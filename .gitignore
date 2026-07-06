@@ -1,0 +1,7 @@
+# Local reference copy of the original applet (not part of this project)
+_spices/
+
+# Editor / OS cruft
+*.swp
+*~
+.DS_Store
