@@ -17,7 +17,7 @@
     },
     "minPriority": {
         "type": "combobox",
-        "default": "4",
+        "default": "5",
         "description": "Include projects with priority at least:",
         "tooltip": "Start small with Top+High; lower it to include more projects.",
         "options": {

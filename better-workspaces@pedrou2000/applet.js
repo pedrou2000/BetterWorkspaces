@@ -178,7 +178,7 @@ MyApplet.prototype = {
     _applyMinPriority: function () {
         let raw = this.settings.getValue("minPriority");
         let rank = parseInt(raw, 10);
-        if (isNaN(rank)) rank = 4;
+        if (isNaN(rank)) rank = 5;
         ProjectMapper.setMinRank(rank);
         log("minPriority threshold rank = " + rank);
     },

@@ -41,9 +41,10 @@ function priorityRank(name) {
     return 0;
 }
 
-// Minimum rank to KEEP a project. Default 4 (High) => only Top + High, to start
-// small; the applet overrides this from the "minPriority" setting.
-let MIN_RANK = 4;
+// Minimum rank to KEEP a project. Default 5 (Top) => only Top-priority
+// projects, to start small; the applet overrides this from the "minPriority"
+// setting.
+let MIN_RANK = 5;
 function setMinRank(rank) { MIN_RANK = rank; }
 function rankForName(name) { return priorityRank(name); }
 
