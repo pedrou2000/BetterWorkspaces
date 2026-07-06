@@ -1,10 +1,12 @@
 /*
  * BetterWorkspaces — Cinnamon applet
  *
- * M1: controlled mutation. The panel shows live "active/total"; the right-click
- * context menu exposes each WorkspaceManager action (create / switch / remove /
- * move window) so every mutation can be triggered and watched. All workspace
- * access goes through wm/WorkspaceManager.js (the Cinnamon quarantine).
+ * M2: Core model + hardcoded strips. The applet seeds a hardcoded deck of
+ * projects and drives everything through core/Controller.js, which maps the
+ * deck-of-strips model onto the flat workspace list (core/mapping.js) and acts
+ * via wm/WorkspaceManager.js. The panel shows "Project L/N" (active project +
+ * local workspace); the right-click menu exercises every intent. No Notion, no
+ * real UI yet.
  *
  * Released under the GNU General Public License v2 (see LICENSE).
  */
@@ -14,13 +16,19 @@ const PopupMenu = imports.ui.popupMenu;
 
 const UUID = "better-workspaces@pedrou2000";
 
-// Import sibling modules from the applet's own directory. In Cinnamon the
-// applet dir is exposed via appletManager; subfolders are nested importers.
 const AppletDir = imports.ui.appletManager.applets[UUID];
 const WorkspaceManager = AppletDir.wm.WorkspaceManager;
+const ControllerModule = AppletDir.core.Controller;
 
 function log(msg) { global.log(UUID + ": " + msg); }
 function logError(msg) { global.logError(UUID + ": " + msg); }
+
+// M2 hardcoded deck. Each project has a home workspace (index 0) plus extras.
+const HARDCODED_PROJECTS = [
+    { id: "webapp",   name: "WebApp",   wsCount: 3 },
+    { id: "blog",     name: "Blog",     wsCount: 2 },
+    { id: "research", name: "Research", wsCount: 2 },
+];
 
 function MyApplet(orientation, panel_height, instanceId) {
     this._init(orientation, panel_height, instanceId);
@@ -33,11 +41,12 @@ MyApplet.prototype = {
         Applet.TextApplet.prototype._init.call(this, orientation, panel_height, instanceId);
 
         try {
-            log("loaded (M1 controlled-mutation v0.1.0)");
+            log("loaded (M2 core-model v0.2.0)");
 
             this.wm = new WorkspaceManager.WorkspaceManager();
+            this.controller = new ControllerModule.Controller(this.wm);
+            this.controller.loadProjects(HARDCODED_PROJECTS);
 
-            // Refresh the label on workspace switch and on count changes.
             this._switchId = global.window_manager.connect(
                 'switch-workspace', Lang.bind(this, this._refresh));
             this._nWorkspacesId = global.workspace_manager.connect(
@@ -50,63 +59,76 @@ MyApplet.prototype = {
         }
     },
 
-    // Compact panel label: 1-based active / total, e.g. "3/6".
+    // Panel: "ProjectName  L/N" for the active project, from reality.
     _refresh: function () {
         try {
-            let total = this.wm.getWorkspaceCount();
-            let active = this.wm.getActiveIndex();
-            this.set_applet_label((active + 1) + "/" + total);
-            this.set_applet_tooltip("BetterWorkspaces (M1) — active "
-                + (active + 1) + " of " + total);
+            let loc = this.controller.currentLocation();
+            if (loc) {
+                let p = this.controller.state.getProject(loc.projectIdx);
+                this.set_applet_label(
+                    p.name + " " + (loc.localIdx + 1) + "/" + p.wsCount);
+            } else {
+                this.set_applet_label("BetterWS ?");
+            }
+            this.set_applet_tooltip(this.controller.describe());
         } catch (e) {
             logError("_refresh exception: " + e.toString());
         }
     },
 
-    // Build the right-click menu with one item per WorkspaceManager action.
     _buildContextMenu: function () {
         let menu = this._applet_context_menu;
 
         let addAction = Lang.bind(this, function (label, fn) {
             let item = new PopupMenu.PopupMenuItem(label);
             item.connect('activate', Lang.bind(this, function () {
-                try {
-                    fn.call(this);
-                } catch (e) {
-                    logError("menu action '" + label + "': " + e.toString());
-                }
+                try { fn.call(this); }
+                catch (e) { logError("menu '" + label + "': " + e.toString()); }
                 this._refresh();
+                log(this.controller.describe());
             }));
             menu.addMenuItem(item);
             return item;
         });
 
-        addAction("Create workspace (append)", function () {
-            let idx = this.wm.createWorkspace();
-            log("menu: created workspace index " + idx);
+        addAction("Next project (in order)", function () {
+            this.controller.goToNextProjectInOrder();
+        });
+        addAction("Previous project (in order)", function () {
+            this.controller.goToPrevProjectInOrder();
+        });
+        addAction("Flip to previous project (MRU)", function () {
+            this.controller.goToPreviousProject();
         });
 
-        addAction("Go to next workspace", function () {
-            this.wm.goToNext();
+        menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
+
+        addAction("Next workspace (within project)", function () {
+            this.controller.nextLocalWorkspace();
+        });
+        addAction("Previous workspace (within project)", function () {
+            this.controller.prevLocalWorkspace();
         });
 
-        addAction("Go to previous workspace", function () {
-            this.wm.goToPrevious();
+        menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
+
+        addAction("Add workspace to active project", function () {
+            this.controller.addWorkspaceToActiveProject();
+        });
+        addAction("Remove last workspace of active project", function () {
+            this.controller.removeLastWorkspaceOfActiveProject();
         });
 
-        addAction("Move focused window to next (and follow)", function () {
-            this.wm.moveFocusedWindowToNext();
-        });
+        menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
 
-        addAction("Remove last workspace", function () {
-            this.wm.removeLastWorkspace();
+        addAction("Log current state", function () {
+            log(this.controller.describe());
         });
     },
 
     on_applet_clicked: function () {
-        // Left-click: quick jump to next workspace, so basic switching is
-        // reachable without opening the menu.
-        this.wm.goToNext();
+        // Left-click: next workspace within the active project.
+        this.controller.nextLocalWorkspace();
         this._refresh();
     },
 
@@ -120,10 +142,8 @@ MyApplet.prototype = {
                 global.workspace_manager.disconnect(this._nWorkspacesId);
                 this._nWorkspacesId = 0;
             }
-            if (this.wm) {
-                this.wm.destroy();
-                this.wm = null;
-            }
+            if (this.controller) { this.controller.destroy(); this.controller = null; }
+            if (this.wm) { this.wm.destroy(); this.wm = null; }
             log("removed, signals disconnected");
         } catch (e) {
             logError("cleanup exception: " + e.toString());
