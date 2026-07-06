@@ -1,0 +1,49 @@
+/* BetterWorkspaces — shared panel/overlay styling */
+
+.better-workspaces-project {
+    padding: 0 8px;
+    margin: 0 1px;
+    border-radius: 4px;
+    color: #bbbbbb;
+}
+
+.better-workspaces-project:hover {
+    background-color: rgba(255, 255, 255, 0.12);
+    color: #ffffff;
+}
+
+.better-workspaces-project:active {
+    /* active = current project (pseudo-class we set in JS) */
+    background-color: rgba(255, 255, 255, 0.22);
+    color: #ffffff;
+    font-weight: bold;
+}
+
+.better-workspaces-position {
+    padding: 0 6px;
+    color: #8899ff;
+    font-weight: bold;
+}
+
+/* Super+Tab switcher overlay */
+.better-workspaces-switcher {
+    background-color: rgba(0, 0, 0, 0.85);
+    border: 2px solid rgba(255, 255, 255, 0.15);
+    border-radius: 12px;
+    padding: 16px;
+    spacing: 10px;
+}
+
+.better-workspaces-switcher-card {
+    padding: 14px 20px;
+    border-radius: 8px;
+    color: #dddddd;
+    font-size: 14px;
+    background-color: rgba(255, 255, 255, 0.05);
+}
+
+.better-workspaces-switcher-card:selected {
+    background-color: rgba(120, 150, 255, 0.55);
+    color: #ffffff;
+    font-weight: bold;
+}
