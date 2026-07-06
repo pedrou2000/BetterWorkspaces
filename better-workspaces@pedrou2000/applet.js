@@ -13,6 +13,7 @@
 const Applet = imports.ui.applet;
 const Lang = imports.lang;
 const Main = imports.ui.main;
+const Meta = imports.gi.Meta;
 const PopupMenu = imports.ui.popupMenu;
 
 const UUID = "better-workspaces@pedrou2000";
@@ -32,12 +33,14 @@ const HARDCODED_PROJECTS = [
     { id: "research", name: "Research", wsCount: 2 },
 ];
 
-// keybinding name -> { keys, handler-method-name }
-const KEYBINDINGS = [
-    { name: "bw-next-project",   keys: "<Control><Alt>Down",  fn: "goToNextProjectInOrder" },
-    { name: "bw-prev-project",   keys: "<Control><Alt>Up",    fn: "goToPrevProjectInOrder" },
-    { name: "bw-next-workspace", keys: "<Control><Alt>Right", fn: "nextLocalWorkspace" },
-    { name: "bw-prev-workspace", keys: "<Control><Alt>Left",  fn: "prevLocalWorkspace" },
+// Built-in WM actions we OVERRIDE (Ctrl+Alt+arrows are already bound to these
+// by Cinnamon, so we replace their handlers instead of adding colliding
+// hotkeys). Maps the WM action name -> the Controller method it should invoke.
+const OVERRIDES = [
+    { action: "switch-to-workspace-up",    fn: "goToPrevProjectInOrder" },
+    { action: "switch-to-workspace-down",  fn: "goToNextProjectInOrder" },
+    { action: "switch-to-workspace-left",  fn: "prevLocalWorkspace" },
+    { action: "switch-to-workspace-right", fn: "nextLocalWorkspace" },
 ];
 
 function MyApplet(orientation, panel_height, instanceId) {
@@ -84,22 +87,28 @@ MyApplet.prototype = {
     _registerKeybindings: function () {
         this._boundKeys = [];
 
-        // Directional / within-project bindings -> Controller methods.
-        KEYBINDINGS.forEach(Lang.bind(this, function (kb) {
-            Main.keybindingManager.addHotKey(
-                kb.name, kb.keys,
-                Lang.bind(this, function () {
-                    try {
-                        this.controller[kb.fn]();
-                        this._refresh();
-                    } catch (e) {
-                        logError("hotkey " + kb.name + ": " + e.toString());
-                    }
-                }));
-            this._boundKeys.push(kb.name);
+        // Override the built-in Ctrl+Alt+arrow WM actions so ours run instead
+        // of Cinnamon's native workspace-switch/Expo (which caused the double
+        // firing). set_custom_handler REPLACES the existing handler.
+        OVERRIDES.forEach(Lang.bind(this, function (o) {
+            try {
+                Meta.keybindings_set_custom_handler(
+                    o.action,
+                    Lang.bind(this, function () {
+                        try {
+                            this.controller[o.fn]();
+                            this._refresh();
+                        } catch (e) {
+                            logError("override " + o.action + ": " + e.toString());
+                        }
+                    }));
+            } catch (e) {
+                logError("failed to override " + o.action + ": " + e.toString());
+            }
         }));
 
-        // Super+Tab -> MRU project switcher overlay.
+        // Super+Tab -> MRU project switcher overlay. This one is a NEW binding
+        // (nothing built-in owns it for us here), so addHotKey is correct.
         Main.keybindingManager.addHotKey(
             "bw-switcher", "<Super>Tab",
             Lang.bind(this, function () {
@@ -108,15 +117,25 @@ MyApplet.prototype = {
             }));
         this._boundKeys.push("bw-switcher");
 
-        log("registered keybindings: " + this._boundKeys.join(", "));
+        log("registered keybindings (overrides + Super+Tab)");
     },
 
+    // Restore Cinnamon's default handlers for the overridden actions, and
+    // remove our added hotkeys.
     _unregisterKeybindings: function () {
-        if (!this._boundKeys) return;
-        this._boundKeys.forEach(function (name) {
-            try { Main.keybindingManager.removeHotKey(name); } catch (e) {}
+        OVERRIDES.forEach(function (o) {
+            try {
+                Meta.keybindings_set_custom_handler(
+                    o.action,
+                    function (d, w, b) { Main.wm._showWorkspaceSwitcher(d, w, b); });
+            } catch (e) {}
         });
-        this._boundKeys = [];
+        if (this._boundKeys) {
+            this._boundKeys.forEach(function (name) {
+                try { Main.keybindingManager.removeHotKey(name); } catch (e) {}
+            });
+            this._boundKeys = [];
+        }
     },
 
     _buildContextMenu: function () {
