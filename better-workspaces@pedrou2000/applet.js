@@ -1,12 +1,11 @@
 /*
  * BetterWorkspaces — Cinnamon applet
  *
- * M3: project-switching UX. The Core (M2) now drives real UI:
- *   - PanelIndicator: a clickable project button row + position label.
- *   - ProjectSwitcher: a Super+Tab MRU overlay.
- *   - Keybindings: Super+Tab (projects, MRU), Ctrl+Alt+Left/Right (workspace
- *     within project), Ctrl+Alt+Up/Down (project in order).
- * Still a hardcoded deck; no Notion yet.
+ * M4: Notion client + sync (headless). Adds Settings (token, database id, sync
+ * interval, "sync now" button) and notion/SyncService, which pulls + filters +
+ * caches the real project list to disk and logs the result. The deck driving
+ * the workspaces is STILL the hardcoded one — fusing Notion data into the deck
+ * is M5. This milestone only proves the pull/filter/cache pipeline.
  *
  * Released under the GNU General Public License v2 (see LICENSE).
  */
@@ -14,6 +13,7 @@ const Applet = imports.ui.applet;
 const Lang = imports.lang;
 const Main = imports.ui.main;
 const Meta = imports.gi.Meta;
+const Settings = imports.ui.settings;
 const PopupMenu = imports.ui.popupMenu;
 
 const UUID = "better-workspaces@pedrou2000";
@@ -23,6 +23,7 @@ const WorkspaceManager = AppletDir.wm.WorkspaceManager;
 const ControllerModule = AppletDir.core.Controller;
 const PanelIndicatorModule = AppletDir.ui.PanelIndicator;
 const ProjectSwitcherModule = AppletDir.ui.ProjectSwitcher;
+const SyncServiceModule = AppletDir.notion.SyncService.SyncServiceModule;
 
 function log(msg) { global.log(UUID + ": " + msg); }
 function logError(msg) { global.logError(UUID + ": " + msg); }
@@ -54,7 +55,7 @@ MyApplet.prototype = {
         Applet.Applet.prototype._init.call(this, orientation, panel_height, instanceId);
 
         try {
-            log("loaded (M3 switching-UX v0.3.0)");
+            log("loaded (M4 notion-sync v0.4.0)");
 
             this.wm = new WorkspaceManager.WorkspaceManager();
             this.controller = new ControllerModule.Controller(this.wm);
@@ -68,6 +69,7 @@ MyApplet.prototype = {
             this._nWorkspacesId = global.workspace_manager.connect(
                 'notify::n-workspaces', Lang.bind(this, this._refresh));
 
+            this._initSettingsAndSync(instanceId);
             this._registerKeybindings();
             this._buildContextMenu();
             this._refresh();
@@ -81,6 +83,57 @@ MyApplet.prototype = {
             if (this.panelUI) this.panelUI.update();
         } catch (e) {
             logError("_refresh exception: " + e.toString());
+        }
+    },
+
+    // Bind settings, create the SyncService, and kick off background sync.
+    _initSettingsAndSync: function (instanceId) {
+        this.settings = new Settings.AppletSettings(this, UUID, instanceId);
+
+        let token = this.settings.getValue("notionToken") || "";
+        let dbId = this.settings.getValue("notionDatabaseId") || "";
+        let interval = this.settings.getValue("syncIntervalSec") || 300;
+
+        this.sync = new SyncServiceModule.SyncService(token, dbId, { intervalSec: interval });
+
+        // For M4 we only LOG what we synced (deck is still hardcoded). M5 will
+        // feed these projects into the controller instead.
+        this.sync.onUpdate(Lang.bind(this, function (projects) {
+            log("sync produced " + projects.length + " projects: "
+                + projects.map(function (p) {
+                    let ic = p.icon ? (p.icon.type + ":" + p.icon.value) : "no-icon";
+                    return p.name + " {" + (p.priority || "-") + ", " + ic + "}";
+                }).join(" | "));
+        }));
+
+        // React to settings changes at runtime.
+        this.settings.bindProperty(Settings.BindingDirection.IN, "notionToken",
+            "notionToken", Lang.bind(this, function () {
+                this.sync.setToken(this.settings.getValue("notionToken"));
+            }));
+        this.settings.bindProperty(Settings.BindingDirection.IN, "notionDatabaseId",
+            "notionDatabaseId", Lang.bind(this, function () {
+                this.sync.setDatabaseId(this.settings.getValue("notionDatabaseId"));
+            }));
+
+        if (token && dbId) {
+            this.sync.start();
+        } else {
+            log("Notion not configured (missing token or database id) — "
+                + "open applet settings to add them, then click 'Sync now'.");
+        }
+    },
+
+    // settings-schema.json "syncNow" button callback.
+    onSyncNowClicked: function () {
+        try {
+            if (this.sync) {
+                this.sync.setToken(this.settings.getValue("notionToken"));
+                this.sync.setDatabaseId(this.settings.getValue("notionDatabaseId"));
+                this.sync.syncNow();
+            }
+        } catch (e) {
+            logError("onSyncNowClicked: " + e.toString());
         }
     },
 
@@ -178,6 +231,8 @@ MyApplet.prototype = {
                 global.workspace_manager.disconnect(this._nWorkspacesId);
                 this._nWorkspacesId = 0;
             }
+            if (this.sync) { this.sync.destroy(); this.sync = null; }
+            if (this.settings) { this.settings.finalize(); this.settings = null; }
             if (this.switcher) { this.switcher.destroy(); this.switcher = null; }
             if (this.panelUI) { this.panelUI.destroy(); this.panelUI = null; }
             if (this.controller) { this.controller.destroy(); this.controller = null; }

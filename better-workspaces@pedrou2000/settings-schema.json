@@ -1,0 +1,32 @@
+{
+    "notionSection": {
+        "type": "section",
+        "description": "Notion integration"
+    },
+    "notionToken": {
+        "type": "entry",
+        "default": "",
+        "description": "Notion integration token (secret_...)",
+        "tooltip": "Create an internal integration at notion.so/my-integrations, share your Projects database with it, and paste the token here. Stored in plaintext in the applet config."
+    },
+    "notionDatabaseId": {
+        "type": "entry",
+        "default": "99d9eb7831fd41e9b42f966ebd9b16cb",
+        "description": "Projects database ID",
+        "tooltip": "The 32-char id of your Notion Projects database."
+    },
+    "syncIntervalSec": {
+        "type": "spinbutton",
+        "default": 300,
+        "min": 30,
+        "max": 3600,
+        "step": 30,
+        "units": "seconds",
+        "description": "Background sync interval"
+    },
+    "syncNow": {
+        "type": "button",
+        "description": "Sync from Notion now",
+        "callback": "onSyncNowClicked"
+    }
+}
