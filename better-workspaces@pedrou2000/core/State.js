@@ -29,7 +29,8 @@ State.prototype = {
         this._mru = []; // project indices, most-recent first
     },
 
-    // Replace the whole project set. `defs` is [{id, name, wsCount}, ...].
+    // Replace the whole project set. `defs` is
+    // [{id, name, wsCount, priority, icon, notionUrl}, ...].
     setProjects: function (defs) {
         this.projects = defs.map(function (d) {
             return {
@@ -37,6 +38,9 @@ State.prototype = {
                 name: d.name,
                 wsCount: Math.max(1, d.wsCount || 1), // every project >= 1 (home)
                 lastLocal: 0,
+                priority: d.priority || null,
+                icon: d.icon || null,
+                notionUrl: d.notionUrl || null,
             };
         });
         this.activeProjectIdx = 0;

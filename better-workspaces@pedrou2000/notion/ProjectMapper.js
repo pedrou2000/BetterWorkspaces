@@ -24,6 +24,29 @@ const TITLE_PROP = "Project";
 const PRIORITY_PROP = "Current Priority";
 const ARCHIVE_PROP = "Archive";
 
+// Priority ranking, high -> low. Higher rank number = higher priority. We match
+// names case-insensitively by their leading word so the Notion typo "Vey Low"
+// still ranks as low. A project with no priority ranks as 0 (below everything),
+// so templates / unprioritized pages drop out under any positive threshold.
+const PRIORITY_RANK = { top: 5, high: 4, medium: 3, low: 2, "vey low": 1, "very low": 1 };
+
+function priorityRank(name) {
+    if (!name) return 0;
+    let key = name.trim().toLowerCase();
+    if (PRIORITY_RANK[key] !== undefined) return PRIORITY_RANK[key];
+    if (key.indexOf("low") !== -1) return 1;   // catch "Vey Low"/"Very Low"
+    if (key.indexOf("top") !== -1) return 5;
+    if (key.indexOf("high") !== -1) return 4;
+    if (key.indexOf("medium") !== -1) return 3;
+    return 0;
+}
+
+// Minimum rank to KEEP a project. Default 4 (High) => only Top + High, to start
+// small; the applet overrides this from the "minPriority" setting.
+let MIN_RANK = 4;
+function setMinRank(rank) { MIN_RANK = rank; }
+function rankForName(name) { return priorityRank(name); }
+
 // Notion API query body implementing the filter server-side where possible.
 // (We also re-check client-side in map(), so this is an optimization.)
 function buildQueryBody() {
@@ -83,17 +106,13 @@ function _icon(page) {
     return null;
 }
 
-// Priority is "low-ish" if its name contains "low" (case-insensitive).
-function _isLowPriority(name) {
-    if (!name) return false; // no priority set -> not explicitly low -> keep
-    return name.toLowerCase().indexOf("low") !== -1;
-}
-
 // Map one raw page -> Project{} or null if it should be filtered out.
+// Filter: not archived AND priority rank >= MIN_RANK. Because unprioritized
+// pages rank 0, templates and stray pages drop out under any positive threshold.
 function mapPage(page) {
     if (_isArchived(page)) return null;
     let priority = _priorityName(page);
-    if (_isLowPriority(priority)) return null;
+    if (priorityRank(priority) < MIN_RANK) return null;
 
     return {
         id: page.id,
@@ -120,6 +139,8 @@ var ProjectMapper = {
     buildQueryBody: buildQueryBody,
     mapPage: mapPage,
     mapResults: mapResults,
+    setMinRank: setMinRank,
+    rankForName: rankForName,
     // exported for reference/testing
     TITLE_PROP: TITLE_PROP,
     PRIORITY_PROP: PRIORITY_PROP,

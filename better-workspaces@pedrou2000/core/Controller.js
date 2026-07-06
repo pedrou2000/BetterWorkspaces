@@ -16,6 +16,7 @@ const UUID = "better-workspaces@pedrou2000";
 const AppletDir = imports.ui.appletManager.applets[UUID];
 const Mapping = AppletDir.core.mapping.Mapping;
 const StateModule = AppletDir.core.State;
+const Util = imports.misc.util;
 
 function log(msg) { global.log(UUID + " [ctrl]: " + msg); }
 function logError(msg) { global.logError(UUID + " [ctrl]: " + msg); }
@@ -79,6 +80,24 @@ Controller.prototype = {
     // Alt-Tab-style flip to the most-recent other project.
     goToPreviousProject: function () {
         return this.goToProject(this.state.previousProjectIdx());
+    },
+
+    // Open the active project's Notion page in the default browser. Manual by
+    // design (auto-opening on every switch would spawn browser tabs constantly).
+    openActiveProjectHome: function () {
+        let p = this.state.activeProject();
+        if (!p || !p.notionUrl) {
+            log("openActiveProjectHome: no Notion URL for active project");
+            return false;
+        }
+        try {
+            Util.spawn(["xdg-open", p.notionUrl]);
+            log("openActiveProjectHome: opened " + p.notionUrl);
+            return true;
+        } catch (e) {
+            logError("openActiveProjectHome: " + e.toString());
+            return false;
+        }
     },
 
     // Cycle to the next/previous project in *project order* (not MRU) — useful

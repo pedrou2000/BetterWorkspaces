@@ -28,11 +28,18 @@ const SyncServiceModule = AppletDir.notion.SyncService.SyncServiceModule;
 function log(msg) { global.log(UUID + ": " + msg); }
 function logError(msg) { global.logError(UUID + ": " + msg); }
 
-const HARDCODED_PROJECTS = [
-    { id: "webapp",   name: "WebApp",   wsCount: 3 },
-    { id: "blog",     name: "Blog",     wsCount: 2 },
-    { id: "research", name: "Research", wsCount: 2 },
+const ProjectMapper = AppletDir.notion.ProjectMapper.ProjectMapper;
+
+// Shown only when no Notion cache exists yet (first run / unconfigured), so the
+// applet is never empty. Replaced by the real deck as soon as a sync lands.
+const PLACEHOLDER_PROJECTS = [
+    { id: "placeholder", name: "Connect Notion", wsCount: 1 },
 ];
+
+// Each synced Notion project starts with just its home workspace; you grow a
+// project's strip with the add-workspace action. Keeps startup sane (N projects
+// -> N workspaces) rather than exploding the flat list.
+const DEFAULT_WS_PER_PROJECT = 1;
 
 // Built-in WM actions we OVERRIDE (Ctrl+Alt+arrows are already bound to these
 // by Cinnamon, so we replace their handlers instead of adding colliding
@@ -55,11 +62,18 @@ MyApplet.prototype = {
         Applet.Applet.prototype._init.call(this, orientation, panel_height, instanceId);
 
         try {
-            log("loaded (M4 notion-sync v0.4.0)");
+            log("loaded (M5 notion-deck v0.5.0)");
 
             this.wm = new WorkspaceManager.WorkspaceManager();
             this.controller = new ControllerModule.Controller(this.wm);
-            this.controller.loadProjects(HARDCODED_PROJECTS);
+
+            // Settings first: we need the priority threshold + token before we
+            // decide the deck. This also creates this.sync.
+            this._initSettingsAndSync(instanceId);
+
+            // Load the deck from the on-disk Notion cache (instant, offline).
+            // Falls back to a placeholder if nothing is cached yet.
+            this._loadDeckFromCache();
 
             this.panelUI = new PanelIndicatorModule.PanelIndicator(this.actor, this.controller);
             this.switcher = new ProjectSwitcherModule.ProjectSwitcher(this.controller);
@@ -69,13 +83,45 @@ MyApplet.prototype = {
             this._nWorkspacesId = global.workspace_manager.connect(
                 'notify::n-workspaces', Lang.bind(this, this._refresh));
 
-            this._initSettingsAndSync(instanceId);
             this._registerKeybindings();
             this._buildContextMenu();
             this._refresh();
+
+            // Kick off a background sync to refresh the cache for NEXT launch.
+            if (this.sync && this._notionConfigured()) this.sync.start();
         } catch (e) {
             logError("init exception: " + e.toString());
         }
+    },
+
+    _notionConfigured: function () {
+        return this.settings
+            && this.settings.getValue("notionToken")
+            && this.settings.getValue("notionDatabaseId");
+    },
+
+    // Build the deck from cached Notion projects. Each project gets a home
+    // workspace to start. If the cache is empty, show the placeholder so the
+    // panel is never blank.
+    _loadDeckFromCache: function () {
+        let cached = this.sync ? this.sync.readCache() : [];
+        if (!cached || cached.length === 0) {
+            log("_loadDeckFromCache: no cache yet -> placeholder deck");
+            this.controller.loadProjects(PLACEHOLDER_PROJECTS);
+            return;
+        }
+        let defs = cached.map(function (p) {
+            return {
+                id: p.id,
+                name: p.name,
+                wsCount: DEFAULT_WS_PER_PROJECT,
+                priority: p.priority,
+                icon: p.icon,
+                notionUrl: p.notionUrl,
+            };
+        });
+        this.controller.loadProjects(defs);
+        log("_loadDeckFromCache: loaded " + defs.length + " projects from cache");
     },
 
     _refresh: function () {
@@ -86,7 +132,8 @@ MyApplet.prototype = {
         }
     },
 
-    // Bind settings, create the SyncService, and kick off background sync.
+    // Bind settings and create the SyncService (does not start it — the caller
+    // decides when, after the deck is loaded).
     _initSettingsAndSync: function (instanceId) {
         this.settings = new Settings.AppletSettings(this, UUID, instanceId);
 
@@ -94,19 +141,21 @@ MyApplet.prototype = {
         let dbId = this.settings.getValue("notionDatabaseId") || "";
         let interval = this.settings.getValue("syncIntervalSec") || 300;
 
+        // Apply the priority threshold to the mapper.
+        this._applyMinPriority();
+
         this.sync = new SyncServiceModule.SyncService(token, dbId, { intervalSec: interval });
 
-        // For M4 we only LOG what we synced (deck is still hardcoded). M5 will
-        // feed these projects into the controller instead.
+        // A completed sync refreshes the on-disk cache (for the NEXT launch) and
+        // logs the result. We deliberately do NOT reshape the live deck mid-
+        // session — that could move workspaces and scatter your open windows.
+        // New Notion changes take effect on the next Cinnamon reload/login.
         this.sync.onUpdate(Lang.bind(this, function (projects) {
-            log("sync produced " + projects.length + " projects: "
-                + projects.map(function (p) {
-                    let ic = p.icon ? (p.icon.type + ":" + p.icon.value) : "no-icon";
-                    return p.name + " {" + (p.priority || "-") + ", " + ic + "}";
-                }).join(" | "));
+            log("sync refreshed cache: " + projects.length + " projects ["
+                + projects.map(function (p) { return p.name; }).join(", ")
+                + "] — applies on next reload");
         }));
 
-        // React to settings changes at runtime.
         this.settings.bindProperty(Settings.BindingDirection.IN, "notionToken",
             "notionToken", Lang.bind(this, function () {
                 this.sync.setToken(this.settings.getValue("notionToken"));
@@ -115,13 +164,23 @@ MyApplet.prototype = {
             "notionDatabaseId", Lang.bind(this, function () {
                 this.sync.setDatabaseId(this.settings.getValue("notionDatabaseId"));
             }));
+        this.settings.bindProperty(Settings.BindingDirection.IN, "minPriority",
+            "minPriority", Lang.bind(this, function () {
+                this._applyMinPriority();
+            }));
 
-        if (token && dbId) {
-            this.sync.start();
-        } else {
-            log("Notion not configured (missing token or database id) — "
-                + "open applet settings to add them, then click 'Sync now'.");
+        if (!token || !dbId) {
+            log("Notion not configured — open settings, add your token, click "
+                + "'Sync now', then reload Cinnamon (Alt+F2, r) to load the deck.");
         }
+    },
+
+    _applyMinPriority: function () {
+        let raw = this.settings.getValue("minPriority");
+        let rank = parseInt(raw, 10);
+        if (isNaN(rank)) rank = 4;
+        ProjectMapper.setMinRank(rank);
+        log("minPriority threshold rank = " + rank);
     },
 
     // settings-schema.json "syncNow" button callback.
@@ -170,7 +229,16 @@ MyApplet.prototype = {
             }));
         this._boundKeys.push("bw-switcher");
 
-        log("registered keybindings (overrides + Super+Tab)");
+        // Super+H -> open the active project's Notion home page in the browser.
+        Main.keybindingManager.addHotKey(
+            "bw-open-home", "<Super>h",
+            Lang.bind(this, function () {
+                try { this.controller.openActiveProjectHome(); }
+                catch (e) { logError("open-home hotkey: " + e.toString()); }
+            }));
+        this._boundKeys.push("bw-open-home");
+
+        log("registered keybindings (overrides + Super+Tab + Super+H)");
     },
 
     // Restore Cinnamon's default handlers for the overridden actions, and
@@ -201,6 +269,10 @@ MyApplet.prototype = {
             }));
             menu.addMenuItem(item);
         });
+        addAction("Open active project's Notion page", function () {
+            this.controller.openActiveProjectHome();
+        });
+        menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
         addAction("Add workspace to active project", function () {
             this.controller.addWorkspaceToActiveProject();
             this.panelUI.update();
