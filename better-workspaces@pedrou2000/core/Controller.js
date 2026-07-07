@@ -86,8 +86,9 @@ Controller.prototype = {
         return this.goToProject(this.state.previousProjectIdx());
     },
 
-    // Open the active project's Notion page in the default browser. Manual by
-    // design (auto-opening on every switch would spawn browser tabs constantly).
+    // Open the active project's Notion page in a NEW browser window, so it
+    // lands on the current (home) workspace instead of adding a tab to an
+    // existing browser window on some other workspace. Manual by design.
     openActiveProjectHome: function () {
         let p = this.state.activeProject();
         if (!p || !p.notionUrl) {
@@ -95,8 +96,14 @@ Controller.prototype = {
             return false;
         }
         try {
-            Util.spawn(["xdg-open", p.notionUrl]);
-            log("openActiveProjectHome: opened " + p.notionUrl);
+            // Firefox (Mint's default): --new-window forces a fresh window on
+            // the active workspace. Fall back to xdg-open if that fails.
+            try {
+                Util.spawn(["firefox", "--new-window", p.notionUrl]);
+            } catch (inner) {
+                Util.spawn(["xdg-open", p.notionUrl]);
+            }
+            log("openActiveProjectHome: opened " + p.notionUrl + " in a new window");
             return true;
         } catch (e) {
             logError("openActiveProjectHome: " + e.toString());
