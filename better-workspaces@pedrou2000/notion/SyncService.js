@@ -38,6 +38,17 @@ SyncService.prototype = {
     setToken: function (token) { this.client.setToken(token); },
     setDatabaseId: function (id) { this.databaseId = id; },
     onUpdate: function (cb) { this._onUpdate = cb; },
+    onStatus: function (cb) { this._onStatus = cb; },
+
+    // last status: "unconfigured" | "loading" | "ok" | "error"
+    status: function () { return this._status || "unconfigured"; },
+
+    _setStatus: function (s) {
+        this._status = s;
+        if (this._onStatus) {
+            try { this._onStatus(s); } catch (e) { L.error("onStatus cb: " + e.toString()); }
+        }
+    },
 
     // Read whatever is currently cached on disk (instant, offline-safe).
     readCache: function () {
@@ -47,17 +58,23 @@ SyncService.prototype = {
 
     // Trigger one sync now. Non-blocking; result flows via cache + onUpdate.
     syncNow: function () {
-        if (!this.databaseId) { L.error("syncNow: no databaseId set"); return; }
-        if (!this.client.hasToken()) { L.log("syncNow: no token, skipping"); return; }
+        if (!this.databaseId || !this.client.hasToken()) {
+            L.log("syncNow: not configured, skipping");
+            this._setStatus("unconfigured");
+            return;
+        }
 
         L.log("syncNow: querying database " + this.databaseId);
+        this._setStatus("loading");
         let body = ProjectMapper.buildQueryBody();
         this.client.queryDatabase(this.databaseId, body, (err, result) => {
             if (err) {
                 L.error("syncNow failed: " + err + " (serving cache)");
+                this._setStatus("error");
                 return;
             }
             let projects = ProjectMapper.mapResults(result);
+            this._setStatus("ok");
             this._writeCache(projects);
             L.log("syncNow: cached " + projects.length + " projects: ["
                 + projects.map(function (p) { return p.name; }).join(", ") + "]");

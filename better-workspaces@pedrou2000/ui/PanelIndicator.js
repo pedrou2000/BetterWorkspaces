@@ -33,7 +33,26 @@ PanelIndicator.prototype = {
         this.orientation = orientation;
         this._buttons = [];
         this._posLabel = null;
+        this._status = "ok";
         this.rebuild();
+    },
+
+    // Reflect Notion connection state: "unconfigured" | "loading" | "ok" |
+    // "error". Shown as a small leading status dot with a tooltip; when not OK
+    // the icons are also dimmed via a style class on the container.
+    setStatus: function (status) {
+        this._status = status;
+        if (!this._statusDot) return;
+        let map = {
+            unconfigured: { text: "⚫", tip: "Notion not connected — open settings to add your token" },
+            loading:      { text: "◌", tip: "Syncing with Notion…" },
+            ok:           { text: "",       tip: "" },
+            error:        { text: "⚠", tip: "Notion sync failed — showing cached projects" },
+        };
+        let s = map[status] || map.ok;
+        this._statusDot.set_text(s.text);
+        this._statusDot.visible = (s.text.length > 0);
+        if (this._statusTip) this._statusTip.set_text(s.tip);
     },
 
     // Full rebuild: one icon button per project + a trailing position label.
@@ -42,8 +61,21 @@ PanelIndicator.prototype = {
             let t = this._buttons[i]._bwTooltip;
             if (t && t.destroy) { try { t.destroy(); } catch (e) {} }
         }
+        if (this._statusTip && this._statusTip.destroy) {
+            try { this._statusTip.destroy(); } catch (e) {}
+        }
         this.actor.destroy_all_children();
         this._buttons = [];
+
+        // Leading status dot (hidden when OK) for degraded-state feedback.
+        this._statusDot = new St.Label({
+            style_class: 'better-workspaces-status',
+            text: '',
+        });
+        this._statusDot.visible = false;
+        this.actor.add(this._statusDot, { y_align: St.Align.MIDDLE, y_fill: false });
+        this._statusTip = new Tooltips.PanelItemTooltip(
+            { actor: this._statusDot }, "", this.orientation);
 
         let nProjects = this.controller.state.projectCount();
         for (let i = 0; i < nProjects; i++) {
@@ -79,6 +111,7 @@ PanelIndicator.prototype = {
         this.actor.add(this._posLabel, { y_align: St.Align.MIDDLE, y_fill: false });
 
         this.update();
+        this.setStatus(this._status); // re-apply after rebuild recreates the dot
     },
 
     _makeIcon: function (project, idx) {

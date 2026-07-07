@@ -146,34 +146,97 @@ Controller.prototype = {
         return this.goToLocalWorkspace(loc.localIdx - 1);
     },
 
+    // ---- Intents: moving the focused window --------------------------------
+
+    // Move the focused window to a local workspace within the CURRENT project,
+    // then follow it there. Bounds-checked against the active project's strip.
+    moveWindowToLocalWorkspace: function (localIdx) {
+        let pIdx = this.state.activeProjectIdx;
+        let p = this.state.getProject(pIdx);
+        if (!p || localIdx < 0 || localIdx > p.wsCount - 1) {
+            log("moveWindowToLocalWorkspace: local " + localIdx + " out of range");
+            return false;
+        }
+        let flat = Mapping.globalIndex(this.state.counts(), pIdx, localIdx);
+        if (this.wm.moveFocusedWindowTo(flat)) {
+            this.state.setLastLocal(pIdx, localIdx);
+            this.wm.goToWorkspace(flat);
+            return true;
+        }
+        return false;
+    },
+
+    moveWindowToNextLocal: function () {
+        let loc = this.currentLocation();
+        if (!loc) return false;
+        return this.moveWindowToLocalWorkspace(loc.localIdx + 1);
+    },
+
+    moveWindowToPrevLocal: function () {
+        let loc = this.currentLocation();
+        if (!loc) return false;
+        return this.moveWindowToLocalWorkspace(loc.localIdx - 1);
+    },
+
+    // Move the focused window to another PROJECT (landing on that project's
+    // last-used local workspace), and switch there with it.
+    moveWindowToProject: function (projectIdx) {
+        let p = this.state.getProject(projectIdx);
+        if (!p) {
+            log("moveWindowToProject: invalid project " + projectIdx);
+            return false;
+        }
+        let local = this.state.getLastLocal(projectIdx);
+        if (local > p.wsCount - 1) local = p.wsCount - 1;
+        let flat = Mapping.globalIndex(this.state.counts(), projectIdx, local);
+        if (this.wm.moveFocusedWindowTo(flat)) {
+            this.state.setActiveProject(projectIdx);
+            this.state.setLastLocal(projectIdx, local);
+            this.wm.goToWorkspace(flat);
+            log("moveWindowToProject: moved window to " + p.name + " local " + local);
+            return true;
+        }
+        return false;
+    },
+
     // ---- Intents: adding/removing a workspace to the active project --------
 
-    // Add a workspace to the END of a project's strip. Because projects are
-    // contiguous partitions, inserting in the middle of the flat list would
-    // shift every later project; for M2 we append the flat workspace at the
-    // project's boundary and grow the model. Simplest correct approach: append
-    // at the global position = offset(project)+wsCount (i.e. right after this
-    // project's current last workspace).
+    // Add a workspace at the end of a project's strip. Projects are contiguous
+    // partitions, so the new workspace must land at flat index
+    // insertAt = offset(P) + count(P). Cinnamon only appends at the very end,
+    // so we append there and then rotate the empty slot down into position by
+    // shifting each later workspace's windows one index up. This keeps every
+    // OTHER project's partition intact (fixes the M2 last-project-only limit).
     addWorkspaceToActiveProject: function () {
         let pIdx = this.state.activeProjectIdx;
         let counts = this.state.counts();
+        let oldTotal = Mapping.totalWorkspaces(counts);
         let insertAt = Mapping.offsetOf(counts, pIdx) + counts[pIdx];
 
-        // Create a workspace at the end of the flat list, then (conceptually)
-        // it belongs to this project. Since Cinnamon only appends at the very
-        // end, we grow the model and rely on reconcile to keep counts aligned.
-        // For contiguous correctness we simply grow THIS project and re-append
-        // globally; middle-insertion reordering is deferred to a later milestone.
+        // 1) Append a new (empty) workspace at the global end (index oldTotal).
+        if (this.wm.createWorkspace() < 0) return false;
+
+        // 2) Rotate the empty slot from the end down to insertAt: move windows
+        //    high -> low so nothing is overwritten.
+        for (let i = oldTotal - 1; i >= insertAt; i--) {
+            this.wm.moveAllWindows(i, i + 1);
+        }
+
+        // 3) Grow the model (count now matches reality; reconcile is a no-op).
         this.state.incWorkspaceCount(pIdx);
         this._reconcileWorkspaceCount();
-        // Land on the new local workspace.
+
         let newLocal = this.state.getProject(pIdx).wsCount - 1;
         log("addWorkspaceToActiveProject: " + this.state.getProject(pIdx).name
-            + " now has " + this.state.getProject(pIdx).wsCount + " (insertAt~"
-            + insertAt + ")");
+            + " now " + this.state.getProject(pIdx).wsCount
+            + " (inserted at flat " + insertAt + ")");
         return this.goToLocalWorkspace(newLocal);
     },
 
+    // Remove the last workspace of a project's strip. Move its windows into the
+    // previous workspace (same project — safe, since we keep >=1 home), then
+    // remove that specific flat index. Cinnamon reindexes; other partitions
+    // stay intact.
     removeLastWorkspaceOfActiveProject: function () {
         let pIdx = this.state.activeProjectIdx;
         let p = this.state.getProject(pIdx);
@@ -183,16 +246,25 @@ Controller.prototype = {
                 + " keeps its home workspace (>=1)");
             return false;
         }
+        let counts = this.state.counts();
+        let removeAt = Mapping.offsetOf(counts, pIdx) + (p.wsCount - 1);
+
+        // Preserve windows: fold them into the previous workspace of the strip.
+        this.wm.moveAllWindows(removeAt, removeAt - 1);
+        // Remove that exact workspace (not just the global last).
+        this.wm.removeWorkspace(removeAt);
+
         this.state.decWorkspaceCount(pIdx);
         this._reconcileWorkspaceCount();
-        // Move onto the (new) last local workspace if we were past it.
+
+        // Ensure we're sitting on a valid local workspace of this project.
         let last = this.state.getProject(pIdx).wsCount - 1;
         let loc = this.currentLocation();
         if (!loc || loc.projectIdx !== pIdx || loc.localIdx > last) {
             this.goToLocalWorkspace(last);
         }
         log("removeLastWorkspaceOfActiveProject: " + p.name + " now "
-            + this.state.getProject(pIdx).wsCount);
+            + this.state.getProject(pIdx).wsCount + " (removed flat " + removeAt + ")");
         return true;
     },
 

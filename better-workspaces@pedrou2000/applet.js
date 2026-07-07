@@ -49,6 +49,9 @@ const OVERRIDES = [
     { action: "switch-to-workspace-down",  fn: "goToNextProjectInOrder" },
     { action: "switch-to-workspace-left",  fn: "prevLocalWorkspace" },
     { action: "switch-to-workspace-right", fn: "nextLocalWorkspace" },
+    // Shift+Ctrl+Alt+Left/Right: move the focused window within the project.
+    { action: "move-to-workspace-left",    fn: "moveWindowToPrevLocal" },
+    { action: "move-to-workspace-right",   fn: "moveWindowToNextLocal" },
 ];
 
 function MyApplet(orientation, panel_height, instanceId) {
@@ -62,7 +65,7 @@ MyApplet.prototype = {
         Applet.Applet.prototype._init.call(this, orientation, panel_height, instanceId);
 
         try {
-            log("loaded (M6 notion-icons v0.6.0)");
+            log("loaded (M7 window-mgmt v0.7.0)");
 
             this.wm = new WorkspaceManager.WorkspaceManager();
             this.controller = new ControllerModule.Controller(this.wm);
@@ -77,6 +80,9 @@ MyApplet.prototype = {
 
             this.panelUI = new PanelIndicatorModule.PanelIndicator(this.actor, this.controller, orientation);
             this.switcher = new ProjectSwitcherModule.ProjectSwitcher(this.controller);
+
+            // Initial status: unconfigured if no token, else neutral until sync.
+            this.panelUI.setStatus(this._notionConfigured() ? "ok" : "unconfigured");
 
             this._switchId = global.window_manager.connect(
                 'switch-workspace', Lang.bind(this, this._refresh));
@@ -154,6 +160,11 @@ MyApplet.prototype = {
             log("sync refreshed cache: " + projects.length + " projects ["
                 + projects.map(function (p) { return p.name; }).join(", ")
                 + "] — applies on next reload");
+        }));
+
+        // Reflect sync status in the panel (degraded-state feedback).
+        this.sync.onStatus(Lang.bind(this, function (status) {
+            if (this.panelUI) this.panelUI.setStatus(status);
         }));
 
         this.settings.bindProperty(Settings.BindingDirection.IN, "notionToken",
@@ -246,9 +257,9 @@ MyApplet.prototype = {
     _unregisterKeybindings: function () {
         OVERRIDES.forEach(function (o) {
             try {
-                Meta.keybindings_set_custom_handler(
-                    o.action,
-                    function (d, w, b) { Main.wm._showWorkspaceSwitcher(d, w, b); });
+                // null restores Cinnamon's built-in default handler for the
+                // action (correct for both switch-to and move-to families).
+                Meta.keybindings_set_custom_handler(o.action, null);
             } catch (e) {}
         });
         if (this._boundKeys) {
@@ -272,6 +283,23 @@ MyApplet.prototype = {
         addAction("Open active project's Notion page", function () {
             this.controller.openActiveProjectHome();
         });
+
+        // Submenu: move the focused window to another project.
+        let moveMenu = new PopupMenu.PopupSubMenuMenuItem("Move focused window to project");
+        let nProjects = this.controller.state.projectCount();
+        for (let i = 0; i < nProjects; i++) {
+            let p = this.controller.state.getProject(i);
+            let idx = i;
+            let sub = new PopupMenu.PopupMenuItem(p.name);
+            sub.connect('activate', Lang.bind(this, function () {
+                try { this.controller.moveWindowToProject(idx); }
+                catch (e) { logError("move-to-project menu: " + e.toString()); }
+                this._refresh();
+            }));
+            moveMenu.menu.addMenuItem(sub);
+        }
+        menu.addMenuItem(moveMenu);
+
         menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
         addAction("Add workspace to active project", function () {
             this.controller.addWorkspaceToActiveProject();

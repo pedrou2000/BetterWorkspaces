@@ -182,6 +182,27 @@ WorkspaceManager.prototype = {
         return false;
     },
 
+    // Move EVERY window on workspace `from` to workspace `to`. Used when
+    // inserting/removing a workspace in the middle of the flat list so a
+    // project's partition can grow/shrink without scattering later projects.
+    // Skips windows pinned to all workspaces (is_on_all_workspaces()).
+    moveAllWindows: function (from, to) {
+        try {
+            let ws = this._wm().get_workspace_by_index(from);
+            if (!ws) return false;
+            let windows = ws.list_windows();
+            for (let i = 0; i < windows.length; i++) {
+                let w = windows[i];
+                if (w.is_on_all_workspaces && w.is_on_all_workspaces()) continue;
+                w.change_workspace_by_index(to, false);
+            }
+            return true;
+        } catch (e) {
+            logError("moveAllWindows(" + from + "->" + to + "): " + e.toString());
+            return false;
+        }
+    },
+
     // ---- Lifecycle ---------------------------------------------------------
 
     destroy: function () {

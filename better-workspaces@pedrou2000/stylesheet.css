@@ -25,6 +25,12 @@
     font-weight: bold;
 }
 
+.better-workspaces-status {
+    padding: 0 4px;
+    color: #e0a030;
+    font-size: 12px;
+}
+
 /* Icon variants rendered inside project buttons */
 .better-workspaces-icon-emoji {
     font-size: 16px;
