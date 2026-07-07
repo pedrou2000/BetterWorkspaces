@@ -11,6 +11,7 @@
  */
 const St = imports.gi.St;
 const Lang = imports.lang;
+const Tooltips = imports.ui.tooltips;
 
 const AppletDir = imports.ui.appletManager.applets["better-workspaces@pedrou2000"];
 const IconRenderer = AppletDir.ui.IconRenderer.IconRenderer;
@@ -36,6 +37,10 @@ PanelIndicator.prototype = {
 
     // Full rebuild: one icon button per project + a trailing position label.
     rebuild: function () {
+        for (let i = 0; i < this._buttons.length; i++) {
+            let t = this._buttons[i]._bwTooltip;
+            if (t && t.destroy) { try { t.destroy(); } catch (e) {} }
+        }
         this.actor.destroy_all_children();
         this._buttons = [];
 
@@ -56,10 +61,8 @@ PanelIndicator.prototype = {
                 this.controller.goToProject(b._projectIdx);
                 this.update();
             }));
-            // Tooltip with the project name (Cinnamon tooltip helper if present).
-            try {
-                btn.set_tooltip_text ? btn.set_tooltip_text(p.name) : null;
-            } catch (e) {}
+            // Hover tooltip with the project name (Cinnamon's Tooltips module).
+            btn._bwTooltip = new Tooltips.Tooltip(btn, p.name);
 
             this.actor.add(btn, { y_align: St.Align.MIDDLE, y_fill: false });
             this._buttons.push(btn);
@@ -110,6 +113,10 @@ PanelIndicator.prototype = {
     },
 
     destroy: function () {
+        for (let i = 0; i < this._buttons.length; i++) {
+            let t = this._buttons[i]._bwTooltip;
+            if (t && t.destroy) { try { t.destroy(); } catch (e) {} }
+        }
         if (this.actor) this.actor.destroy_all_children();
         this._buttons = [];
         this._posLabel = null;
