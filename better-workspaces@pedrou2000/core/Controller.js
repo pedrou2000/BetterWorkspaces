@@ -18,6 +18,20 @@ const Mapping = AppletDir.core.mapping.Mapping;
 const StateModule = AppletDir.core.State;
 const Util = imports.misc.util;
 const Mainloop = imports.mainloop;
+const GLib = imports.gi.GLib;
+
+// Map an xdg default-web-browser .desktop id -> the binary to launch with
+// --new-window. Mainstream browsers all accept --new-window. Anything not
+// listed falls back to xdg-open (default browser, but a new tab).
+const BROWSER_BINARIES = [
+    { match: "firefox",  bin: "firefox" },
+    { match: "chrome",   bin: "google-chrome" },
+    { match: "chromium", bin: "chromium" },
+    { match: "brave",    bin: "brave-browser" },
+    { match: "edge",     bin: "microsoft-edge" },
+    { match: "vivaldi",  bin: "vivaldi" },
+    { match: "opera",    bin: "opera" },
+];
 
 // How long to wait after requesting window closes before rechecking (ms).
 const CLOSE_GRACE_MS = 700;
@@ -312,13 +326,45 @@ Controller.prototype = {
         Mainloop.timeout_add(600, next);
     },
 
-    // Open a URL in a new browser window on the CURRENT workspace.
-    _openUrlNewWindow: function (url) {
+    // The user's default browser binary, or null if we can't determine one that
+    // we know how to open with --new-window. Cached after first lookup.
+    _defaultBrowserBin: function () {
+        if (this._browserBin !== undefined) return this._browserBin;
+        this._browserBin = null;
         try {
-            try { Util.spawn(["firefox", "--new-window", url]); }
-            catch (inner) { Util.spawn(["xdg-open", url]); }
+            // xdg-settings returns e.g. "firefox.desktop" / "google-chrome.desktop".
+            let [ok, out] = GLib.spawn_command_line_sync("xdg-settings get default-web-browser");
+            if (ok && out) {
+                let desktop = (out instanceof Uint8Array
+                    ? imports.byteArray.toString(out) : String(out)).trim().toLowerCase();
+                for (let i = 0; i < BROWSER_BINARIES.length; i++) {
+                    if (desktop.indexOf(BROWSER_BINARIES[i].match) !== -1) {
+                        this._browserBin = BROWSER_BINARIES[i].bin;
+                        break;
+                    }
+                }
+                log("_defaultBrowserBin: default=" + desktop + " -> " + this._browserBin);
+            }
         } catch (e) {
-            logError("_openUrlNewWindow: " + e.toString());
+            logError("_defaultBrowserBin: " + e.toString());
+        }
+        return this._browserBin;
+    },
+
+    // Open a URL in a new window of the DEFAULT browser on the CURRENT
+    // workspace. Falls back to xdg-open (default browser, new tab) if we don't
+    // recognize the browser or the launch fails.
+    _openUrlNewWindow: function (url) {
+        let bin = this._defaultBrowserBin();
+        try {
+            if (bin) {
+                Util.spawn([bin, "--new-window", url]);
+            } else {
+                Util.spawn(["xdg-open", url]);
+            }
+        } catch (e) {
+            logError("_openUrlNewWindow: " + e.toString() + " — falling back to xdg-open");
+            try { Util.spawn(["xdg-open", url]); } catch (e2) {}
         }
     },
 
