@@ -21,15 +21,16 @@ function log(msg) { global.log(UUID + " [panel]: " + msg); }
 
 const ICON_SIZE = 22;
 
-function PanelIndicator(appletActor, controller) {
-    this._init(appletActor, controller);
+function PanelIndicator(appletActor, controller, orientation) {
+    this._init(appletActor, controller, orientation);
 }
 
 PanelIndicator.prototype = {
 
-    _init: function (appletActor, controller) {
+    _init: function (appletActor, controller, orientation) {
         this.actor = appletActor;
         this.controller = controller;
+        this.orientation = orientation;
         this._buttons = [];
         this._posLabel = null;
         this.rebuild();
@@ -61,8 +62,11 @@ PanelIndicator.prototype = {
                 this.controller.goToProject(b._projectIdx);
                 this.update();
             }));
-            // Hover tooltip with the project name (Cinnamon's Tooltips module).
-            btn._bwTooltip = new Tooltips.Tooltip(btn, p.name);
+            // Hover tooltip with the project name. PanelItemTooltip is panel-
+            // aware, so it positions relative to the panel (above, when the
+            // panel is at the bottom) instead of always dropping downward.
+            btn._bwTooltip = new Tooltips.PanelItemTooltip(
+                { actor: btn }, p.name, this.orientation);
 
             this.actor.add(btn, { y_align: St.Align.MIDDLE, y_fill: false });
             this._buttons.push(btn);

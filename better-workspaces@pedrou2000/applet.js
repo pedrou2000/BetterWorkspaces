@@ -75,7 +75,7 @@ MyApplet.prototype = {
             // Falls back to a placeholder if nothing is cached yet.
             this._loadDeckFromCache();
 
-            this.panelUI = new PanelIndicatorModule.PanelIndicator(this.actor, this.controller);
+            this.panelUI = new PanelIndicatorModule.PanelIndicator(this.actor, this.controller, orientation);
             this.switcher = new ProjectSwitcherModule.ProjectSwitcher(this.controller);
 
             this._switchId = global.window_manager.connect(
