@@ -282,37 +282,36 @@ Controller.prototype = {
         return true;
     },
 
-    // DEBUG-SIMPLE: on load, open EVERY project's Notion page on its home
-    // workspace, unconditionally (no empty-check), with verbose logging so we
-    // can see exactly what happens. Sequential with a delay so windows land on
-    // the right workspace. Returns to the starting workspace at the end.
+    // On load, open each project's Notion page on its home workspace WITHOUT
+    // switching workspaces: for each job we arm a one-shot window catcher that
+    // moves the next-created window to the target workspace in the background,
+    // then spawn the browser. The user stays on their current workspace the
+    // whole time — no visible hopping. Only opens homes that are empty.
     ensureProjectHomesOpen: function () {
-        let startFlat = this.wm.getActiveIndex();
         let counts = this.state.counts();
         let jobs = [];
         for (let i = 0; i < this.state.projectCount(); i++) {
             let p = this.state.getProject(i);
+            if (!p || !p.notionUrl) continue;
             let homeFlat = Mapping.offsetOf(counts, i);
-            log("ensureProjectHomesOpen: project " + i + " '" + (p ? p.name : "?")
-                + "' homeFlat=" + homeFlat + " url=" + (p && p.notionUrl ? p.notionUrl : "NONE"));
-            if (p && p.notionUrl) jobs.push({ flat: homeFlat, url: p.notionUrl, name: p.name });
+            if (this.wm.countWindows(homeFlat) === 0) {
+                jobs.push({ flat: homeFlat, url: p.notionUrl, name: p.name });
+            }
         }
-        log("ensureProjectHomesOpen: " + jobs.length + " job(s), startFlat=" + startFlat);
+        log("ensureProjectHomesOpen: " + jobs.length + " home(s) to open (no switching)");
         if (jobs.length === 0) return;
 
         let self = this;
         let step = 0;
-        let PER_JOB_MS = 2000;
+        // Space jobs out so each browser window is created and caught before the
+        // next spawn — otherwise a single catcher could grab the wrong window.
+        let PER_JOB_MS = 2500;
         function next() {
-            if (step >= jobs.length) {
-                log("ensureProjectHomesOpen: done, returning to flat " + startFlat);
-                self.wm.goToWorkspace(startFlat);
-                return false;
-            }
+            if (step >= jobs.length) return false;
             let job = jobs[step++];
             log("ensureProjectHomesOpen: [" + step + "/" + jobs.length + "] '" + job.name
-                + "' -> goToWorkspace(" + job.flat + ") then open " + job.url);
-            self.wm.goToWorkspace(job.flat);
+                + "' -> catch next window to flat " + job.flat + ", open " + job.url);
+            self.wm.catchNextWindowToWorkspace(job.flat, 1);
             self._openUrlNewWindow(job.url);
             Mainloop.timeout_add(PER_JOB_MS, next);
             return false;

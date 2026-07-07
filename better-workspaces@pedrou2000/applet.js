@@ -66,7 +66,7 @@ MyApplet.prototype = {
         Applet.Applet.prototype._init.call(this, orientation, panel_height, instanceId);
 
         try {
-            log("loaded (M9 toggle-panel v0.9.2-debug)");
+            log("loaded (M9 toggle-panel v0.9.3)");
 
             this.wm = new WorkspaceManager.WorkspaceManager();
             this.controller = new ControllerModule.Controller(this.wm);
@@ -97,8 +97,8 @@ MyApplet.prototype = {
             // Kick off a background sync to refresh the cache for NEXT launch.
             if (this.sync && this._notionConfigured()) this.sync.start();
 
-            // DEBUG: open every project's Notion page on its home workspace.
-            log("calling ensureProjectHomesOpen()");
+            // Open each project's Notion page on its home workspace (in the
+            // background, without switching the active workspace).
             this.controller.ensureProjectHomesOpen();
         } catch (e) {
             logError("init exception: " + e.toString());
