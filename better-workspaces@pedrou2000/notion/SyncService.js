@@ -51,9 +51,32 @@ SyncService.prototype = {
     },
 
     // Read whatever is currently cached on disk (instant, offline-safe).
+    // Returns ALL non-archived projects; callers derive the deck by filtering
+    // inWorkspace=true.
     readCache: function () {
         let cached = Persistence.readJSON(CACHE_FILE, null);
         return (cached && cached.projects) ? cached.projects : [];
+    },
+
+    // Write the Workspace checkbox for a project back to Notion, then update the
+    // cached entry's inWorkspace flag on success. cb(err) — err null on success.
+    setWorkspaceFlag: function (pageId, value, cb) {
+        if (!this.client.hasToken()) { cb && cb("no-token"); return; }
+        this.client.updatePageCheckbox(pageId, "Workspace", value, (err) => {
+            if (err) {
+                L.error("setWorkspaceFlag failed for " + pageId + ": " + err);
+                cb && cb(err);
+                return;
+            }
+            // Reflect the change in the on-disk cache so it survives reloads.
+            let projects = this.readCache();
+            for (let i = 0; i < projects.length; i++) {
+                if (projects[i].id === pageId) { projects[i].inWorkspace = !!value; break; }
+            }
+            this._writeCache(projects);
+            L.log("setWorkspaceFlag: " + pageId + " -> " + value);
+            cb && cb(null);
+        });
     },
 
     // Trigger one sync now. Non-blocking; result flows via cache + onUpdate.

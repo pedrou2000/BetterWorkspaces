@@ -15,6 +15,8 @@ const Main = imports.ui.main;
 const Meta = imports.gi.Meta;
 const Settings = imports.ui.settings;
 const PopupMenu = imports.ui.popupMenu;
+const ModalDialog = imports.ui.modalDialog;
+const Clutter = imports.gi.Clutter;
 
 const UUID = "better-workspaces@pedrou2000";
 
@@ -23,6 +25,7 @@ const WorkspaceManager = AppletDir.wm.WorkspaceManager;
 const ControllerModule = AppletDir.core.Controller;
 const PanelIndicatorModule = AppletDir.ui.PanelIndicator;
 const ProjectSwitcherModule = AppletDir.ui.ProjectSwitcher;
+const ProjectTogglePanelModule = AppletDir.ui.ProjectTogglePanel.ProjectTogglePanelModule;
 const SyncServiceModule = AppletDir.notion.SyncService.SyncServiceModule;
 
 function log(msg) { global.log(UUID + ": " + msg); }
@@ -63,7 +66,7 @@ MyApplet.prototype = {
         Applet.Applet.prototype._init.call(this, orientation, panel_height, instanceId);
 
         try {
-            log("loaded (M8 workspace-checkbox v0.8.0)");
+            log("loaded (M9 toggle-panel v0.9.0)");
 
             this.wm = new WorkspaceManager.WorkspaceManager();
             this.controller = new ControllerModule.Controller(this.wm);
@@ -104,27 +107,31 @@ MyApplet.prototype = {
             && this.settings.getValue("notionDatabaseId");
     },
 
-    // Build the deck from cached Notion projects. Each project gets a home
-    // workspace to start. If the cache is empty, show the placeholder so the
-    // panel is never blank.
+    // Convert a cached project entry to a controller project def.
+    _toDef: function (p) {
+        return {
+            id: p.id,
+            name: p.name,
+            wsCount: DEFAULT_WS_PER_PROJECT,
+            icon: p.icon,
+            notionUrl: p.notionUrl,
+        };
+    },
+
+    // Build the deck from cached Notion projects, filtered to the ones whose
+    // Workspace checkbox is true (inWorkspace). The cache holds ALL non-archived
+    // projects (for the toggle panel); the DECK is the inWorkspace subset.
     _loadDeckFromCache: function () {
         let cached = this.sync ? this.sync.readCache() : [];
-        if (!cached || cached.length === 0) {
-            log("_loadDeckFromCache: no cache yet -> placeholder deck");
+        let inDeck = cached.filter(function (p) { return p.inWorkspace; });
+        if (!inDeck || inDeck.length === 0) {
+            log("_loadDeckFromCache: no in-workspace projects cached -> placeholder deck");
             this.controller.loadProjects(PLACEHOLDER_PROJECTS);
             return;
         }
-        let defs = cached.map(function (p) {
-            return {
-                id: p.id,
-                name: p.name,
-                wsCount: DEFAULT_WS_PER_PROJECT,
-                icon: p.icon,
-                notionUrl: p.notionUrl,
-            };
-        });
-        this.controller.loadProjects(defs);
-        log("_loadDeckFromCache: loaded " + defs.length + " projects from cache");
+        this.controller.loadProjects(inDeck.map(Lang.bind(this, this._toDef)));
+        log("_loadDeckFromCache: loaded " + inDeck.length + " in-workspace projects (of "
+            + cached.length + " cached)");
     },
 
     _refresh: function () {
@@ -189,6 +196,114 @@ MyApplet.prototype = {
         }
     },
 
+    // ---- M9: Project Toggle Panel ------------------------------------------
+
+    // Open the searchable toggle panel. Reads the full cached project list; each
+    // toggle change is orchestrated by _handleToggle below.
+    openTogglePanel: function () {
+        try {
+            let panel = new ProjectTogglePanelModule.ProjectTogglePanel(
+                Lang.bind(this, function () { return this.sync ? this.sync.readCache() : []; }),
+                Lang.bind(this, this._handleToggle));
+            this._togglePanel = panel;
+            panel.open();
+        } catch (e) {
+            logError("openTogglePanel: " + e.toString());
+        }
+    },
+
+    // Perform a Workspace toggle: write to Notion, then add/remove the project
+    // from the live deck. doneCb(err) — err non-null reverts the toggle.
+    _handleToggle: function (project, newValue, doneCb) {
+        if (!this.sync) { doneCb("no-sync"); return; }
+
+        if (newValue) {
+            // Turning ON: write Notion, then add to the live deck immediately.
+            this.sync.setWorkspaceFlag(project.id, true, Lang.bind(this, function (err) {
+                if (err) { doneCb(err); return; }
+                this.controller.addProjectLive(this._toDef(project));
+                this.panelUI.rebuild();
+                this._refresh();
+                doneCb(null);
+            }));
+        } else {
+            // Turning OFF: destructive. Find the deck index, confirm, then
+            // remove (which gracefully closes windows). Only on success do we
+            // write Workspace=false to Notion.
+            let deckIdx = this._deckIndexOf(project.id);
+            if (deckIdx < 0) {
+                // Not in the live deck (shouldn't happen) — just write the flag.
+                this.sync.setWorkspaceFlag(project.id, false, function (err) { doneCb(err); });
+                return;
+            }
+            this._confirmRemoval(project, Lang.bind(this, function (confirmed) {
+                if (!confirmed) { doneCb("cancelled"); return; }
+                this.controller.removeProjectLive(deckIdx, Lang.bind(this, function (rmErr, info) {
+                    if (rmErr === "windows-open") {
+                        this._notifyWindowsOpen(project, info);
+                        doneCb("windows-open");
+                        return;
+                    }
+                    if (rmErr) { doneCb(rmErr); return; }
+                    this.panelUI.rebuild();
+                    this._refresh();
+                    // Deck change succeeded; now persist Workspace=false.
+                    this.sync.setWorkspaceFlag(project.id, false, function (wErr) {
+                        doneCb(wErr); // if the write fails, panel reverts the toggle
+                    });
+                }));
+            }));
+        }
+    },
+
+    // Index of a project in the live controller deck by Notion id, or -1.
+    _deckIndexOf: function (projectId) {
+        let n = this.controller.state.projectCount();
+        for (let i = 0; i < n; i++) {
+            let p = this.controller.state.getProject(i);
+            if (p && p.id === projectId) return i;
+        }
+        return -1;
+    },
+
+    // Confirm destructive removal via a modal. cb(confirmedBool).
+    _confirmRemoval: function (project, cb) {
+        let deckIdx = this._deckIndexOf(project.id);
+        let p = this.controller.state.getProject(deckIdx);
+        let wsCount = p ? p.wsCount : 1;
+        let dialog = new ModalDialog.ModalDialog();
+        let box = new (imports.gi.St.BoxLayout)({ vertical: true, style_class: 'better-workspaces-toggle-panel' });
+        box.add(new (imports.gi.St.Label)({
+            style_class: 'better-workspaces-toggle-title',
+            text: "Remove “" + project.name + "” from workspaces?",
+        }));
+        box.add(new (imports.gi.St.Label)({
+            text: "This will close its windows and remove its " + wsCount + " workspace(s).",
+        }));
+        dialog.contentLayout.add(box);
+        dialog.setButtons([
+            { label: "Cancel", action: function () { dialog.close(); cb(false); }, key: Clutter.KEY_Escape },
+            { label: "Remove", action: function () { dialog.close(); cb(true); } },
+        ]);
+        dialog.open();
+    },
+
+    _notifyWindowsOpen: function (project, info) {
+        let titles = (info && info.openTitles) ? info.openTitles.join(", ") : "";
+        let dialog = new ModalDialog.ModalDialog();
+        let box = new (imports.gi.St.BoxLayout)({ vertical: true, style_class: 'better-workspaces-toggle-panel' });
+        box.add(new (imports.gi.St.Label)({
+            style_class: 'better-workspaces-toggle-title',
+            text: "Couldn’t remove “" + project.name + "”",
+        }));
+        box.add(new (imports.gi.St.Label)({
+            text: "Please close these window(s) first, then try again:\n" + titles,
+        }));
+        dialog.contentLayout.add(box);
+        dialog.setButtons([{ label: "OK", action: function () { dialog.close(); }, key: Clutter.KEY_Escape }]);
+        dialog.open();
+    },
+
     _registerKeybindings: function () {
         this._boundKeys = [];
 
@@ -231,6 +346,15 @@ MyApplet.prototype = {
             }));
         this._boundKeys.push("bw-open-home");
 
+        // Super+P -> open the Project Toggle Panel.
+        Main.keybindingManager.addHotKey(
+            "bw-toggle-panel", "<Super>p",
+            Lang.bind(this, function () {
+                try { this.openTogglePanel(); }
+                catch (e) { logError("toggle-panel hotkey: " + e.toString()); }
+            }));
+        this._boundKeys.push("bw-toggle-panel");
+
         log("registered keybindings (overrides + Super+Tab + Super+H)");
     },
 
@@ -261,6 +385,9 @@ MyApplet.prototype = {
                 this._refresh();
             }));
             menu.addMenuItem(item);
+        });
+        addAction("Manage workspace projects… (Super+P)", function () {
+            this.openTogglePanel();
         });
         addAction("Open active project's Notion page", function () {
             this.controller.openActiveProjectHome();
@@ -313,6 +440,7 @@ MyApplet.prototype = {
                 global.workspace_manager.disconnect(this._nWorkspacesId);
                 this._nWorkspacesId = 0;
             }
+            if (this._togglePanel) { this._togglePanel.destroy(); this._togglePanel = null; }
             if (this.sync) { this.sync.destroy(); this.sync = null; }
             if (this.settings) { this.settings.finalize(); this.settings = null; }
             if (this.switcher) { this.switcher.destroy(); this.switcher = null; }

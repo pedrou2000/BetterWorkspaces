@@ -101,6 +101,45 @@ State.prototype = {
         return this._mru.length > 1 ? this._mru[1] : this.activeProjectIdx;
     },
 
+    // ---- Adding / removing whole projects (M9 live deck changes) -----------
+
+    // Append a project to the end of the deck. Returns its new index.
+    appendProject: function (def) {
+        this.projects.push({
+            id: def.id,
+            name: def.name,
+            wsCount: Math.max(1, def.wsCount || 1),
+            lastLocal: 0,
+            icon: def.icon || null,
+            notionUrl: def.notionUrl || null,
+        });
+        let idx = this.projects.length - 1;
+        this._mru.push(idx); // least-recent until visited
+        log("appendProject: " + def.name + " at index " + idx);
+        return idx;
+    },
+
+    // Remove the project at `idx`, fixing up MRU + activeProjectIdx to account
+    // for the reindexing of everything after `idx`.
+    removeProject: function (idx) {
+        if (idx < 0 || idx >= this.projects.length) return false;
+        this.projects.splice(idx, 1);
+
+        // Rebuild MRU: drop `idx`, decrement any index above it.
+        this._mru = this._mru
+            .filter(function (i) { return i !== idx; })
+            .map(function (i) { return i > idx ? i - 1 : i; });
+
+        // Fix active pointer similarly (caller usually re-sets it right after).
+        if (this.activeProjectIdx === idx) {
+            this.activeProjectIdx = Math.max(0, Math.min(this.activeProjectIdx, this.projects.length - 1));
+        } else if (this.activeProjectIdx > idx) {
+            this.activeProjectIdx -= 1;
+        }
+        log("removeProject: removed index " + idx + ", " + this.projects.length + " remain");
+        return true;
+    },
+
     // ---- Mutating a project's workspace count ------------------------------
 
     incWorkspaceCount: function (projectIdx) {

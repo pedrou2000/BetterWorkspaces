@@ -203,6 +203,40 @@ WorkspaceManager.prototype = {
         }
     },
 
+    // ---- Closing windows (graceful) ----------------------------------------
+
+    // List non-pinned windows across a set of workspace indices.
+    listWindowsOnWorkspaces: function (indices) {
+        let out = [];
+        try {
+            for (let k = 0; k < indices.length; k++) {
+                let ws = this._wm().get_workspace_by_index(indices[k]);
+                if (!ws) continue;
+                let windows = ws.list_windows();
+                for (let i = 0; i < windows.length; i++) {
+                    let w = windows[i];
+                    if (w.is_on_all_workspaces && w.is_on_all_workspaces()) continue;
+                    out.push(w);
+                }
+            }
+        } catch (e) {
+            logError("listWindowsOnWorkspaces: " + e.toString());
+        }
+        return out;
+    },
+
+    // Request a graceful close of a window (behaves like clicking the X; the
+    // app may prompt to save). Does NOT force-kill.
+    requestCloseWindow: function (win) {
+        try {
+            win.delete(this._now());
+            return true;
+        } catch (e) {
+            logError("requestCloseWindow: " + e.toString());
+            return false;
+        }
+    },
+
     // ---- Lifecycle ---------------------------------------------------------
 
     destroy: function () {

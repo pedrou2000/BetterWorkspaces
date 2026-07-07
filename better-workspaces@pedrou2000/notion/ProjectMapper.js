@@ -11,8 +11,9 @@
  *   - icon:                page-level "icon" (emoji | external | file |
  *                          custom_emoji | built-in {name,color})
  *
- * Filter: keep a project iff its "Workspace" checkbox is true AND it is not
- * archived. (Priority no longer plays any role in selection.)
+ * We cache ALL non-archived projects, each tagged with `inWorkspace` (its
+ * Workspace checkbox). The DECK is derived downstream by filtering to
+ * inWorkspace=true; the Project Toggle Panel (M9) shows the full list.
  *
  * Released under the GNU General Public License v2 (see LICENSE).
  */
@@ -24,13 +25,13 @@ const TITLE_PROP = "Project";
 const WORKSPACE_PROP = "Workspace";
 const ARCHIVE_PROP = "Archive";
 
-// Notion API query body: filter server-side to Workspace=true AND Archive=false.
+// Notion API query body: fetch all non-archived projects (we tag each with its
+// Workspace flag in the mapper rather than filtering it out server-side).
 function buildQueryBody() {
     return {
         page_size: 100,
         filter: {
             and: [
-                { property: WORKSPACE_PROP, checkbox: { equals: true } },
                 { property: ARCHIVE_PROP, checkbox: { equals: false } },
             ],
         },
@@ -94,17 +95,17 @@ function _icon(page) {
     return null;
 }
 
-// Map one raw page -> Project{} or null if it should be filtered out.
-// Filter: Workspace checkbox true AND not archived.
+// Map one raw page -> Project{} or null. We keep every non-archived project and
+// record its Workspace checkbox as `inWorkspace`; the deck is derived downstream.
 function mapPage(page) {
     if (_isArchived(page)) return null;
-    if (!_wantsWorkspace(page)) return null;
 
     return {
         id: page.id,
         name: _plainTitle(page),
         icon: _icon(page),
         notionUrl: page.url || null,
+        inWorkspace: _wantsWorkspace(page),
     };
 }
 

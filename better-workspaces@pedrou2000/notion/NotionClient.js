@@ -49,8 +49,18 @@ NotionClient.prototype = {
         h.append("Content-Type", "application/json");
     },
 
-    // POST JSON to `path` (relative to base). Calls cb(err, parsedObjOrNull).
+    // POST JSON to `path`. Calls cb(err, parsedObjOrNull).
     _post: function (path, bodyObj, cb) {
+        this._request("POST", path, bodyObj, cb);
+    },
+
+    // PATCH JSON to `path`. Calls cb(err, parsedObjOrNull).
+    _patch: function (path, bodyObj, cb) {
+        this._request("PATCH", path, bodyObj, cb);
+    },
+
+    // Send a JSON request with the given HTTP method. cb(err, parsedObjOrNull).
+    _request: function (method, path, bodyObj, cb) {
         if (!this.hasToken()) {
             cb("no-token", null);
             return;
@@ -60,9 +70,7 @@ NotionClient.prototype = {
         let bodyText = JSON.stringify(bodyObj || {});
 
         try {
-            let msg = SOUP3
-                ? Soup.Message.new("POST", url)
-                : Soup.Message.new("POST", url);
+            let msg = Soup.Message.new(method, url);
             this._headers(msg);
 
             if (SOUP3) {
@@ -123,6 +131,14 @@ NotionClient.prototype = {
     // later if the project list ever exceeds that.
     queryDatabase: function (dbId, body, cb) {
         this._post("/databases/" + dbId + "/query", body, cb);
+    },
+
+    // Set a checkbox property on a page. cb(err, parsedObjOrNull).
+    // Requires the integration to have update-content capability.
+    updatePageCheckbox: function (pageId, propName, value, cb) {
+        let props = {};
+        props[propName] = { checkbox: !!value };
+        this._patch("/pages/" + pageId, { properties: props }, cb);
     },
 };
 

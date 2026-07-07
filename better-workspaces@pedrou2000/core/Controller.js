@@ -17,6 +17,10 @@ const AppletDir = imports.ui.appletManager.applets[UUID];
 const Mapping = AppletDir.core.mapping.Mapping;
 const StateModule = AppletDir.core.State;
 const Util = imports.misc.util;
+const Mainloop = imports.mainloop;
+
+// How long to wait after requesting window closes before rechecking (ms).
+const CLOSE_GRACE_MS = 700;
 
 function log(msg) { global.log(UUID + " [ctrl]: " + msg); }
 function logError(msg) { global.logError(UUID + " [ctrl]: " + msg); }
@@ -266,6 +270,82 @@ Controller.prototype = {
         log("removeLastWorkspaceOfActiveProject: " + p.name + " now "
             + this.state.getProject(pIdx).wsCount + " (removed flat " + removeAt + ")");
         return true;
+    },
+
+    // ---- M9: live add / remove of whole projects ---------------------------
+
+    // Add a project to the live deck: append its partition at the end of the
+    // flat list (safe — no window shifting), grow the model. Stays put.
+    addProjectLive: function (def) {
+        let idx = this.state.appendProject(def);
+        // The new project's single home workspace goes at the global end, which
+        // is exactly where Cinnamon appends — so a plain reconcile is correct.
+        this._reconcileWorkspaceCount();
+        log("addProjectLive: " + def.name + " (index " + idx + ")");
+        return idx;
+    },
+
+    // Remove a project from the live deck (destructive). Requests a graceful
+    // close of every window in the project's partition, waits, then:
+    //   - if any window survives -> ABORT (cb receives the surviving windows'
+    //     titles); the project stays.
+    //   - else -> remove the partition's workspaces and the project from the
+    //     model, landing on the MRU-previous project if we removed the active one.
+    // cb(err, info): err null on success; err "windows-open" with
+    // info.openTitles when aborted.
+    removeProjectLive: function (projectIdx, cb) {
+        let p = this.state.getProject(projectIdx);
+        if (!p) { cb && cb("invalid-project"); return; }
+
+        let counts = this.state.counts();
+        let offset = Mapping.offsetOf(counts, projectIdx);
+        let indices = [];
+        for (let i = 0; i < p.wsCount; i++) indices.push(offset + i);
+
+        // 1) Request graceful close of all windows in this partition.
+        let windows = this.wm.listWindowsOnWorkspaces(indices);
+        log("removeProjectLive: " + p.name + " has " + windows.length
+            + " windows across workspaces [" + indices.join(",") + "]");
+        for (let i = 0; i < windows.length; i++) this.wm.requestCloseWindow(windows[i]);
+
+        // 2) After a grace period, recheck.
+        Mainloop.timeout_add(CLOSE_GRACE_MS, () => {
+            let remaining = this.wm.listWindowsOnWorkspaces(indices);
+            if (remaining.length > 0) {
+                let titles = remaining.map(function (w) {
+                    try { return w.get_title(); } catch (e) { return "(window)"; }
+                });
+                log("removeProjectLive: ABORT — " + remaining.length + " window(s) still open");
+                cb && cb("windows-open", { openTitles: titles });
+                return false;
+            }
+
+            // 3) All closed — remove the partition's workspaces high->low so
+            //    indices stay valid, then remove the project from the model.
+            let curCounts = this.state.counts();
+            let curOffset = Mapping.offsetOf(curCounts, projectIdx);
+            for (let i = p.wsCount - 1; i >= 0; i--) {
+                this.wm.removeWorkspace(curOffset + i);
+            }
+            let wasActive = (this.state.activeProjectIdx === projectIdx);
+            // MRU-previous is captured as an OLD index; removeProject() shifts
+            // every index above projectIdx down by one, so adjust to match.
+            let mruPrev = this.state.previousProjectIdx();
+            if (mruPrev > projectIdx) mruPrev -= 1;
+            this.state.removeProject(projectIdx);
+            this._reconcileWorkspaceCount();
+
+            // 4) If we removed the active project, land on the MRU-previous one
+            //    (clamped to a valid index after the reindex).
+            if (wasActive && this.state.projectCount() > 0) {
+                let target = mruPrev;
+                if (target < 0 || target >= this.state.projectCount()) target = 0;
+                this.goToProject(target);
+            }
+            log("removeProjectLive: removed " + p.name);
+            cb && cb(null);
+            return false;
+        });
     },
 
     // ---- Introspection for logging / future UI -----------------------------
