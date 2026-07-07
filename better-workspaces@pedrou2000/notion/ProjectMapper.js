@@ -4,15 +4,15 @@
  * Turns raw Notion pages into our domain object and owns ALL schema knowledge
  * (Design Doc §3.A). If the Notion schema changes, only this file changes.
  *
- * Projects DB schema (as of M4):
- *   - title property:    "Project"
- *   - priority (select): "Current Priority"  options: Top/High/Medium/Low/Vey Low
- *   - archive (checkbox):"Archive"
- *   - icon:              page-level "icon" (emoji | external | file)
+ * Projects DB schema:
+ *   - title property:      "Project"
+ *   - workspace (checkbox):"Workspace"  <- decides if a project appears here
+ *   - archive (checkbox):  "Archive"
+ *   - icon:                page-level "icon" (emoji | external | file |
+ *                          custom_emoji | built-in {name,color})
  *
- * Filter (UX doc §4): keep projects that are NOT archived AND whose priority is
- * NOT low-ish. We match "low" case-insensitively so both "Low" and the literal
- * Notion typo "Vey Low" are excluded, future-proof against fixing the typo.
+ * Filter: keep a project iff its "Workspace" checkbox is true AND it is not
+ * archived. (Priority no longer plays any role in selection.)
  *
  * Released under the GNU General Public License v2 (see LICENSE).
  */
@@ -21,40 +21,16 @@ const AppletDir = imports.ui.appletManager.applets["better-workspaces@pedrou2000
 const L = AppletDir.lib.logger.Logger.makeLogger("mapper");
 
 const TITLE_PROP = "Project";
-const PRIORITY_PROP = "Current Priority";
+const WORKSPACE_PROP = "Workspace";
 const ARCHIVE_PROP = "Archive";
 
-// Priority ranking, high -> low. Higher rank number = higher priority. We match
-// names case-insensitively by their leading word so the Notion typo "Vey Low"
-// still ranks as low. A project with no priority ranks as 0 (below everything),
-// so templates / unprioritized pages drop out under any positive threshold.
-const PRIORITY_RANK = { top: 5, high: 4, medium: 3, low: 2, "vey low": 1, "very low": 1 };
-
-function priorityRank(name) {
-    if (!name) return 0;
-    let key = name.trim().toLowerCase();
-    if (PRIORITY_RANK[key] !== undefined) return PRIORITY_RANK[key];
-    if (key.indexOf("low") !== -1) return 1;   // catch "Vey Low"/"Very Low"
-    if (key.indexOf("top") !== -1) return 5;
-    if (key.indexOf("high") !== -1) return 4;
-    if (key.indexOf("medium") !== -1) return 3;
-    return 0;
-}
-
-// Minimum rank to KEEP a project. Default 5 (Top) => only Top-priority
-// projects, to start small; the applet overrides this from the "minPriority"
-// setting.
-let MIN_RANK = 5;
-function setMinRank(rank) { MIN_RANK = rank; }
-function rankForName(name) { return priorityRank(name); }
-
-// Notion API query body implementing the filter server-side where possible.
-// (We also re-check client-side in map(), so this is an optimization.)
+// Notion API query body: filter server-side to Workspace=true AND Archive=false.
 function buildQueryBody() {
     return {
         page_size: 100,
         filter: {
             and: [
+                { property: WORKSPACE_PROP, checkbox: { equals: true } },
                 { property: ARCHIVE_PROP, checkbox: { equals: false } },
             ],
         },
@@ -74,27 +50,26 @@ function _plainTitle(page) {
     }
 }
 
-function _priorityName(page) {
+function _checkbox(page, propName) {
     try {
-        let prop = page.properties[PRIORITY_PROP];
-        if (prop && prop.select && prop.select.name) return prop.select.name;
-    } catch (e) {}
-    return null;
+        let prop = page.properties[propName];
+        return !!(prop && prop.checkbox === true);
+    } catch (e) { return false; }
 }
 
 function _isArchived(page) {
     // Page-level archived flag OR our Archive checkbox = true.
     if (page.archived === true) return true;
-    try {
-        let prop = page.properties[ARCHIVE_PROP];
-        if (prop && prop.checkbox === true) return true;
-    } catch (e) {}
-    return false;
+    return _checkbox(page, ARCHIVE_PROP);
+}
+
+function _wantsWorkspace(page) {
+    return _checkbox(page, WORKSPACE_PROP);
 }
 
 // Extract the icon into a normalized shape:
 //   { type: "emoji", value: "🗂️" }
-//   { type: "url",   value: "https://..." }   (external or uploaded file)
+//   { type: "url",   value: "https://..." }
 //   null
 function _icon(page) {
     try {
@@ -106,8 +81,8 @@ function _icon(page) {
         // Notion "custom_emoji" (uploaded emoji) carries an image URL.
         if (ic.type === "custom_emoji" && ic.custom_emoji)
             return { type: "url", value: ic.custom_emoji.url };
-        // Notion built-in gallery icon: {name, color}. These are served as SVGs
-        // at a predictable URL, e.g. brain+blue -> /icons/brain_blue.svg.
+        // Notion built-in gallery icon: {name, color}. Served as SVGs at a
+        // predictable URL, e.g. brain+blue -> /icons/brain_blue.svg.
         if (ic.type === "icon" && ic.icon && ic.icon.name) {
             let color = ic.icon.color || "gray";
             return {
@@ -120,17 +95,14 @@ function _icon(page) {
 }
 
 // Map one raw page -> Project{} or null if it should be filtered out.
-// Filter: not archived AND priority rank >= MIN_RANK. Because unprioritized
-// pages rank 0, templates and stray pages drop out under any positive threshold.
+// Filter: Workspace checkbox true AND not archived.
 function mapPage(page) {
     if (_isArchived(page)) return null;
-    let priority = _priorityName(page);
-    if (priorityRank(priority) < MIN_RANK) return null;
+    if (!_wantsWorkspace(page)) return null;
 
     return {
         id: page.id,
         name: _plainTitle(page),
-        priority: priority,
         icon: _icon(page),
         notionUrl: page.url || null,
     };
@@ -152,10 +124,8 @@ var ProjectMapper = {
     buildQueryBody: buildQueryBody,
     mapPage: mapPage,
     mapResults: mapResults,
-    setMinRank: setMinRank,
-    rankForName: rankForName,
     // exported for reference/testing
     TITLE_PROP: TITLE_PROP,
-    PRIORITY_PROP: PRIORITY_PROP,
+    WORKSPACE_PROP: WORKSPACE_PROP,
     ARCHIVE_PROP: ARCHIVE_PROP,
 };

@@ -15,18 +15,6 @@
         "description": "Projects database ID",
         "tooltip": "The 32-char id of your Notion Projects database."
     },
-    "minPriority": {
-        "type": "combobox",
-        "default": "5",
-        "description": "Include projects with priority at least:",
-        "tooltip": "Start small with Top+High; lower it to include more projects.",
-        "options": {
-            "Top only": "5",
-            "High and above": "4",
-            "Medium and above": "3",
-            "Low and above (all non-archived)": "2"
-        }
-    },
     "syncIntervalSec": {
         "type": "spinbutton",
         "default": 300,

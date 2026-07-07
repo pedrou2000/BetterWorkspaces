@@ -28,8 +28,6 @@ const SyncServiceModule = AppletDir.notion.SyncService.SyncServiceModule;
 function log(msg) { global.log(UUID + ": " + msg); }
 function logError(msg) { global.logError(UUID + ": " + msg); }
 
-const ProjectMapper = AppletDir.notion.ProjectMapper.ProjectMapper;
-
 // Shown only when no Notion cache exists yet (first run / unconfigured), so the
 // applet is never empty. Replaced by the real deck as soon as a sync lands.
 const PLACEHOLDER_PROJECTS = [
@@ -65,13 +63,13 @@ MyApplet.prototype = {
         Applet.Applet.prototype._init.call(this, orientation, panel_height, instanceId);
 
         try {
-            log("loaded (M7 window-mgmt v0.7.0)");
+            log("loaded (M8 workspace-checkbox v0.8.0)");
 
             this.wm = new WorkspaceManager.WorkspaceManager();
             this.controller = new ControllerModule.Controller(this.wm);
 
-            // Settings first: we need the priority threshold + token before we
-            // decide the deck. This also creates this.sync.
+            // Settings first: we need the token before we decide the deck.
+            // This also creates this.sync.
             this._initSettingsAndSync(instanceId);
 
             // Load the deck from the on-disk Notion cache (instant, offline).
@@ -121,7 +119,6 @@ MyApplet.prototype = {
                 id: p.id,
                 name: p.name,
                 wsCount: DEFAULT_WS_PER_PROJECT,
-                priority: p.priority,
                 icon: p.icon,
                 notionUrl: p.notionUrl,
             };
@@ -146,9 +143,6 @@ MyApplet.prototype = {
         let token = this.settings.getValue("notionToken") || "";
         let dbId = this.settings.getValue("notionDatabaseId") || "";
         let interval = this.settings.getValue("syncIntervalSec") || 300;
-
-        // Apply the priority threshold to the mapper.
-        this._applyMinPriority();
 
         this.sync = new SyncServiceModule.SyncService(token, dbId, { intervalSec: interval });
 
@@ -175,23 +169,11 @@ MyApplet.prototype = {
             "notionDatabaseId", Lang.bind(this, function () {
                 this.sync.setDatabaseId(this.settings.getValue("notionDatabaseId"));
             }));
-        this.settings.bindProperty(Settings.BindingDirection.IN, "minPriority",
-            "minPriority", Lang.bind(this, function () {
-                this._applyMinPriority();
-            }));
 
         if (!token || !dbId) {
             log("Notion not configured — open settings, add your token, click "
                 + "'Sync now', then reload Cinnamon (Alt+F2, r) to load the deck.");
         }
-    },
-
-    _applyMinPriority: function () {
-        let raw = this.settings.getValue("minPriority");
-        let rank = parseInt(raw, 10);
-        if (isNaN(rank)) rank = 5;
-        ProjectMapper.setMinRank(rank);
-        log("minPriority threshold rank = " + rank);
     },
 
     // settings-schema.json "syncNow" button callback.
