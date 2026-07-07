@@ -371,13 +371,22 @@ Controller.prototype = {
     // ---- M9: live add / remove of whole projects ---------------------------
 
     // Add a project to the live deck: append its partition at the end of the
-    // flat list (safe — no window shifting), grow the model. Stays put.
+    // flat list (safe — no window shifting), grow the model, then switch to its
+    // home workspace and open its Notion page there (if it has one and the
+    // workspace is empty). Ends on the new project so the page lands correctly.
     addProjectLive: function (def) {
         let idx = this.state.appendProject(def);
         // The new project's single home workspace goes at the global end, which
         // is exactly where Cinnamon appends — so a plain reconcile is correct.
         this._reconcileWorkspaceCount();
         log("addProjectLive: " + def.name + " (index " + idx + ")");
+
+        // Open the project's Notion page on its (empty) home workspace.
+        let homeFlat = Mapping.offsetOf(this.state.counts(), idx);
+        if (def.notionUrl && this.wm.countWindows(homeFlat) === 0) {
+            this.goToProject(idx);
+            this._openUrlNewWindow(def.notionUrl);
+        }
         return idx;
     },
 
