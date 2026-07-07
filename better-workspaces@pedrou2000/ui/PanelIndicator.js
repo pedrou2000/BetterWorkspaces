@@ -67,6 +67,17 @@ PanelIndicator.prototype = {
         this.actor.destroy_all_children();
         this._buttons = [];
 
+        // Leading status dot (hidden when OK) for degraded-state feedback.
+        this._statusDot = new St.Label({
+            style_class: 'better-workspaces-status',
+            text: '',
+            reactive: true, // needed so hover tooltips fire (labels aren't reactive by default)
+        });
+        this._statusDot.visible = false;
+        this.actor.add(this._statusDot, { y_align: St.Align.MIDDLE, y_fill: false });
+        this._statusTip = new Tooltips.PanelItemTooltip(
+            { actor: this._statusDot }, "", this.orientation);
+
         let nProjects = this.controller.state.projectCount();
         for (let i = 0; i < nProjects; i++) {
             let p = this.controller.state.getProject(i);
@@ -99,18 +110,6 @@ PanelIndicator.prototype = {
             text: '',
         });
         this.actor.add(this._posLabel, { y_align: St.Align.MIDDLE, y_fill: false });
-
-        // Trailing status dot (hidden when OK) for degraded-state feedback —
-        // placed last so the project icons lead and this sits at the back.
-        this._statusDot = new St.Label({
-            style_class: 'better-workspaces-status',
-            text: '',
-            reactive: true, // needed so hover tooltips fire (labels aren't reactive by default)
-        });
-        this._statusDot.visible = false;
-        this.actor.add(this._statusDot, { y_align: St.Align.MIDDLE, y_fill: false });
-        this._statusTip = new Tooltips.PanelItemTooltip(
-            { actor: this._statusDot }, "", this.orientation);
 
         this.update();
         this.setStatus(this._status); // re-apply after rebuild recreates the dot
