@@ -71,6 +71,7 @@ PanelIndicator.prototype = {
         this._statusDot = new St.Label({
             style_class: 'better-workspaces-status',
             text: '',
+            reactive: true, // needed so hover tooltips fire (labels aren't reactive by default)
         });
         this._statusDot.visible = false;
         this.actor.add(this._statusDot, { y_align: St.Align.MIDDLE, y_fill: false });
