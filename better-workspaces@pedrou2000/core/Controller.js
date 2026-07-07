@@ -95,20 +95,9 @@ Controller.prototype = {
             log("openActiveProjectHome: no Notion URL for active project");
             return false;
         }
-        try {
-            // Firefox (Mint's default): --new-window forces a fresh window on
-            // the active workspace. Fall back to xdg-open if that fails.
-            try {
-                Util.spawn(["firefox", "--new-window", p.notionUrl]);
-            } catch (inner) {
-                Util.spawn(["xdg-open", p.notionUrl]);
-            }
-            log("openActiveProjectHome: opened " + p.notionUrl + " in a new window");
-            return true;
-        } catch (e) {
-            logError("openActiveProjectHome: " + e.toString());
-            return false;
-        }
+        this._openUrlNewWindow(p.notionUrl);
+        log("openActiveProjectHome: opened " + p.notionUrl + " in a new window");
+        return true;
     },
 
     // Cycle to the next/previous project in *project order* (not MRU) — useful
@@ -277,6 +266,60 @@ Controller.prototype = {
         log("removeLastWorkspaceOfActiveProject: " + p.name + " now "
             + this.state.getProject(pIdx).wsCount + " (removed flat " + removeAt + ")");
         return true;
+    },
+
+    // Ensure each project's HOME workspace (local 0) has its Notion page open.
+    // Eager: called once at load. For every project whose home workspace is
+    // empty, we switch to it, open the page in a new browser window (which lands
+    // on the now-active workspace), wait, then move to the next — sequentially,
+    // to avoid windows landing on the wrong workspace. Returns to the original
+    // active workspace at the end. "Any window present" => skip that project.
+    ensureProjectHomesOpen: function () {
+        let startFlat = this.wm.getActiveIndex();
+
+        // Build the work list: home flat index + url for empty homes only.
+        let jobs = [];
+        let counts = this.state.counts();
+        for (let i = 0; i < this.state.projectCount(); i++) {
+            let p = this.state.getProject(i);
+            if (!p || !p.notionUrl) continue;
+            let homeFlat = Mapping.offsetOf(counts, i); // local 0
+            if (this.wm.countWindows(homeFlat) === 0) {
+                jobs.push({ flat: homeFlat, url: p.notionUrl, name: p.name });
+            }
+        }
+        if (jobs.length === 0) { log("ensureProjectHomesOpen: nothing to open"); return; }
+        log("ensureProjectHomesOpen: opening " + jobs.length + " home page(s)");
+
+        let self = this;
+        let step = 0;
+        let PER_JOB_MS = 1800; // time for the browser window to appear
+        function next() {
+            if (step >= jobs.length) {
+                self.wm.goToWorkspace(startFlat); // return where we started
+                return false;
+            }
+            let job = jobs[step++];
+            // Re-check emptiness (a previous step's window could have raced in).
+            if (self.wm.countWindows(job.flat) === 0) {
+                self.wm.goToWorkspace(job.flat);
+                self._openUrlNewWindow(job.url);
+            }
+            Mainloop.timeout_add(PER_JOB_MS, next);
+            return false;
+        }
+        // Kick off after a short settle so the deck/workspaces are ready.
+        Mainloop.timeout_add(600, next);
+    },
+
+    // Open a URL in a new browser window on the CURRENT workspace.
+    _openUrlNewWindow: function (url) {
+        try {
+            try { Util.spawn(["firefox", "--new-window", url]); }
+            catch (inner) { Util.spawn(["xdg-open", url]); }
+        } catch (e) {
+            logError("_openUrlNewWindow: " + e.toString());
+        }
     },
 
     // ---- M9: live add / remove of whole projects ---------------------------
