@@ -100,16 +100,21 @@ function _icon(page) {
     try {
         let ic = page.icon;
         if (!ic) return null;
-        // Diagnostic: log the raw icon shape so we can handle every variant
-        // Notion sends (emoji / external / file / custom_emoji / built-in).
-        L.log("raw icon for '" + _plainTitle(page) + "': " + JSON.stringify(ic));
-
         if (ic.type === "emoji" && ic.emoji) return { type: "emoji", value: ic.emoji };
         if (ic.type === "external" && ic.external) return { type: "url", value: ic.external.url };
         if (ic.type === "file" && ic.file) return { type: "url", value: ic.file.url };
         // Notion "custom_emoji" (uploaded emoji) carries an image URL.
         if (ic.type === "custom_emoji" && ic.custom_emoji)
             return { type: "url", value: ic.custom_emoji.url };
+        // Notion built-in gallery icon: {name, color}. These are served as SVGs
+        // at a predictable URL, e.g. brain+blue -> /icons/brain_blue.svg.
+        if (ic.type === "icon" && ic.icon && ic.icon.name) {
+            let color = ic.icon.color || "gray";
+            return {
+                type: "url",
+                value: "https://www.notion.so/icons/" + ic.icon.name + "_" + color + ".svg",
+            };
+        }
     } catch (e) { L.error("_icon: " + e.toString()); }
     return null;
 }
