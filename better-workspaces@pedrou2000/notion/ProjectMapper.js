@@ -100,10 +100,17 @@ function _icon(page) {
     try {
         let ic = page.icon;
         if (!ic) return null;
-        if (ic.type === "emoji") return { type: "emoji", value: ic.emoji };
+        // Diagnostic: log the raw icon shape so we can handle every variant
+        // Notion sends (emoji / external / file / custom_emoji / built-in).
+        L.log("raw icon for '" + _plainTitle(page) + "': " + JSON.stringify(ic));
+
+        if (ic.type === "emoji" && ic.emoji) return { type: "emoji", value: ic.emoji };
         if (ic.type === "external" && ic.external) return { type: "url", value: ic.external.url };
         if (ic.type === "file" && ic.file) return { type: "url", value: ic.file.url };
-    } catch (e) {}
+        // Notion "custom_emoji" (uploaded emoji) carries an image URL.
+        if (ic.type === "custom_emoji" && ic.custom_emoji)
+            return { type: "url", value: ic.custom_emoji.url };
+    } catch (e) { L.error("_icon: " + e.toString()); }
     return null;
 }
 
