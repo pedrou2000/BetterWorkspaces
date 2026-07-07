@@ -2,19 +2,23 @@
  * BetterWorkspaces — ui/PanelIndicator.js
  *
  * Always-on panel surface (Design Doc §5.1). Renders one clickable button per
- * project (M3: name labels; Notion icons arrive in M6), highlights the active
- * project, and appends a compact within-project position label ("2/3"). Reads
- * Controller state; emits intents by calling Controller methods. Left-click a
- * project button -> switch to that project.
+ * project showing its Notion icon (M6, via ui/IconRenderer.js): emoji glyphs
+ * render directly, image icons download+cache and swap in when ready. The
+ * active project is highlighted; a trailing label shows within-project position
+ * ("2/3"). Project name is the tooltip. Left-click a button -> switch project.
  *
  * Released under the GNU General Public License v2 (see LICENSE).
  */
 const St = imports.gi.St;
 const Lang = imports.lang;
-const Clutter = imports.gi.Clutter;
+
+const AppletDir = imports.ui.appletManager.applets["better-workspaces@pedrou2000"];
+const IconRenderer = AppletDir.ui.IconRenderer.IconRenderer;
 
 const UUID = "better-workspaces@pedrou2000";
 function log(msg) { global.log(UUID + " [panel]: " + msg); }
+
+const ICON_SIZE = 22;
 
 function PanelIndicator(appletActor, controller) {
     this._init(appletActor, controller);
@@ -23,14 +27,14 @@ function PanelIndicator(appletActor, controller) {
 PanelIndicator.prototype = {
 
     _init: function (appletActor, controller) {
-        this.actor = appletActor;      // the applet's own St.BoxLayout
+        this.actor = appletActor;
         this.controller = controller;
         this._buttons = [];
         this._posLabel = null;
         this.rebuild();
     },
 
-    // Full rebuild: one button per project + a trailing position label.
+    // Full rebuild: one icon button per project + a trailing position label.
     rebuild: function () {
         this.actor.destroy_all_children();
         this._buttons = [];
@@ -41,13 +45,22 @@ PanelIndicator.prototype = {
             let btn = new St.Button({
                 style_class: 'better-workspaces-project',
                 reactive: true,
-                label: p.name,
             });
             btn._projectIdx = i;
+
+            // Icon child (emoji/image/fallback). If it's an image that needs
+            // downloading, swap it in when the download completes.
+            btn.set_child(this._makeIcon(p, i));
+
             btn.connect('clicked', Lang.bind(this, function (b) {
                 this.controller.goToProject(b._projectIdx);
                 this.update();
             }));
+            // Tooltip with the project name (Cinnamon tooltip helper if present).
+            try {
+                btn.set_tooltip_text ? btn.set_tooltip_text(p.name) : null;
+            } catch (e) {}
+
             this.actor.add(btn, { y_align: St.Align.MIDDLE, y_fill: false });
             this._buttons.push(btn);
         }
@@ -59,6 +72,19 @@ PanelIndicator.prototype = {
         this.actor.add(this._posLabel, { y_align: St.Align.MIDDLE, y_fill: false });
 
         this.update();
+    },
+
+    _makeIcon: function (project, idx) {
+        return IconRenderer.makeActor(
+            project.icon, project.name, ICON_SIZE,
+            Lang.bind(this, function () {
+                // Download finished: rebuild just this button's child.
+                let btn = this._buttons[idx];
+                if (btn) {
+                    try { btn.set_child(this._makeIcon(project, idx)); }
+                    catch (e) { log("icon swap failed: " + e.toString()); }
+                }
+            }));
     },
 
     // Lightweight refresh: highlight active project, update position label.
