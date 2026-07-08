@@ -45,11 +45,28 @@ function _parse(accel) {
 }
 
 function KeyBinder() {
-    this._cleared = []; // {schema, key, original: [..]} to restore on teardown
+    this._touched = {}; // "schema\0key" -> original [..] (saved once, for restore)
     this._added = [];   // hotkey names we registered
 }
 
+function _open(schema) {
+    try {
+        let src = Gio.SettingsSchemaSource.get_default();
+        if (!src || !src.lookup(schema, true)) return null;
+        return new Gio.Settings({ schema_id: schema });
+    } catch (e) { return null; }
+}
+
 KeyBinder.prototype = {
+
+    // Save a gsettings key's current value ONCE, so teardown restores the true
+    // original even if we both clear and reassign the same key.
+    _recordOriginal: function (schema, key, settings) {
+        let id = schema + "\0" + key;
+        if (this._touched[id] !== undefined) return;
+        try { this._touched[id] = settings.get_strv(key); }
+        catch (e) { this._touched[id] = []; }
+    },
 
     // Clear any Cinnamon binding that maps to `accel`, remembering the original.
     _clearConflicts: function (accel) {
@@ -58,15 +75,8 @@ KeyBinder.prototype = {
 
         for (let s = 0; s < KB_SCHEMAS.length; s++) {
             let schema = KB_SCHEMAS[s];
-            let settings;
-            try {
-                // Guard: skip schemas not installed on this system. Use the
-                // schema source (list_schemas is deprecated); if lookup returns
-                // null the schema is absent, so skip it.
-                let src = Gio.SettingsSchemaSource.get_default();
-                if (!src || !src.lookup(schema, true)) continue;
-                settings = new Gio.Settings({ schema_id: schema });
-            } catch (e) { continue; }
+            let settings = _open(schema);
+            if (!settings) continue;
 
             let keys;
             try { keys = settings.list_keys(); } catch (e) { continue; }
@@ -81,8 +91,7 @@ KeyBinder.prototype = {
                 let hit = accels.some(function (a) { return a && _parse(a) === want; });
                 if (!hit) continue;
 
-                // Save original once, then clear the whole key's bindings.
-                this._cleared.push({ schema: schema, key: key, original: accels.slice() });
+                this._recordOriginal(schema, key, settings);
                 try {
                     settings.set_strv(key, []);
                     L.log("cleared conflict " + schema + " " + key + " (had " + accels.join(",") + ")");
@@ -106,24 +115,47 @@ KeyBinder.prototype = {
         }
     },
 
-    // Remove our hotkeys and restore every cleared original binding.
+    // Assign a Cinnamon gsettings keybinding to specific accelerators (e.g. put
+    // window tiling on Super+Alt+arrows). Records the original for restore.
+    // Returns true on success.
+    assignGsettings: function (schema, key, accels) {
+        let settings = _open(schema);
+        if (!settings) { L.error("assign: schema not found " + schema); return false; }
+        try {
+            if (settings.list_keys().indexOf(key) === -1) {
+                L.error("assign: key not found " + schema + " " + key);
+                return false;
+            }
+            this._recordOriginal(schema, key, settings);
+            settings.set_strv(key, accels);
+            Gio.Settings.sync();
+            L.log("assigned " + schema + " " + key + " -> " + accels.join(","));
+            return true;
+        } catch (e) {
+            L.error("assign " + schema + " " + key + ": " + e.toString());
+            return false;
+        }
+    },
+
+    // Remove our hotkeys and restore every touched gsettings key to its original.
     teardown: function () {
         for (let i = 0; i < this._added.length; i++) {
             try { Main.keybindingManager.removeHotKey(this._added[i]); } catch (e) {}
         }
         this._added = [];
 
-        for (let i = 0; i < this._cleared.length; i++) {
-            let c = this._cleared[i];
+        for (let id in this._touched) {
+            let parts = id.split("\0");
+            let settings = _open(parts[0]);
+            if (!settings) continue;
             try {
-                let settings = new Gio.Settings({ schema_id: c.schema });
-                settings.set_strv(c.key, c.original);
-                L.log("restored " + c.schema + " " + c.key);
+                settings.set_strv(parts[1], this._touched[id]);
+                L.log("restored " + parts[0] + " " + parts[1]);
             } catch (e) {
-                L.error("failed restoring " + c.schema + " " + c.key + ": " + e.toString());
+                L.error("failed restoring " + parts[0] + " " + parts[1] + ": " + e.toString());
             }
         }
-        this._cleared = [];
+        this._touched = {};
         try { Gio.Settings.sync(); } catch (e) {}
     },
 };

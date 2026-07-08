@@ -61,6 +61,17 @@ const KB_DEFAULTS = {
     kbTogglePanel: "<Super>p",
 };
 
+// We also (re)assign Cinnamon's window tiling to Super+Alt+arrows, so that the
+// keys our move-window bindings vacated are put to good use. muffin's tiling
+// actions live in org.cinnamon.muffin.keybindings. Restored on unload.
+const TILING_SCHEMA = "org.cinnamon.muffin.keybindings";
+const TILING_ASSIGN = {
+    "push-tile-left":  ["<Super><Alt>Left"],
+    "push-tile-right": ["<Super><Alt>Right"],
+    "push-tile-up":    ["<Super><Alt>Up"],
+    "push-tile-down":  ["<Super><Alt>Down"],
+};
+
 function MyApplet(orientation, panel_height, instanceId) {
     this._init(orientation, panel_height, instanceId);
 }
@@ -72,7 +83,7 @@ MyApplet.prototype = {
         Applet.Applet.prototype._init.call(this, orientation, panel_height, instanceId);
 
         try {
-            log("loaded (M10 keybindings v0.10.2 ctrl-super move)");
+            log("loaded (M10 keybindings v0.10.3 tiling-assign)");
 
             this.wm = new WorkspaceManager.WorkspaceManager();
             this.controller = new ControllerModule.Controller(this.wm);
@@ -360,7 +371,16 @@ MyApplet.prototype = {
             this.settings.bindProperty(Settings.BindingDirection.IN, spec.setting,
                 spec.setting, Lang.bind(this, this._rebindKeys));
         }));
+        this._assignTiling();
         log("registered " + specs.length + " keybindings (settings-driven)");
+    },
+
+    // Assign Cinnamon window tiling to Super+Alt+arrows (Option A). Recorded and
+    // restored on teardown/unload.
+    _assignTiling: function () {
+        for (let key in TILING_ASSIGN) {
+            this._keybinder.assignGsettings(TILING_SCHEMA, key, TILING_ASSIGN[key]);
+        }
     },
 
     // Re-register all keybindings from current settings (called on any change).
@@ -375,6 +395,7 @@ MyApplet.prototype = {
                 catch (e) { logError("hotkey " + spec.name + ": " + e.toString()); }
             }));
         }));
+        this._assignTiling();
         log("re-registered keybindings after settings change");
     },
 
