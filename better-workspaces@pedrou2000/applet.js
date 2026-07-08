@@ -53,7 +53,7 @@ MyApplet.prototype = {
         Applet.Applet.prototype._init.call(this, orientation, panel_height, instanceId);
 
         try {
-            log("loaded (M9 toggle-panel v0.9.7 settings-driven keys)");
+            log("loaded (M10 keybindings v0.10.0)");
 
             this.wm = new WorkspaceManager.WorkspaceManager();
             this.controller = new ControllerModule.Controller(this.wm);
@@ -304,6 +304,8 @@ MyApplet.prototype = {
             { setting: "kbProjectNext",   name: "bw-proj-next",  run: function () { self.controller.goToNextProjectInOrder(); self._refresh(); } },
             { setting: "kbMoveWindowPrev",name: "bw-move-prev",  run: function () { self.controller.moveWindowToPrevLocal(); self._refresh(); } },
             { setting: "kbMoveWindowNext",name: "bw-move-next",  run: function () { self.controller.moveWindowToNextLocal(); self._refresh(); } },
+            { setting: "kbMoveWindowProjectPrev", name: "bw-move-proj-prev", run: function () { self.controller.moveWindowToPrevProjectInOrder(); self._refresh(); } },
+            { setting: "kbMoveWindowProjectNext", name: "bw-move-proj-next", run: function () { self.controller.moveWindowToNextProjectInOrder(); self._refresh(); } },
             { setting: "kbSwitcher",      name: "bw-switcher",   run: function () { self.switcher.cycle(); } },
             { setting: "kbOpenNotion",    name: "bw-open-home",  run: function () { self.controller.openActiveProjectHome(); } },
             { setting: "kbTogglePanel",   name: "bw-toggle-panel", run: function () { self.openTogglePanel(); } },

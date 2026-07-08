@@ -213,6 +213,20 @@ Controller.prototype = {
         return false;
     },
 
+    // Move the focused window to the next/previous project in LIST order
+    // (wrapping), following it there.
+    moveWindowToNextProjectInOrder: function () {
+        let n = this.state.projectCount();
+        if (n === 0) return false;
+        return this.moveWindowToProject((this.state.activeProjectIdx + 1) % n);
+    },
+
+    moveWindowToPrevProjectInOrder: function () {
+        let n = this.state.projectCount();
+        if (n === 0) return false;
+        return this.moveWindowToProject((this.state.activeProjectIdx + n - 1) % n);
+    },
+
     // ---- Intents: adding/removing a workspace to the active project --------
 
     // Add a workspace at the end of a project's strip. Projects are contiguous
