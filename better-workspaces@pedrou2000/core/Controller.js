@@ -328,24 +328,12 @@ Controller.prototype = {
         let activeFlat = this.wm.getActiveIndex();
         let removed = 0;
 
-        // Diagnostic: dump the partition's window counts + active index so we
-        // can see exactly why the loop stops.
-        let counts0 = this.state.counts();
-        let base = Mapping.offsetOf(counts0, pIdx);
-        let dump = [];
-        for (let l = 0; l < p.wsCount; l++) {
-            dump.push("f" + (base + l) + "=" + this.wm.countWindows(base + l) + "w");
-        }
-        log("removeEmpty: " + p.name + " activeFlat=" + activeFlat
-            + " partition[" + dump.join(",") + "]");
-
         while (this.state.getProject(pIdx).wsCount > 1) {
             let counts = this.state.counts();
             let lastFlat = Mapping.offsetOf(counts, pIdx)
                 + (this.state.getProject(pIdx).wsCount - 1);
-            let nWin = this.wm.countWindows(lastFlat);
-            if (lastFlat === activeFlat) { log("removeEmpty: stop, lastFlat " + lastFlat + " is active"); break; }
-            if (nWin > 0) { log("removeEmpty: stop, lastFlat " + lastFlat + " has " + nWin + " windows"); break; }
+            if (lastFlat === activeFlat) break;            // keep the current one
+            if (this.wm.countWindows(lastFlat) > 0) break; // stop at first non-empty
             this.wm.removeWorkspace(lastFlat);
             this.state.decWorkspaceCount(pIdx);
             removed++;

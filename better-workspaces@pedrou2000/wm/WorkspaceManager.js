@@ -47,11 +47,20 @@ WorkspaceManager.prototype = {
         return this._wm().get_active_workspace_index();
     },
 
-    // Number of windows on a given workspace (normal windows only would need
-    // extra filtering; for M1 we report the raw list length).
+    // Number of "real" windows on a workspace, EXCLUDING windows pinned to all
+    // workspaces (sticky windows appear in every workspace's list and would
+    // otherwise make every workspace look non-empty).
     countWindows: function (index) {
         let ws = this._wm().get_workspace_by_index(index);
-        return ws ? ws.list_windows().length : 0;
+        if (!ws) return 0;
+        let windows = ws.list_windows();
+        let n = 0;
+        for (let i = 0; i < windows.length; i++) {
+            let w = windows[i];
+            if (w.is_on_all_workspaces && w.is_on_all_workspaces()) continue;
+            n++;
+        }
+        return n;
     },
 
     // ---- Switching ---------------------------------------------------------
