@@ -66,7 +66,7 @@ ProjectTogglePanel.prototype = {
         // clears the caret (caret + hint share the text origin while empty).
         this._search = new St.Entry({
             style_class: 'better-workspaces-toggle-search',
-            hint_text: "  Search projects…",
+            hint_text: " Search projects…",
             can_focus: true,
         });
         try {
