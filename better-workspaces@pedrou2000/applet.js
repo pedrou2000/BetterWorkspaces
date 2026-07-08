@@ -26,6 +26,7 @@ const PanelIndicatorModule = AppletDir.ui.PanelIndicator;
 const ProjectSwitcherModule = AppletDir.ui.ProjectSwitcher;
 const ProjectTogglePanelModule = AppletDir.ui.ProjectTogglePanel.ProjectTogglePanelModule;
 const SyncServiceModule = AppletDir.notion.SyncService.SyncServiceModule;
+const ProjectMapper = AppletDir.notion.ProjectMapper.ProjectMapper;
 const KeyBindings = AppletDir.lib.keybindings.KeyBindings;
 
 function log(msg) { global.log(UUID + ": " + msg); }
@@ -94,7 +95,7 @@ MyApplet.prototype = {
         Applet.Applet.prototype._init.call(this, orientation, panel_height, instanceId);
 
         try {
-            log("loaded (M11 reorder v0.11.5 drag-snapshot-centers)");
+            log("loaded (M11 reorder v0.11.6 reorder-in-toggle-panel)");
 
             this.wm = new WorkspaceManager.WorkspaceManager();
             this.controller = new ControllerModule.Controller(this.wm);
@@ -233,13 +234,22 @@ MyApplet.prototype = {
 
     // ---- M9: Project Toggle Panel ------------------------------------------
 
-    // Open the searchable toggle panel. Reads the full cached project list; each
-    // toggle change is orchestrated by _handleToggle below.
+    // Open the searchable toggle panel. Reads the full cached project list
+    // (sorted by Workspace Order so ON rows match the deck); toggles go through
+    // _handleToggle, reorders through reorderProject.
     openTogglePanel: function () {
         try {
             let panel = new ProjectTogglePanelModule.ProjectTogglePanel(
-                Lang.bind(this, function () { return this.sync ? this.sync.readCache() : []; }),
-                Lang.bind(this, this._handleToggle));
+                Lang.bind(this, function () {
+                    let cache = this.sync ? this.sync.readCache() : [];
+                    return ProjectMapper.sortByOrder(cache);
+                }),
+                Lang.bind(this, this._handleToggle),
+                Lang.bind(this, function (fromOnIdx, toOnIdx) {
+                    // ON-project index == deck index; reorder relocates windows
+                    // and persists Workspace Order.
+                    this.controller.reorderProject(fromOnIdx, toOnIdx);
+                }));
             this._togglePanel = panel;
             panel.open();
         } catch (e) {

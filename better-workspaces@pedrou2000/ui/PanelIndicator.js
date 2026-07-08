@@ -12,7 +12,6 @@
 const St = imports.gi.St;
 const Lang = imports.lang;
 const Tooltips = imports.ui.tooltips;
-const DND = imports.ui.dnd;
 
 const AppletDir = imports.ui.appletManager.applets["better-workspaces@pedrou2000"];
 const IconRenderer = AppletDir.ui.IconRenderer.IconRenderer;
@@ -102,10 +101,6 @@ PanelIndicator.prototype = {
             btn._bwTooltip = new Tooltips.PanelItemTooltip(
                 { actor: btn }, p.name, this.orientation);
 
-            // Drag to reorder: makeDraggable emits drag-begin/drag-end; on end
-            // we compute the drop slot from the pointer x and reorder.
-            this._makeDraggable(btn, i);
-
             this.actor.add(btn, { y_align: St.Align.MIDDLE, y_fill: false });
             this._buttons.push(btn);
         }
@@ -131,56 +126,6 @@ PanelIndicator.prototype = {
                     catch (e) { log("icon swap failed: " + e.toString()); }
                 }
             }));
-    },
-
-    // Make a project button draggable to reorder. On drag-BEGIN we snapshot the
-    // centers of all buttons (the layout is still stable then); during a drag
-    // Cinnamon reparents the dragged actor and the siblings reflow, so reading
-    // positions at drag-end would be wrong. On drag-end we compare the pointer x
-    // against the snapshot to pick the target slot.
-    _makeDraggable: function (btn, fromIdx) {
-        let draggable;
-        try { draggable = DND.makeDraggable(btn); }
-        catch (e) { log("makeDraggable failed: " + e.toString()); return; }
-        btn._bwFromIdx = fromIdx;
-
-        draggable.connect('drag-begin', Lang.bind(this, function () {
-            this._dragCenters = [];
-            for (let i = 0; i < this._buttons.length; i++) {
-                let b = this._buttons[i];
-                let [bx] = b.get_transformed_position();
-                let [bw] = b.get_transformed_size();
-                this._dragCenters.push(bx + bw / 2);
-            }
-        }));
-
-        draggable.connect('drag-end', Lang.bind(this, function () {
-            try {
-                let ptr = global.get_pointer();
-                let px = ptr[0];
-                let to = this._slotForX(px);
-                let from = btn._bwFromIdx;
-                if (to >= 0 && to !== from) {
-                    this.controller.reorderProject(from, to);
-                    // onOrderChanged (in applet) rebuilds the panel + persists.
-                } else {
-                    this.update();
-                }
-            } catch (e) {
-                log("drag-end reorder: " + e.toString());
-            }
-            this._dragCenters = null;
-        }));
-    },
-
-    // Target slot from pointer x, using the centers snapshotted at drag-begin.
-    _slotForX: function (px) {
-        let centers = this._dragCenters;
-        if (!centers || centers.length === 0) return -1;
-        for (let i = 0; i < centers.length; i++) {
-            if (px < centers[i]) return i; // left of this button's center
-        }
-        return centers.length - 1; // past the last -> drop at the end
     },
 
     // Lightweight refresh: highlight active project, update position label.

@@ -27,17 +27,20 @@ const L = AppletDir.lib.logger.Logger.makeLogger("toggle-panel");
 
 const ROW_ICON_SIZE = 20;
 
-function ProjectTogglePanel(getProjects, onToggle) {
-    this._init(getProjects, onToggle);
+function ProjectTogglePanel(getProjects, onToggle, onReorder) {
+    this._init(getProjects, onToggle, onReorder);
 }
 
 ProjectTogglePanel.prototype = {
 
-    // getProjects(): returns the current array of {id,name,icon,inWorkspace,...}
+    // getProjects(): returns the current array of {id,name,icon,inWorkspace,...},
+    //   with the ON (inWorkspace) projects already in deck order.
     // onToggle(project, newValue, doneCb): performs the change; doneCb(err).
-    _init: function (getProjects, onToggle) {
+    // onReorder(fromOnIdx, toOnIdx): reorder among the ON projects (deck order).
+    _init: function (getProjects, onToggle, onReorder) {
         this._getProjects = getProjects;
         this._onToggle = onToggle;
+        this._onReorder = onReorder;
         this._rows = [];
         this._filter = "";
     },
@@ -95,26 +98,78 @@ ProjectTogglePanel.prototype = {
         this._rows = [];
 
         let projects = this._getProjects() || [];
-        for (let i = 0; i < projects.length; i++) {
-            let p = projects[i];
-            if (this._filter && p.name.toLowerCase().indexOf(this._filter) === -1)
-                continue;
-            this._addRow(p);
-        }
+        let matches = Lang.bind(this, function (p) {
+            return !this._filter || p.name.toLowerCase().indexOf(this._filter) !== -1;
+        });
 
-        if (this._listBox.get_n_children() === 0) {
+        // ON projects, in deck order (getProjects already returns them sorted).
+        // We track each ON project's index AMONG ON projects (== deck index) so
+        // the up/down buttons can call reorder with the right positions.
+        let onProjects = projects.filter(function (p) { return p.inWorkspace; });
+        let offProjects = projects.filter(function (p) { return !p.inWorkspace; });
+
+        // --- Active (in workspace) section, reorderable ---
+        this._listBox.add(this._sectionHeader("In workspaces — reorder with ▲ ▼"));
+        let shownOn = 0;
+        for (let i = 0; i < onProjects.length; i++) {
+            if (!matches(onProjects[i])) continue;
+            this._addRow(onProjects[i], i, onProjects.length);
+            shownOn++;
+        }
+        if (shownOn === 0) {
             this._listBox.add(new St.Label({
                 style_class: 'better-workspaces-toggle-empty',
-                text: this._filter ? "No matching projects" : "No projects cached yet",
+                text: this._filter ? "No matching active projects" : "None yet — toggle some on below",
+            }));
+        }
+
+        // --- Other projects section ---
+        this._listBox.add(this._sectionHeader("Other projects"));
+        let shownOff = 0;
+        for (let i = 0; i < offProjects.length; i++) {
+            if (!matches(offProjects[i])) continue;
+            this._addRow(offProjects[i], -1, 0);
+            shownOff++;
+        }
+        if (shownOff === 0) {
+            this._listBox.add(new St.Label({
+                style_class: 'better-workspaces-toggle-empty',
+                text: this._filter ? "No matching projects" : "—",
             }));
         }
     },
 
-    _addRow: function (project) {
+    _sectionHeader: function (text) {
+        return new St.Label({ style_class: 'better-workspaces-toggle-section', text: text });
+    },
+
+    // onIdx: index among ON projects (deck index) if this is an ON row, else -1.
+    // onCount: total ON projects (to disable ▲ on first / ▼ on last).
+    _addRow: function (project, onIdx, onCount) {
         let row = new St.BoxLayout({
             style_class: 'better-workspaces-toggle-row',
             vertical: false,
         });
+
+        // Reorder controls (only for ON rows).
+        if (onIdx >= 0) {
+            let up = new St.Button({ style_class: 'better-workspaces-reorder-btn', label: "▲", reactive: true });
+            let down = new St.Button({ style_class: 'better-workspaces-reorder-btn', label: "▼", reactive: true });
+            if (onIdx === 0) up.reactive = false;
+            if (onIdx === onCount - 1) down.reactive = false;
+            up.connect('clicked', Lang.bind(this, function () {
+                if (onIdx > 0) { this._onReorder(onIdx, onIdx - 1); this._renderRows(); }
+            }));
+            down.connect('clicked', Lang.bind(this, function () {
+                if (onIdx < onCount - 1) { this._onReorder(onIdx, onIdx + 1); this._renderRows(); }
+            }));
+            row.add(up, { y_align: St.Align.MIDDLE, y_fill: false });
+            row.add(down, { y_align: St.Align.MIDDLE, y_fill: false });
+        } else {
+            // Spacer to keep names aligned with ON rows.
+            row.add(new St.Label({ style_class: 'better-workspaces-reorder-spacer', text: "" }),
+                { y_align: St.Align.MIDDLE, y_fill: false });
+        }
 
         let icon = IconRenderer.makeActor(project.icon, project.name, ROW_ICON_SIZE);
         row.add(icon, { y_align: St.Align.MIDDLE, y_fill: false });
@@ -125,7 +180,6 @@ ProjectTogglePanel.prototype = {
         });
         row.add(name, { expand: true, y_align: St.Align.MIDDLE, y_fill: false });
 
-        // Toggle as a reactive button showing on/off state.
         let toggle = new St.Button({
             style_class: 'better-workspaces-toggle-switch',
             reactive: true,
@@ -161,8 +215,10 @@ ProjectTogglePanel.prototype = {
                 toggle.set_checked(!newValue);
                 this._paintToggle(toggle);
             } else {
-                // Keep our cached view in sync so re-filtering shows the truth.
+                // Membership changed — re-render so the row moves between the
+                // "In workspaces" and "Other projects" sections.
                 project.inWorkspace = newValue;
+                this._renderRows();
             }
         }));
     },
