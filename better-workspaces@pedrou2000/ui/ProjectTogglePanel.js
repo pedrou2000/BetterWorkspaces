@@ -61,15 +61,21 @@ ProjectTogglePanel.prototype = {
         });
         box.add(title);
 
-        // Search box. The caret and the hint both sit at the text origin while
-        // the field is empty+focused, so they overlap. Simplest robust fix:
-        // pad the hint STRING with leading spaces so the visible text starts to
-        // the right of the caret.
+        // Search box: a magnifier icon on the left (reads as a search field),
+        // plus a couple of leading spaces in the hint so the placeholder text
+        // clears the caret (caret + hint share the text origin while empty).
         this._search = new St.Entry({
             style_class: 'better-workspaces-toggle-search',
-            hint_text: "   Search projects…",
+            hint_text: "  Search projects…",
             can_focus: true,
         });
+        try {
+            this._search.set_primary_icon(new St.Icon({
+                icon_name: "edit-find-symbolic",
+                icon_size: 14,
+                style_class: 'better-workspaces-search-icon',
+            }));
+        } catch (e) {}
         this._search.clutter_text.connect('text-changed', Lang.bind(this, function () {
             this._filter = this._search.get_text().toLowerCase();
             this._renderRows();
