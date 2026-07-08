@@ -27,6 +27,7 @@ const PanelIndicatorModule = AppletDir.ui.PanelIndicator;
 const ProjectSwitcherModule = AppletDir.ui.ProjectSwitcher;
 const ProjectTogglePanelModule = AppletDir.ui.ProjectTogglePanel.ProjectTogglePanelModule;
 const SyncServiceModule = AppletDir.notion.SyncService.SyncServiceModule;
+const KeyBindings = AppletDir.lib.keybindings.KeyBindings;
 
 function log(msg) { global.log(UUID + ": " + msg); }
 function logError(msg) { global.logError(UUID + ": " + msg); }
@@ -66,7 +67,7 @@ MyApplet.prototype = {
         Applet.Applet.prototype._init.call(this, orientation, panel_height, instanceId);
 
         try {
-            log("loaded (M9 toggle-panel v0.9.5)");
+            log("loaded (M9 toggle-panel v0.9.6)");
 
             this.wm = new WorkspaceManager.WorkspaceManager();
             this.controller = new ControllerModule.Controller(this.wm);
@@ -305,8 +306,6 @@ MyApplet.prototype = {
     },
 
     _registerKeybindings: function () {
-        this._boundKeys = [];
-
         // Override the built-in Ctrl+Alt+arrow WM actions so ours run instead
         // of Cinnamon's native workspace-switch/Expo (which caused the double
         // firing). set_custom_handler REPLACES the existing handler.
@@ -327,40 +326,35 @@ MyApplet.prototype = {
             }
         }));
 
-        // Super+Tab -> MRU project switcher overlay. This one is a NEW binding
-        // (nothing built-in owns it for us here), so addHotKey is correct.
-        Main.keybindingManager.addHotKey(
-            "bw-switcher", "<Super>Tab",
+        // Custom hotkeys. We use KeyBinder.force(), which first CLEARS any
+        // conflicting Cinnamon binding (saving it for restore on unload) so our
+        // grab reliably wins even for combos Cinnamon already owns (e.g.
+        // Super+N = notifications).
+        this._keybinder = new KeyBindings.KeyBinder();
+
+        this._keybinder.force("bw-switcher", "<Super>Tab",
             Lang.bind(this, function () {
                 try { this.switcher.cycle(); }
                 catch (e) { logError("switcher hotkey: " + e.toString()); }
             }));
-        this._boundKeys.push("bw-switcher");
 
-        // Super+O -> open the active project's Notion page in the browser.
-        // (Super+N is taken by Cinnamon's notifications menu.)
-        Main.keybindingManager.addHotKey(
-            "bw-open-home", "<Super>o",
+        this._keybinder.force("bw-open-home", "<Super>n",
             Lang.bind(this, function () {
                 try { this.controller.openActiveProjectHome(); }
                 catch (e) { logError("open-notion hotkey: " + e.toString()); }
             }));
-        this._boundKeys.push("bw-open-home");
 
-        // Super+P -> open the Project Toggle Panel.
-        Main.keybindingManager.addHotKey(
-            "bw-toggle-panel", "<Super>p",
+        this._keybinder.force("bw-toggle-panel", "<Super>p",
             Lang.bind(this, function () {
                 try { this.openTogglePanel(); }
                 catch (e) { logError("toggle-panel hotkey: " + e.toString()); }
             }));
-        this._boundKeys.push("bw-toggle-panel");
 
-        log("registered keybindings (overrides + Super+Tab + Super+O + Super+P)");
+        log("registered keybindings (overrides + forced Super+Tab/N/P)");
     },
 
-    // Restore Cinnamon's default handlers for the overridden actions, and
-    // remove our added hotkeys.
+    // Restore Cinnamon's default handlers for the overridden actions, and tear
+    // down our forced hotkeys (which also restores any cleared conflicts).
     _unregisterKeybindings: function () {
         OVERRIDES.forEach(function (o) {
             try {
@@ -369,11 +363,9 @@ MyApplet.prototype = {
                 Meta.keybindings_set_custom_handler(o.action, null);
             } catch (e) {}
         });
-        if (this._boundKeys) {
-            this._boundKeys.forEach(function (name) {
-                try { Main.keybindingManager.removeHotKey(name); } catch (e) {}
-            });
-            this._boundKeys = [];
+        if (this._keybinder) {
+            this._keybinder.teardown();
+            this._keybinder = null;
         }
     },
 
@@ -390,7 +382,7 @@ MyApplet.prototype = {
         addAction("Manage workspace projects… (Super+P)", function () {
             this.openTogglePanel();
         });
-        addAction("Open active project's Notion page (Super+O)", function () {
+        addAction("Open active project's Notion page (Super+N)", function () {
             this.controller.openActiveProjectHome();
         });
 
