@@ -93,7 +93,7 @@ MyApplet.prototype = {
         Applet.Applet.prototype._init.call(this, orientation, panel_height, instanceId);
 
         try {
-            log("loaded (M10 keybindings v0.10.7 grow-on-overflow)");
+            log("loaded (M10 keybindings v0.10.9 remove-empty-on-demand)");
 
             this.wm = new WorkspaceManager.WorkspaceManager();
             this.controller = new ControllerModule.Controller(this.wm);
@@ -465,6 +465,10 @@ MyApplet.prototype = {
         });
         addAction("Remove last workspace of active project", function () {
             this.controller.removeLastWorkspaceOfActiveProject();
+            this.panelUI.update();
+        });
+        addAction("Remove empty workspaces of active project", function () {
+            this.controller.removeEmptyWorkspacesOfActiveProject();
             this.panelUI.update();
         });
         addAction("Log current state", function () {

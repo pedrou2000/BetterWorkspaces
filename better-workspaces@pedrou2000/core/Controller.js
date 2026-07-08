@@ -317,6 +317,33 @@ Controller.prototype = {
         return true;
     },
 
+    // On-demand: collapse TRAILING empty workspaces of the active project, from
+    // the end inward, stopping at the first workspace that has windows. Never
+    // removes the home workspace (local 0) or the one currently focused. Trailing
+    // -only keeps indices simple (no mid-partition reshuffling). Returns count.
+    removeEmptyWorkspacesOfActiveProject: function () {
+        let pIdx = this.state.activeProjectIdx;
+        let p = this.state.getProject(pIdx);
+        if (!p) return 0;
+        let activeFlat = this.wm.getActiveIndex();
+        let removed = 0;
+
+        while (this.state.getProject(pIdx).wsCount > 1) {
+            let counts = this.state.counts();
+            let lastFlat = Mapping.offsetOf(counts, pIdx)
+                + (this.state.getProject(pIdx).wsCount - 1);
+            if (lastFlat === activeFlat) break;            // keep the current one
+            if (this.wm.countWindows(lastFlat) > 0) break; // stop at first non-empty
+            this.wm.removeWorkspace(lastFlat);
+            this.state.decWorkspaceCount(pIdx);
+            removed++;
+        }
+        if (removed > 0) this._reconcileWorkspaceCount();
+        log("removeEmptyWorkspacesOfActiveProject: " + p.name + " removed "
+            + removed + ", now " + this.state.getProject(pIdx).wsCount);
+        return removed;
+    },
+
     // The user's default browser binary, or null if we can't determine one that
     // we know how to open with --new-window. Cached after first lookup.
     _defaultBrowserBin: function () {
