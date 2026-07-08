@@ -69,7 +69,9 @@ KeyBinder.prototype = {
     },
 
     // Clear any Cinnamon binding that maps to `accel`, remembering the original.
-    _clearConflicts: function (accel) {
+    // `exceptId` ("schema\0key") is left untouched — used when assigning an
+    // action to an accel so we don't clear the very key we're about to set.
+    _clearConflicts: function (accel, exceptId) {
         let want = _parse(accel);
         if (!want) { L.error("could not parse accel: " + accel); return; }
 
@@ -83,6 +85,7 @@ KeyBinder.prototype = {
 
             for (let k = 0; k < keys.length; k++) {
                 let key = keys[k];
+                if (exceptId && (schema + "\0" + key) === exceptId) continue;
                 let value;
                 try { value = settings.get_value(key); } catch (e) { continue; }
                 if (!value || value.get_type_string() !== "as") continue;
@@ -116,8 +119,9 @@ KeyBinder.prototype = {
     },
 
     // Assign a Cinnamon gsettings keybinding to specific accelerators (e.g. put
-    // window tiling on Super+Alt+arrows). Records the original for restore.
-    // Returns true on success.
+    // window tiling on Super+Shift+arrows). Clears any OTHER action holding the
+    // same accel first (so ours wins — e.g. move-to-monitor-down also claiming
+    // Super+Shift+Down), records originals for restore. Returns true on success.
     assignGsettings: function (schema, key, accels) {
         let settings = _open(schema);
         if (!settings) { L.error("assign: schema not found " + schema); return false; }
@@ -126,6 +130,10 @@ KeyBinder.prototype = {
                 L.error("assign: key not found " + schema + " " + key);
                 return false;
             }
+            // Free the accel from any competing action (but not this key itself).
+            let selfId = schema + "\0" + key;
+            for (let i = 0; i < accels.length; i++) this._clearConflicts(accels[i], selfId);
+
             this._recordOriginal(schema, key, settings);
             settings.set_strv(key, accels);
             Gio.Settings.sync();
