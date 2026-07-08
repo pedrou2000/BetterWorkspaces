@@ -282,43 +282,6 @@ Controller.prototype = {
         return true;
     },
 
-    // On load, open each project's Notion page on its home workspace WITHOUT
-    // switching workspaces: for each job we arm a one-shot window catcher that
-    // moves the next-created window to the target workspace in the background,
-    // then spawn the browser. The user stays on their current workspace the
-    // whole time — no visible hopping. Only opens homes that are empty.
-    ensureProjectHomesOpen: function () {
-        let counts = this.state.counts();
-        let jobs = [];
-        for (let i = 0; i < this.state.projectCount(); i++) {
-            let p = this.state.getProject(i);
-            if (!p || !p.notionUrl) continue;
-            let homeFlat = Mapping.offsetOf(counts, i);
-            if (this.wm.countWindows(homeFlat) === 0) {
-                jobs.push({ flat: homeFlat, url: p.notionUrl, name: p.name });
-            }
-        }
-        log("ensureProjectHomesOpen: " + jobs.length + " home(s) to open (no switching)");
-        if (jobs.length === 0) return;
-
-        let self = this;
-        let step = 0;
-        // Space jobs out so each browser window is created and caught before the
-        // next spawn — otherwise a single catcher could grab the wrong window.
-        let PER_JOB_MS = 2500;
-        function next() {
-            if (step >= jobs.length) return false;
-            let job = jobs[step++];
-            log("ensureProjectHomesOpen: [" + step + "/" + jobs.length + "] '" + job.name
-                + "' -> catch next window to flat " + job.flat + ", open " + job.url);
-            self.wm.catchNextWindowToWorkspace(job.flat, 1);
-            self._openUrlNewWindow(job.url);
-            Mainloop.timeout_add(PER_JOB_MS, next);
-            return false;
-        }
-        Mainloop.timeout_add(1000, next);
-    },
-
     // The user's default browser binary, or null if we can't determine one that
     // we know how to open with --new-window. Cached after first lookup.
     _defaultBrowserBin: function () {
@@ -350,36 +313,25 @@ Controller.prototype = {
     _openUrlNewWindow: function (url) {
         let bin = this._defaultBrowserBin();
         let cmd = bin ? [bin, "--new-window", url] : ["xdg-open", url];
-        log("_openUrlNewWindow: spawning: " + cmd.join(" "));
         try {
             Util.spawn(cmd);
-            log("_openUrlNewWindow: spawn OK");
         } catch (e) {
-            logError("_openUrlNewWindow: spawn FAILED: " + e.toString() + " — trying xdg-open");
-            try { Util.spawn(["xdg-open", url]); log("_openUrlNewWindow: xdg-open OK"); }
-            catch (e2) { logError("_openUrlNewWindow: xdg-open FAILED: " + e2.toString()); }
+            logError("_openUrlNewWindow: spawn failed: " + e.toString() + " — trying xdg-open");
+            try { Util.spawn(["xdg-open", url]); } catch (e2) {}
         }
     },
 
     // ---- M9: live add / remove of whole projects ---------------------------
 
     // Add a project to the live deck: append its partition at the end of the
-    // flat list (safe — no window shifting), grow the model, then switch to its
-    // home workspace and open its Notion page there (if it has one and the
-    // workspace is empty). Ends on the new project so the page lands correctly.
+    // flat list (safe — no window shifting), grow the model. Stays put; open the
+    // project's Notion page manually with the keybinding when you want it.
     addProjectLive: function (def) {
         let idx = this.state.appendProject(def);
         // The new project's single home workspace goes at the global end, which
         // is exactly where Cinnamon appends — so a plain reconcile is correct.
         this._reconcileWorkspaceCount();
         log("addProjectLive: " + def.name + " (index " + idx + ")");
-
-        // Open the project's Notion page on its (empty) home workspace.
-        let homeFlat = Mapping.offsetOf(this.state.counts(), idx);
-        if (def.notionUrl && this.wm.countWindows(homeFlat) === 0) {
-            this.goToProject(idx);
-            this._openUrlNewWindow(def.notionUrl);
-        }
         return idx;
     },
 

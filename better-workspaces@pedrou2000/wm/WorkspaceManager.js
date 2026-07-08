@@ -203,53 +203,6 @@ WorkspaceManager.prototype = {
         }
     },
 
-    // Catch the NEXT window(s) created and move them to `targetIndex`, without
-    // switching the active workspace. Used to place an opened browser window on
-    // a project's home workspace while the user stays put (no visible hopping).
-    // Listens for a short window, then disconnects. `expected` = how many new
-    // windows to grab (default 1). Skips pinned windows.
-    catchNextWindowToWorkspace: function (targetIndex, expected) {
-        expected = expected || 1;
-        let grabbed = 0;
-        let handlerId = 0;
-
-        try {
-            handlerId = global.display.connect('window-created', function (display, win) {
-                try {
-                    if (win.is_on_all_workspaces && win.is_on_all_workspaces()) return;
-                    // Defer the move slightly: the window isn't fully placed at
-                    // creation time. change_workspace_by_index does NOT activate
-                    // the target, so the user stays on their current workspace.
-                    imports.mainloop.timeout_add(120, function () {
-                        try { win.change_workspace_by_index(targetIndex, false); }
-                        catch (e) { logError("catchNext move: " + e.toString()); }
-                        return false;
-                    });
-                    grabbed++;
-                    if (grabbed >= expected && handlerId) {
-                        global.display.disconnect(handlerId);
-                        handlerId = 0;
-                    }
-                } catch (e) {
-                    logError("catchNextWindow handler: " + e.toString());
-                }
-            });
-        } catch (e) {
-            logError("catchNextWindowToWorkspace: " + e.toString());
-            return;
-        }
-
-        // Safety: stop listening after a few seconds even if nothing appeared,
-        // so we never leave a dangling handler stealing later windows.
-        imports.mainloop.timeout_add(5000, function () {
-            if (handlerId) {
-                try { global.display.disconnect(handlerId); } catch (e) {}
-                handlerId = 0;
-            }
-            return false;
-        });
-    },
-
     // ---- Closing windows (graceful) ----------------------------------------
 
     // List non-pinned windows across a set of workspace indices.

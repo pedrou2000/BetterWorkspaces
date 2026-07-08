@@ -66,7 +66,7 @@ MyApplet.prototype = {
         Applet.Applet.prototype._init.call(this, orientation, panel_height, instanceId);
 
         try {
-            log("loaded (M9 toggle-panel v0.9.3)");
+            log("loaded (M9 toggle-panel v0.9.4)");
 
             this.wm = new WorkspaceManager.WorkspaceManager();
             this.controller = new ControllerModule.Controller(this.wm);
@@ -96,10 +96,6 @@ MyApplet.prototype = {
 
             // Kick off a background sync to refresh the cache for NEXT launch.
             if (this.sync && this._notionConfigured()) this.sync.start();
-
-            // Open each project's Notion page on its home workspace (in the
-            // background, without switching the active workspace).
-            this.controller.ensureProjectHomesOpen();
         } catch (e) {
             logError("init exception: " + e.toString());
         }
@@ -341,12 +337,12 @@ MyApplet.prototype = {
             }));
         this._boundKeys.push("bw-switcher");
 
-        // Super+H -> open the active project's Notion home page in the browser.
+        // Super+N -> open the active project's Notion page in the browser.
         Main.keybindingManager.addHotKey(
-            "bw-open-home", "<Super>h",
+            "bw-open-home", "<Super>n",
             Lang.bind(this, function () {
                 try { this.controller.openActiveProjectHome(); }
-                catch (e) { logError("open-home hotkey: " + e.toString()); }
+                catch (e) { logError("open-notion hotkey: " + e.toString()); }
             }));
         this._boundKeys.push("bw-open-home");
 
@@ -359,7 +355,7 @@ MyApplet.prototype = {
             }));
         this._boundKeys.push("bw-toggle-panel");
 
-        log("registered keybindings (overrides + Super+Tab + Super+H)");
+        log("registered keybindings (overrides + Super+Tab + Super+N + Super+P)");
     },
 
     // Restore Cinnamon's default handlers for the overridden actions, and
@@ -393,7 +389,7 @@ MyApplet.prototype = {
         addAction("Manage workspace projects… (Super+P)", function () {
             this.openTogglePanel();
         });
-        addAction("Open active project's Notion page", function () {
+        addAction("Open active project's Notion page (Super+N)", function () {
             this.controller.openActiveProjectHome();
         });
 
