@@ -61,15 +61,18 @@ const KB_DEFAULTS = {
     kbTogglePanel: "<Super>p",
 };
 
-// We also (re)assign Cinnamon's window tiling to Super+Alt+arrows, so that the
-// keys our move-window bindings vacated are put to good use. The push-tile-*
-// actions live in org.cinnamon.desktop.keybindings.wm. Restored on unload.
-const TILING_SCHEMA = "org.cinnamon.desktop.keybindings.wm";
-const TILING_ASSIGN = {
+// We also (re)assign some Cinnamon window-management shortcuts so the keys our
+// move-window bindings vacated are put to good use: tiling on Super+Alt+arrows,
+// plus maximize/minimize. These actions live in
+// org.cinnamon.desktop.keybindings.wm. All restored on unload.
+const WM_SCHEMA = "org.cinnamon.desktop.keybindings.wm";
+const WM_ASSIGN = {
     "push-tile-left":  ["<Super><Alt>Left"],
     "push-tile-right": ["<Super><Alt>Right"],
     "push-tile-up":    ["<Super><Alt>Up"],
     "push-tile-down":  ["<Super><Alt>Down"],
+    "maximize":        ["<Alt>a"],
+    "minimize":        ["<Alt>s"],
 };
 
 function MyApplet(orientation, panel_height, instanceId) {
@@ -83,7 +86,7 @@ MyApplet.prototype = {
         Applet.Applet.prototype._init.call(this, orientation, panel_height, instanceId);
 
         try {
-            log("loaded (M10 keybindings v0.10.4 tiling-schema-fix)");
+            log("loaded (M10 keybindings v0.10.5 max-min)");
 
             this.wm = new WorkspaceManager.WorkspaceManager();
             this.controller = new ControllerModule.Controller(this.wm);
@@ -378,8 +381,8 @@ MyApplet.prototype = {
     // Assign Cinnamon window tiling to Super+Alt+arrows (Option A). Recorded and
     // restored on teardown/unload.
     _assignTiling: function () {
-        for (let key in TILING_ASSIGN) {
-            this._keybinder.assignGsettings(TILING_SCHEMA, key, TILING_ASSIGN[key]);
+        for (let key in WM_ASSIGN) {
+            this._keybinder.assignGsettings(WM_SCHEMA, key, WM_ASSIGN[key]);
         }
     },
 
