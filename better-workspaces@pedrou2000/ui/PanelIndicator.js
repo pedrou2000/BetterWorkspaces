@@ -152,6 +152,8 @@ PanelIndicator.prototype = {
             manage._bwManageTip = new Tooltips.PanelItemTooltip(
                 { actor: manage }, "Manage workspace projects", this.orientation);
             this.actor.add(manage, { y_align: St.Align.MIDDLE, y_fill: false });
+            // Force it to the leftmost slot regardless of the box's pack order.
+            try { this.actor.set_child_at_index(manage, 0); } catch (e) {}
         }
 
         let nProjects = this.controller.state.projectCount();

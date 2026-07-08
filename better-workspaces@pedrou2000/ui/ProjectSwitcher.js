@@ -32,7 +32,10 @@ ProjectSwitcher.prototype = {
         this._order = [];        // project indices in MRU order (this cycle)
         this._selection = 0;     // index into _order
         this._commitTimer = 0;
+        this._onCommit = null;   // optional callback() after committing
     },
+
+    onCommit: function (cb) { this._onCommit = cb; },
 
     // Called on each Super+Tab press. Opens the overlay on first press, then
     // advances the highlighted selection and (re)arms the commit timer.
@@ -62,6 +65,7 @@ ProjectSwitcher.prototype = {
         this._close();
         this.controller.goToProject(projectIdx);
         log("committed to project " + projectIdx);
+        if (this._onCommit) { try { this._onCommit(); } catch (e) {} }
         return false; // don't repeat the timeout
     },
 

@@ -95,7 +95,7 @@ MyApplet.prototype = {
         Applet.Applet.prototype._init.call(this, orientation, panel_height, instanceId);
 
         try {
-            log("loaded (M11 v0.11.15 project-aware-osd)");
+            log("loaded (M11 v0.11.16 osd-on-switcher + manage-left)");
 
             this.wm = new WorkspaceManager.WorkspaceManager();
             this.controller = new ControllerModule.Controller(this.wm);
@@ -112,6 +112,7 @@ MyApplet.prototype = {
                 this.actor, this.controller, orientation,
                 { onManage: Lang.bind(this, this.openTogglePanel) });
             this.switcher = new ProjectSwitcherModule.ProjectSwitcher(this.controller);
+            this.switcher.onCommit(Lang.bind(this, this._afterNav));
 
             // When projects are reordered, rebuild the panel and persist the new
             // order to Notion (Workspace Order = 0,1,2,...).
