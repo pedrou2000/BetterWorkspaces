@@ -1,8 +1,9 @@
 /* BetterWorkspaces — shared panel/overlay styling */
 
 .better-workspaces-project {
-    padding: 0 8px;
-    margin: 0 1px;
+    /* Square-ish, compact: small symmetric padding, minimal gap between icons */
+    padding: 2px;
+    margin: 0;
     border-radius: 4px;
     color: #bbbbbb;
 }

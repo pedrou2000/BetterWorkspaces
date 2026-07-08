@@ -94,7 +94,7 @@ MyApplet.prototype = {
         Applet.Applet.prototype._init.call(this, orientation, panel_height, instanceId);
 
         try {
-            log("loaded (M10 keybindings v0.11.1 tiling-conflict-clear)");
+            log("loaded (M11 visual v0.11.2 compact-icons)");
 
             this.wm = new WorkspaceManager.WorkspaceManager();
             this.controller = new ControllerModule.Controller(this.wm);
