@@ -317,31 +317,37 @@ Controller.prototype = {
         return true;
     },
 
-    // On-demand: collapse TRAILING empty workspaces of the active project, from
-    // the end inward, stopping at the first workspace that has windows. Never
-    // removes the home workspace (local 0) or the one currently focused. Trailing
-    // -only keeps indices simple (no mid-partition reshuffling). Returns count.
+    // On-demand: remove ALL empty workspaces of the active project (including
+    // middle ones), keeping the home workspace (local 0) and the one currently
+    // focused. We gather target flats first, then remove them high -> low so the
+    // remaining indices stay valid as Cinnamon reindexes. Returns count removed.
     removeEmptyWorkspacesOfActiveProject: function () {
         let pIdx = this.state.activeProjectIdx;
         let p = this.state.getProject(pIdx);
         if (!p) return 0;
         let activeFlat = this.wm.getActiveIndex();
-        let removed = 0;
+        let base = Mapping.offsetOf(this.state.counts(), pIdx);
 
-        while (this.state.getProject(pIdx).wsCount > 1) {
-            let counts = this.state.counts();
-            let lastFlat = Mapping.offsetOf(counts, pIdx)
-                + (this.state.getProject(pIdx).wsCount - 1);
-            if (lastFlat === activeFlat) break;            // keep the current one
-            if (this.wm.countWindows(lastFlat) > 0) break; // stop at first non-empty
-            this.wm.removeWorkspace(lastFlat);
-            this.state.decWorkspaceCount(pIdx);
-            removed++;
+        // Collect flats to remove: local >= 1 (keep home), not the active one,
+        // and empty.
+        let toRemove = [];
+        for (let local = 1; local < p.wsCount; local++) {
+            let flat = base + local;
+            if (flat === activeFlat) continue;
+            if (this.wm.countWindows(flat) > 0) continue;
+            toRemove.push(flat);
         }
-        if (removed > 0) this._reconcileWorkspaceCount();
+
+        // Remove high -> low so earlier (smaller) flats remain valid.
+        toRemove.sort(function (a, b) { return b - a; });
+        for (let i = 0; i < toRemove.length; i++) {
+            this.wm.removeWorkspace(toRemove[i]);
+            this.state.decWorkspaceCount(pIdx);
+        }
+        if (toRemove.length > 0) this._reconcileWorkspaceCount();
         log("removeEmptyWorkspacesOfActiveProject: " + p.name + " removed "
-            + removed + ", now " + this.state.getProject(pIdx).wsCount);
-        return removed;
+            + toRemove.length + ", now " + this.state.getProject(pIdx).wsCount);
+        return toRemove.length;
     },
 
     // The user's default browser binary, or null if we can't determine one that
