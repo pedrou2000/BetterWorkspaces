@@ -317,6 +317,41 @@ Controller.prototype = {
         return true;
     },
 
+    // Collapse trailing EMPTY workspaces of project `projectIdx` from the end
+    // inward, stopping at the first non-empty one. Rules:
+    //   - never below 1 (keep the home workspace)
+    //   - never remove the workspace we're currently on (so a fresh empty one
+    //     you just moved to survives until you leave it)
+    // Safe to call after any navigation; guarded against reentrancy since
+    // removeWorkspace fires switch-workspace which could re-enter.
+    pruneTrailingEmptyWorkspaces: function (projectIdx) {
+        if (this._pruning) return;
+        this._pruning = true;
+        try {
+            let p = this.state.getProject(projectIdx);
+            if (!p) return;
+            let activeFlat = this.wm.getActiveIndex();
+
+            while (p.wsCount > 1) {
+                let counts = this.state.counts();
+                let lastFlat = Mapping.offsetOf(counts, projectIdx) + (p.wsCount - 1);
+                // Stop if the last workspace has windows or is the current one.
+                if (this.wm.countWindows(lastFlat) > 0) break;
+                if (lastFlat === activeFlat) break;
+
+                this.wm.removeWorkspace(lastFlat);
+                this.state.decWorkspaceCount(projectIdx);
+                log("pruneTrailingEmpty: " + p.name + " removed flat " + lastFlat
+                    + " -> " + p.wsCount + " left");
+            }
+            this._reconcileWorkspaceCount();
+        } catch (e) {
+            logError("pruneTrailingEmptyWorkspaces: " + e.toString());
+        } finally {
+            this._pruning = false;
+        }
+    },
+
     // The user's default browser binary, or null if we can't determine one that
     // we know how to open with --new-window. Cached after first lookup.
     _defaultBrowserBin: function () {
