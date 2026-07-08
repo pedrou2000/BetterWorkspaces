@@ -42,6 +42,25 @@ const PLACEHOLDER_PROJECTS = [
 // -> N workspaces) rather than exploding the flat list.
 const DEFAULT_WS_PER_PROJECT = 1;
 
+// Default keybindings, and a scheme version. When we change these defaults we
+// bump KB_SCHEME_VERSION; on load, if the user's stored scheme is older, we
+// reset the keybindings to these values (token/other settings untouched). This
+// lets default changes actually take effect without a manual settings wipe.
+const KB_SCHEME_VERSION = 2;
+const KB_DEFAULTS = {
+    kbWorkspacePrev: "<Super>Left",
+    kbWorkspaceNext: "<Super>Right",
+    kbProjectPrev: "<Super>Up",
+    kbProjectNext: "<Super>Down",
+    kbMoveWindowPrev: "<Super><Alt>Left",
+    kbMoveWindowNext: "<Super><Alt>Right",
+    kbMoveWindowProjectPrev: "<Super><Alt>Up",
+    kbMoveWindowProjectNext: "<Super><Alt>Down",
+    kbSwitcher: "<Super>Tab",
+    kbOpenNotion: "<Super>n",
+    kbTogglePanel: "<Super>p",
+};
+
 function MyApplet(orientation, panel_height, instanceId) {
     this._init(orientation, panel_height, instanceId);
 }
@@ -53,7 +72,7 @@ MyApplet.prototype = {
         Applet.Applet.prototype._init.call(this, orientation, panel_height, instanceId);
 
         try {
-            log("loaded (M10 keybindings v0.10.0)");
+            log("loaded (M10 keybindings v0.10.1 scheme-reset)");
 
             this.wm = new WorkspaceManager.WorkspaceManager();
             this.controller = new ControllerModule.Controller(this.wm);
@@ -312,7 +331,22 @@ MyApplet.prototype = {
         ];
     },
 
+    // If the stored keybinding scheme is older than the current one, overwrite
+    // the shortcut values with the current defaults (token/other settings are
+    // untouched). This makes changed defaults take effect without a manual wipe.
+    _applyKeybindingScheme: function () {
+        let stored = this.settings.getValue("kbSchemeVersion") || 0;
+        if (stored >= KB_SCHEME_VERSION) return;
+        for (let key in KB_DEFAULTS) {
+            try { this.settings.setValue(key, KB_DEFAULTS[key]); } catch (e) {}
+        }
+        this.settings.setValue("kbSchemeVersion", KB_SCHEME_VERSION);
+        log("keybindings reset to scheme v" + KB_SCHEME_VERSION
+            + " (was v" + stored + ")");
+    },
+
     _registerKeybindings: function () {
+        this._applyKeybindingScheme();
         this._keybinder = new KeyBindings.KeyBinder();
         let specs = this._bindingSpecs();
         specs.forEach(Lang.bind(this, function (spec) {

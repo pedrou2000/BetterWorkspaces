@@ -33,6 +33,10 @@
         "type": "section",
         "description": "Keyboard shortcuts"
     },
+    "kbSchemeVersion": {
+        "type": "generic",
+        "default": 0
+    },
     "kbWorkspacePrev": {
         "type": "keybinding",
         "default": "<Super>Left",
