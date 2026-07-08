@@ -61,12 +61,15 @@ ProjectTogglePanel.prototype = {
         });
         box.add(title);
 
-        // Search box.
+        // Search box. Inset the inner text so it doesn't sit under the caret
+        // (stylesheet selectors for the inner clutter_text are unreliable, so
+        // set it directly on the text actor).
         this._search = new St.Entry({
             style_class: 'better-workspaces-toggle-search',
             hint_text: "Search projects…",
             can_focus: true,
         });
+        try { this._search.clutter_text.set_style("padding-left: 6px;"); } catch (e) {}
         this._search.clutter_text.connect('text-changed', Lang.bind(this, function () {
             this._filter = this._search.get_text().toLowerCase();
             this._renderRows();
