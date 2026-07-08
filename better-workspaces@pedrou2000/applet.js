@@ -93,7 +93,7 @@ MyApplet.prototype = {
         Applet.Applet.prototype._init.call(this, orientation, panel_height, instanceId);
 
         try {
-            log("loaded (M10 keybindings v0.10.8 collapse-empty)");
+            log("loaded (M10 keybindings v0.10.7 grow-on-overflow)");
 
             this.wm = new WorkspaceManager.WorkspaceManager();
             this.controller = new ControllerModule.Controller(this.wm);
@@ -113,7 +113,7 @@ MyApplet.prototype = {
             this.panelUI.setStatus(this._notionConfigured() ? "ok" : "unconfigured");
 
             this._switchId = global.window_manager.connect(
-                'switch-workspace', Lang.bind(this, this._onWorkspaceSwitched));
+                'switch-workspace', Lang.bind(this, this._refresh));
             this._nWorkspacesId = global.workspace_manager.connect(
                 'notify::n-workspaces', Lang.bind(this, this._refresh));
 
@@ -167,23 +167,6 @@ MyApplet.prototype = {
         } catch (e) {
             logError("_refresh exception: " + e.toString());
         }
-    },
-
-    // On workspace switch: collapse trailing empty workspaces across all
-    // projects (the current-workspace guard protects the one you're on), then
-    // refresh the panel. This gives "grow on demand, collapse when empty".
-    _onWorkspaceSwitched: function () {
-        try {
-            if (this.controller) {
-                let n = this.controller.state.projectCount();
-                for (let i = 0; i < n; i++) {
-                    this.controller.pruneTrailingEmptyWorkspaces(i);
-                }
-            }
-        } catch (e) {
-            logError("_onWorkspaceSwitched prune: " + e.toString());
-        }
-        this._refresh();
     },
 
     // Bind settings and create the SyncService (does not start it — the caller
