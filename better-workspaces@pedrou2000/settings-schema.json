@@ -28,5 +28,54 @@
         "type": "button",
         "description": "Sync from Notion now",
         "callback": "onSyncNowClicked"
+    },
+    "keybindingsSection": {
+        "type": "section",
+        "description": "Keyboard shortcuts"
+    },
+    "kbWorkspacePrev": {
+        "type": "keybinding",
+        "default": "<Super>Left",
+        "description": "Previous workspace (within project)"
+    },
+    "kbWorkspaceNext": {
+        "type": "keybinding",
+        "default": "<Super>Right",
+        "description": "Next workspace (within project)"
+    },
+    "kbProjectPrev": {
+        "type": "keybinding",
+        "default": "<Primary><Alt>Up",
+        "description": "Previous project"
+    },
+    "kbProjectNext": {
+        "type": "keybinding",
+        "default": "<Primary><Alt>Down",
+        "description": "Next project"
+    },
+    "kbMoveWindowPrev": {
+        "type": "keybinding",
+        "default": "<Primary><Alt>Left",
+        "description": "Move window to previous workspace"
+    },
+    "kbMoveWindowNext": {
+        "type": "keybinding",
+        "default": "<Primary><Alt>Right",
+        "description": "Move window to next workspace"
+    },
+    "kbSwitcher": {
+        "type": "keybinding",
+        "default": "<Super>Tab",
+        "description": "Project switcher (MRU)"
+    },
+    "kbOpenNotion": {
+        "type": "keybinding",
+        "default": "<Super>n",
+        "description": "Open active project's Notion page"
+    },
+    "kbTogglePanel": {
+        "type": "keybinding",
+        "default": "<Super>p",
+        "description": "Open the project toggle panel"
     }
 }

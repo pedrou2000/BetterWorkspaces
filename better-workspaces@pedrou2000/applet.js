@@ -12,7 +12,6 @@
 const Applet = imports.ui.applet;
 const Lang = imports.lang;
 const Main = imports.ui.main;
-const Meta = imports.gi.Meta;
 const Settings = imports.ui.settings;
 const PopupMenu = imports.ui.popupMenu;
 const ModalDialog = imports.ui.modalDialog;
@@ -43,19 +42,6 @@ const PLACEHOLDER_PROJECTS = [
 // -> N workspaces) rather than exploding the flat list.
 const DEFAULT_WS_PER_PROJECT = 1;
 
-// Built-in WM actions we OVERRIDE (Ctrl+Alt+arrows are already bound to these
-// by Cinnamon, so we replace their handlers instead of adding colliding
-// hotkeys). Maps the WM action name -> the Controller method it should invoke.
-const OVERRIDES = [
-    { action: "switch-to-workspace-up",    fn: "goToPrevProjectInOrder" },
-    { action: "switch-to-workspace-down",  fn: "goToNextProjectInOrder" },
-    { action: "switch-to-workspace-left",  fn: "prevLocalWorkspace" },
-    { action: "switch-to-workspace-right", fn: "nextLocalWorkspace" },
-    // Shift+Ctrl+Alt+Left/Right: move the focused window within the project.
-    { action: "move-to-workspace-left",    fn: "moveWindowToPrevLocal" },
-    { action: "move-to-workspace-right",   fn: "moveWindowToNextLocal" },
-];
-
 function MyApplet(orientation, panel_height, instanceId) {
     this._init(orientation, panel_height, instanceId);
 }
@@ -67,7 +53,7 @@ MyApplet.prototype = {
         Applet.Applet.prototype._init.call(this, orientation, panel_height, instanceId);
 
         try {
-            log("loaded (M9 toggle-panel v0.9.6)");
+            log("loaded (M9 toggle-panel v0.9.7 settings-driven keys)");
 
             this.wm = new WorkspaceManager.WorkspaceManager();
             this.controller = new ControllerModule.Controller(this.wm);
@@ -305,64 +291,58 @@ MyApplet.prototype = {
         dialog.open();
     },
 
-    _registerKeybindings: function () {
-        // Override the built-in Ctrl+Alt+arrow WM actions so ours run instead
-        // of Cinnamon's native workspace-switch/Expo (which caused the double
-        // firing). set_custom_handler REPLACES the existing handler.
-        OVERRIDES.forEach(Lang.bind(this, function (o) {
-            try {
-                Meta.keybindings_set_custom_handler(
-                    o.action,
-                    Lang.bind(this, function () {
-                        try {
-                            this.controller[o.fn]();
-                            this._refresh();
-                        } catch (e) {
-                            logError("override " + o.action + ": " + e.toString());
-                        }
-                    }));
-            } catch (e) {
-                logError("failed to override " + o.action + ": " + e.toString());
-            }
-        }));
-
-        // Custom hotkeys. We use KeyBinder.force(), which first CLEARS any
-        // conflicting Cinnamon binding (saving it for restore on unload) so our
-        // grab reliably wins even for combos Cinnamon already owns (e.g.
-        // Super+N = notifications).
-        this._keybinder = new KeyBindings.KeyBinder();
-
-        this._keybinder.force("bw-switcher", "<Super>Tab",
-            Lang.bind(this, function () {
-                try { this.switcher.cycle(); }
-                catch (e) { logError("switcher hotkey: " + e.toString()); }
-            }));
-
-        this._keybinder.force("bw-open-home", "<Super>n",
-            Lang.bind(this, function () {
-                try { this.controller.openActiveProjectHome(); }
-                catch (e) { logError("open-notion hotkey: " + e.toString()); }
-            }));
-
-        this._keybinder.force("bw-toggle-panel", "<Super>p",
-            Lang.bind(this, function () {
-                try { this.openTogglePanel(); }
-                catch (e) { logError("toggle-panel hotkey: " + e.toString()); }
-            }));
-
-        log("registered keybindings (overrides + forced Super+Tab/N/P)");
+    // The full binding table: settings key -> hotkey name + handler. All
+    // bindings are settings-driven and grabbed via KeyBinder.force(), which
+    // clears any conflicting Cinnamon binding (restored on teardown) so our
+    // grab reliably wins even for combos Cinnamon already owns.
+    _bindingSpecs: function () {
+        let self = this;
+        return [
+            { setting: "kbWorkspacePrev", name: "bw-ws-prev",    run: function () { self.controller.prevLocalWorkspace(); self._refresh(); } },
+            { setting: "kbWorkspaceNext", name: "bw-ws-next",    run: function () { self.controller.nextLocalWorkspace(); self._refresh(); } },
+            { setting: "kbProjectPrev",   name: "bw-proj-prev",  run: function () { self.controller.goToPrevProjectInOrder(); self._refresh(); } },
+            { setting: "kbProjectNext",   name: "bw-proj-next",  run: function () { self.controller.goToNextProjectInOrder(); self._refresh(); } },
+            { setting: "kbMoveWindowPrev",name: "bw-move-prev",  run: function () { self.controller.moveWindowToPrevLocal(); self._refresh(); } },
+            { setting: "kbMoveWindowNext",name: "bw-move-next",  run: function () { self.controller.moveWindowToNextLocal(); self._refresh(); } },
+            { setting: "kbSwitcher",      name: "bw-switcher",   run: function () { self.switcher.cycle(); } },
+            { setting: "kbOpenNotion",    name: "bw-open-home",  run: function () { self.controller.openActiveProjectHome(); } },
+            { setting: "kbTogglePanel",   name: "bw-toggle-panel", run: function () { self.openTogglePanel(); } },
+        ];
     },
 
-    // Restore Cinnamon's default handlers for the overridden actions, and tear
-    // down our forced hotkeys (which also restores any cleared conflicts).
+    _registerKeybindings: function () {
+        this._keybinder = new KeyBindings.KeyBinder();
+        let specs = this._bindingSpecs();
+        specs.forEach(Lang.bind(this, function (spec) {
+            let accel = this.settings.getValue(spec.setting);
+            if (!accel) return;
+            this._keybinder.force(spec.name, accel, Lang.bind(this, function () {
+                try { spec.run(); }
+                catch (e) { logError("hotkey " + spec.name + ": " + e.toString()); }
+            }));
+            // Re-bind live when the user edits this shortcut in settings.
+            this.settings.bindProperty(Settings.BindingDirection.IN, spec.setting,
+                spec.setting, Lang.bind(this, this._rebindKeys));
+        }));
+        log("registered " + specs.length + " keybindings (settings-driven)");
+    },
+
+    // Re-register all keybindings from current settings (called on any change).
+    _rebindKeys: function () {
+        if (this._keybinder) this._keybinder.teardown();
+        this._keybinder = new KeyBindings.KeyBinder();
+        this._bindingSpecs().forEach(Lang.bind(this, function (spec) {
+            let accel = this.settings.getValue(spec.setting);
+            if (!accel) return;
+            this._keybinder.force(spec.name, accel, Lang.bind(this, function () {
+                try { spec.run(); }
+                catch (e) { logError("hotkey " + spec.name + ": " + e.toString()); }
+            }));
+        }));
+        log("re-registered keybindings after settings change");
+    },
+
     _unregisterKeybindings: function () {
-        OVERRIDES.forEach(function (o) {
-            try {
-                // null restores Cinnamon's built-in default handler for the
-                // action (correct for both switch-to and move-to families).
-                Meta.keybindings_set_custom_handler(o.action, null);
-            } catch (e) {}
-        });
         if (this._keybinder) {
             this._keybinder.teardown();
             this._keybinder = null;
