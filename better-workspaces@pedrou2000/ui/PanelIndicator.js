@@ -12,6 +12,7 @@
 const St = imports.gi.St;
 const Lang = imports.lang;
 const Tooltips = imports.ui.tooltips;
+const DND = imports.ui.dnd;
 
 const AppletDir = imports.ui.appletManager.applets["better-workspaces@pedrou2000"];
 const IconRenderer = AppletDir.ui.IconRenderer.IconRenderer;
@@ -34,7 +35,62 @@ PanelIndicator.prototype = {
         this._buttons = [];
         this._posLabel = null;
         this._status = "ok";
+        this._installDropTarget();
         this.rebuild();
+    },
+
+    // Make the applet's button row a DnD drop target so dragged project icons
+    // can be reordered horizontally (Cinnamon protocol; the panel isn't modal,
+    // so DnD works here). acceptDrop computes the target slot from pointer x.
+    _installDropTarget: function () {
+        let self = this;
+        this.actor._delegate = {
+            handleDragOver: function (source, actor, x, y, time) {
+                self._showDropHint(self._dropSlotForX(x));
+                return DND.DragMotionResult.MOVE_DROP;
+            },
+            handleDragOut: function () { self._clearDropHint(); },
+            acceptDrop: function (source, actor, x, y, time) {
+                let from = (source && source._bwIdx !== undefined) ? source._bwIdx : -1;
+                let slot = self._dropSlotForX(x);
+                self._clearDropHint();
+                if (from < 0) return false;
+                let target = slot;
+                if (target > from) target -= 1;
+                if (target !== from && target >= 0) {
+                    self.controller.reorderProject(from, target);
+                    // onOrderChanged (applet) rebuilds panel + persists order.
+                }
+                return true;
+            },
+        };
+    },
+
+    // Insertion slot 0..count from pointer x, vs project button horizontal centers.
+    _dropSlotForX: function (x) {
+        let n = this._buttons.length;
+        for (let i = 0; i < n; i++) {
+            let box = this._buttons[i].get_allocation_box();
+            let center = (box.x1 + box.x2) / 2;
+            if (x < center) return i;
+        }
+        return n;
+    },
+
+    _showDropHint: function (slot) {
+        this._clearDropHint();
+        let idx = Math.min(slot, this._buttons.length - 1);
+        if (idx >= 0 && this._buttons[idx]) {
+            this._buttons[idx].add_style_pseudo_class('drop-target');
+            this._hintedBtn = this._buttons[idx];
+        }
+    },
+
+    _clearDropHint: function () {
+        if (this._hintedBtn) {
+            try { this._hintedBtn.remove_style_pseudo_class('drop-target'); } catch (e) {}
+            this._hintedBtn = null;
+        }
     },
 
     // Reflect Notion connection state: "unconfigured" | "loading" | "ok" |
@@ -101,6 +157,10 @@ PanelIndicator.prototype = {
             btn._bwTooltip = new Tooltips.PanelItemTooltip(
                 { actor: btn }, p.name, this.orientation);
 
+            // Draggable to reorder (see _installDropTarget). Plain clicks still
+            // switch projects; drag only starts past the move threshold.
+            this._makeButtonDraggable(btn, p, i);
+
             this.actor.add(btn, { y_align: St.Align.MIDDLE, y_fill: false });
             this._buttons.push(btn);
         }
@@ -126,6 +186,26 @@ PanelIndicator.prototype = {
                     catch (e) { log("icon swap failed: " + e.toString()); }
                 }
             }));
+    },
+
+    // Make a panel project button draggable for reorder. It's its own DnD
+    // delegate: getDragActor provides a floating icon clone. The actual reorder
+    // happens in the row's acceptDrop (_installDropTarget).
+    _makeButtonDraggable: function (btn, project, idx) {
+        let self = this;
+        btn._bwIdx = idx;
+        btn._delegate = btn;
+        btn.getDragActor = function () {
+            return IconRenderer.makeActor(project.icon, project.name, ICON_SIZE);
+        };
+        btn.getDragActorSource = function () { return btn; };
+        try {
+            let draggable = DND.makeDraggable(btn);
+            draggable.connect('drag-end', function () { self._clearDropHint(); });
+            draggable.connect('drag-cancelled', function () { self._clearDropHint(); });
+        } catch (e) {
+            log("makeButtonDraggable: " + e.toString());
+        }
     },
 
     // Lightweight refresh: highlight active project, update position label.

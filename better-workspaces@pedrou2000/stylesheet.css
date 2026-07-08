@@ -20,6 +20,11 @@
     font-weight: bold;
 }
 
+.better-workspaces-project:drop-target {
+    /* drop hint while dragging a project icon to reorder */
+    background-color: rgba(120, 150, 255, 0.45);
+}
+
 .better-workspaces-position {
     padding: 0 6px;
     color: #8899ff;
