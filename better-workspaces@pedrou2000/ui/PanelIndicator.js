@@ -12,6 +12,7 @@
 const St = imports.gi.St;
 const Lang = imports.lang;
 const Tooltips = imports.ui.tooltips;
+const DND = imports.ui.dnd;
 
 const AppletDir = imports.ui.appletManager.applets["better-workspaces@pedrou2000"];
 const IconRenderer = AppletDir.ui.IconRenderer.IconRenderer;
@@ -101,6 +102,10 @@ PanelIndicator.prototype = {
             btn._bwTooltip = new Tooltips.PanelItemTooltip(
                 { actor: btn }, p.name, this.orientation);
 
+            // Drag to reorder: makeDraggable emits drag-begin/drag-end; on end
+            // we compute the drop slot from the pointer x and reorder.
+            this._makeDraggable(btn, i);
+
             this.actor.add(btn, { y_align: St.Align.MIDDLE, y_fill: false });
             this._buttons.push(btn);
         }
@@ -126,6 +131,45 @@ PanelIndicator.prototype = {
                     catch (e) { log("icon swap failed: " + e.toString()); }
                 }
             }));
+    },
+
+    // Make a project button draggable to reorder. We don't use a full drop
+    // target; instead, on drag-end we read the pointer x and figure out which
+    // slot it fell on, then reorder from the button's index to that slot.
+    _makeDraggable: function (btn, fromIdx) {
+        let draggable;
+        try { draggable = DND.makeDraggable(btn); }
+        catch (e) { log("makeDraggable failed: " + e.toString()); return; }
+        btn._bwFromIdx = fromIdx;
+
+        draggable.connect('drag-end', Lang.bind(this, function () {
+            try {
+                let [px, py] = global.get_pointer();
+                let to = this._slotForX(px);
+                let from = btn._bwFromIdx;
+                if (to >= 0 && to !== from) {
+                    this.controller.reorderProject(from, to);
+                    // onOrderChanged (in applet) rebuilds the panel + persists.
+                } else {
+                    this.update();
+                }
+            } catch (e) {
+                log("drag-end reorder: " + e.toString());
+            }
+        }));
+    },
+
+    // Given an absolute pointer x, return the target project slot index by
+    // comparing against each button's on-screen center.
+    _slotForX: function (px) {
+        let n = this._buttons.length;
+        for (let i = 0; i < n; i++) {
+            let btn = this._buttons[i];
+            let [bx, by] = btn.get_transformed_position();
+            let [bw, bh] = btn.get_transformed_size();
+            if (px < bx + bw / 2) return i; // pointer is left of this button's center
+        }
+        return n - 1; // past the last -> drop at the end
     },
 
     // Lightweight refresh: highlight active project, update position label.

@@ -94,7 +94,7 @@ MyApplet.prototype = {
         Applet.Applet.prototype._init.call(this, orientation, panel_height, instanceId);
 
         try {
-            log("loaded (M11 reorder v0.11.3 reorder-engine)");
+            log("loaded (M11 reorder v0.11.4 drag-and-drop)");
 
             this.wm = new WorkspaceManager.WorkspaceManager();
             this.controller = new ControllerModule.Controller(this.wm);
