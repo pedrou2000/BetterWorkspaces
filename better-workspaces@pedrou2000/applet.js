@@ -46,16 +46,16 @@ const DEFAULT_WS_PER_PROJECT = 1;
 // bump KB_SCHEME_VERSION; on load, if the user's stored scheme is older, we
 // reset the keybindings to these values (token/other settings untouched). This
 // lets default changes actually take effect without a manual settings wipe.
-const KB_SCHEME_VERSION = 2;
+const KB_SCHEME_VERSION = 3;
 const KB_DEFAULTS = {
     kbWorkspacePrev: "<Super>Left",
     kbWorkspaceNext: "<Super>Right",
     kbProjectPrev: "<Super>Up",
     kbProjectNext: "<Super>Down",
-    kbMoveWindowPrev: "<Super><Alt>Left",
-    kbMoveWindowNext: "<Super><Alt>Right",
-    kbMoveWindowProjectPrev: "<Super><Alt>Up",
-    kbMoveWindowProjectNext: "<Super><Alt>Down",
+    kbMoveWindowPrev: "<Primary><Super>Left",
+    kbMoveWindowNext: "<Primary><Super>Right",
+    kbMoveWindowProjectPrev: "<Primary><Super>Up",
+    kbMoveWindowProjectNext: "<Primary><Super>Down",
     kbSwitcher: "<Super>Tab",
     kbOpenNotion: "<Super>n",
     kbTogglePanel: "<Super>p",
@@ -72,7 +72,7 @@ MyApplet.prototype = {
         Applet.Applet.prototype._init.call(this, orientation, panel_height, instanceId);
 
         try {
-            log("loaded (M10 keybindings v0.10.1 scheme-reset)");
+            log("loaded (M10 keybindings v0.10.2 ctrl-super move)");
 
             this.wm = new WorkspaceManager.WorkspaceManager();
             this.controller = new ControllerModule.Controller(this.wm);

@@ -59,22 +59,22 @@
     },
     "kbMoveWindowPrev": {
         "type": "keybinding",
-        "default": "<Super><Alt>Left",
+        "default": "<Primary><Super>Left",
         "description": "Move window to previous workspace"
     },
     "kbMoveWindowNext": {
         "type": "keybinding",
-        "default": "<Super><Alt>Right",
+        "default": "<Primary><Super>Right",
         "description": "Move window to next workspace"
     },
     "kbMoveWindowProjectPrev": {
         "type": "keybinding",
-        "default": "<Super><Alt>Up",
+        "default": "<Primary><Super>Up",
         "description": "Move window to previous project (list order)"
     },
     "kbMoveWindowProjectNext": {
         "type": "keybinding",
-        "default": "<Super><Alt>Down",
+        "default": "<Primary><Super>Down",
         "description": "Move window to next project (list order)"
     },
     "kbSwitcher": {
