@@ -240,13 +240,25 @@ PanelIndicator.prototype = {
         }
 
         if (this._posLabel) {
-            if (loc) {
-                let p = this.controller.state.getProject(loc.projectIdx);
-                this._posLabel.set_text(" " + (loc.localIdx + 1) + "/" + p.wsCount);
-            } else {
-                this._posLabel.set_text(" ?");
-            }
+            this._posLabel.set_text(loc ? this._dotsFor(loc) : "");
         }
+    },
+
+    // Carousel dots for the current project's strip: the active workspace is a
+    // large filled dot, the others small dots — e.g. "· ● ·". Hidden entirely
+    // when the project has only one workspace (a bare "1/1" carries no info).
+    // Falls back to compact text if the strip is very long.
+    _dotsFor: function (loc) {
+        let p = this.controller.state.getProject(loc.projectIdx);
+        if (!p || p.wsCount <= 1) return "";           // single workspace -> nothing
+        if (p.wsCount > 12) {                          // too many for dots
+            return "  " + (loc.localIdx + 1) + "/" + p.wsCount;
+        }
+        let parts = [];
+        for (let i = 0; i < p.wsCount; i++) {
+            parts.push(i === loc.localIdx ? "●" : "·");
+        }
+        return "  " + parts.join(" ");
     },
 
     destroy: function () {

@@ -95,7 +95,7 @@ MyApplet.prototype = {
         Applet.Applet.prototype._init.call(this, orientation, panel_height, instanceId);
 
         try {
-            log("loaded (M11 v0.11.18 switcher-vertical-icons)");
+            log("loaded (M11 v0.11.19 carousel-dots)");
 
             this.wm = new WorkspaceManager.WorkspaceManager();
             this.controller = new ControllerModule.Controller(this.wm);
