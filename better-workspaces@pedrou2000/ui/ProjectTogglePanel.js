@@ -212,6 +212,7 @@ ProjectTogglePanel.prototype = {
         let row = new St.BoxLayout({
             style_class: 'better-workspaces-toggle-row',
             vertical: false,
+            reactive: true, // needed for DnD to receive button-press
         });
 
         // Drag handle glyph (ON rows only) as an affordance.
