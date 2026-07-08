@@ -133,18 +133,31 @@ PanelIndicator.prototype = {
             }));
     },
 
-    // Make a project button draggable to reorder. We don't use a full drop
-    // target; instead, on drag-end we read the pointer x and figure out which
-    // slot it fell on, then reorder from the button's index to that slot.
+    // Make a project button draggable to reorder. On drag-BEGIN we snapshot the
+    // centers of all buttons (the layout is still stable then); during a drag
+    // Cinnamon reparents the dragged actor and the siblings reflow, so reading
+    // positions at drag-end would be wrong. On drag-end we compare the pointer x
+    // against the snapshot to pick the target slot.
     _makeDraggable: function (btn, fromIdx) {
         let draggable;
         try { draggable = DND.makeDraggable(btn); }
         catch (e) { log("makeDraggable failed: " + e.toString()); return; }
         btn._bwFromIdx = fromIdx;
 
+        draggable.connect('drag-begin', Lang.bind(this, function () {
+            this._dragCenters = [];
+            for (let i = 0; i < this._buttons.length; i++) {
+                let b = this._buttons[i];
+                let [bx] = b.get_transformed_position();
+                let [bw] = b.get_transformed_size();
+                this._dragCenters.push(bx + bw / 2);
+            }
+        }));
+
         draggable.connect('drag-end', Lang.bind(this, function () {
             try {
-                let [px, py] = global.get_pointer();
+                let ptr = global.get_pointer();
+                let px = ptr[0];
                 let to = this._slotForX(px);
                 let from = btn._bwFromIdx;
                 if (to >= 0 && to !== from) {
@@ -156,20 +169,18 @@ PanelIndicator.prototype = {
             } catch (e) {
                 log("drag-end reorder: " + e.toString());
             }
+            this._dragCenters = null;
         }));
     },
 
-    // Given an absolute pointer x, return the target project slot index by
-    // comparing against each button's on-screen center.
+    // Target slot from pointer x, using the centers snapshotted at drag-begin.
     _slotForX: function (px) {
-        let n = this._buttons.length;
-        for (let i = 0; i < n; i++) {
-            let btn = this._buttons[i];
-            let [bx, by] = btn.get_transformed_position();
-            let [bw, bh] = btn.get_transformed_size();
-            if (px < bx + bw / 2) return i; // pointer is left of this button's center
+        let centers = this._dragCenters;
+        if (!centers || centers.length === 0) return -1;
+        for (let i = 0; i < centers.length; i++) {
+            if (px < centers[i]) return i; // left of this button's center
         }
-        return n - 1; // past the last -> drop at the end
+        return centers.length - 1; // past the last -> drop at the end
     },
 
     // Lightweight refresh: highlight active project, update position label.
