@@ -66,7 +66,7 @@ MyApplet.prototype = {
         Applet.Applet.prototype._init.call(this, orientation, panel_height, instanceId);
 
         try {
-            log("loaded (M9 toggle-panel v0.9.4)");
+            log("loaded (M9 toggle-panel v0.9.5)");
 
             this.wm = new WorkspaceManager.WorkspaceManager();
             this.controller = new ControllerModule.Controller(this.wm);
@@ -337,9 +337,10 @@ MyApplet.prototype = {
             }));
         this._boundKeys.push("bw-switcher");
 
-        // Super+N -> open the active project's Notion page in the browser.
+        // Super+O -> open the active project's Notion page in the browser.
+        // (Super+N is taken by Cinnamon's notifications menu.)
         Main.keybindingManager.addHotKey(
-            "bw-open-home", "<Super>n",
+            "bw-open-home", "<Super>o",
             Lang.bind(this, function () {
                 try { this.controller.openActiveProjectHome(); }
                 catch (e) { logError("open-notion hotkey: " + e.toString()); }
@@ -355,7 +356,7 @@ MyApplet.prototype = {
             }));
         this._boundKeys.push("bw-toggle-panel");
 
-        log("registered keybindings (overrides + Super+Tab + Super+N + Super+P)");
+        log("registered keybindings (overrides + Super+Tab + Super+O + Super+P)");
     },
 
     // Restore Cinnamon's default handlers for the overridden actions, and
@@ -389,7 +390,7 @@ MyApplet.prototype = {
         addAction("Manage workspace projects… (Super+P)", function () {
             this.openTogglePanel();
         });
-        addAction("Open active project's Notion page (Super+N)", function () {
+        addAction("Open active project's Notion page (Super+O)", function () {
             this.controller.openActiveProjectHome();
         });
 
