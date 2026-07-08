@@ -62,9 +62,9 @@ const KB_DEFAULTS = {
 };
 
 // We also (re)assign Cinnamon's window tiling to Super+Alt+arrows, so that the
-// keys our move-window bindings vacated are put to good use. muffin's tiling
-// actions live in org.cinnamon.muffin.keybindings. Restored on unload.
-const TILING_SCHEMA = "org.cinnamon.muffin.keybindings";
+// keys our move-window bindings vacated are put to good use. The push-tile-*
+// actions live in org.cinnamon.desktop.keybindings.wm. Restored on unload.
+const TILING_SCHEMA = "org.cinnamon.desktop.keybindings.wm";
 const TILING_ASSIGN = {
     "push-tile-left":  ["<Super><Alt>Left"],
     "push-tile-right": ["<Super><Alt>Right"],
@@ -83,7 +83,7 @@ MyApplet.prototype = {
         Applet.Applet.prototype._init.call(this, orientation, panel_height, instanceId);
 
         try {
-            log("loaded (M10 keybindings v0.10.3 tiling-assign)");
+            log("loaded (M10 keybindings v0.10.4 tiling-schema-fix)");
 
             this.wm = new WorkspaceManager.WorkspaceManager();
             this.controller = new ControllerModule.Controller(this.wm);
