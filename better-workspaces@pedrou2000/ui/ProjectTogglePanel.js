@@ -61,15 +61,22 @@ ProjectTogglePanel.prototype = {
         });
         box.add(title);
 
-        // Search box. Inset the inner text so it doesn't sit under the caret
-        // (stylesheet selectors for the inner clutter_text are unreliable, so
-        // set it directly on the text actor).
+        // Search box. A primary (left) icon pushes the caret + text right so
+        // they don't sit on top of each other — ClutterText draws its caret at
+        // the text origin regardless of CSS padding, so an icon is the reliable
+        // way to create left inset (and it reads as a normal search field).
         this._search = new St.Entry({
             style_class: 'better-workspaces-toggle-search',
             hint_text: "Search projects…",
             can_focus: true,
         });
-        try { this._search.clutter_text.set_style("padding-left: 6px;"); } catch (e) {}
+        try {
+            this._search.set_primary_icon(new St.Icon({
+                icon_name: "edit-find-symbolic",
+                icon_size: 14,
+                style_class: 'better-workspaces-search-icon',
+            }));
+        } catch (e) {}
         this._search.clutter_text.connect('text-changed', Lang.bind(this, function () {
             this._filter = this._search.get_text().toLowerCase();
             this._renderRows();
