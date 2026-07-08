@@ -118,8 +118,6 @@ ProjectTogglePanel.prototype = {
                 // the insertion index shifts down by one if slot was past it.
                 let target = slot;
                 if (target > from) target -= 1;
-                L.log("drop: from=" + from + " y=" + Math.round(y)
-                    + " slot=" + slot + " target=" + target);
                 if (target !== from && target >= 0) {
                     self._onReorder(from, target);
                     self._renderRows();
@@ -133,17 +131,11 @@ ProjectTogglePanel.prototype = {
     // by comparing against ON-row vertical centers.
     _dropSlotForY: function (y) {
         let rows = this._onRowActors || [];
-        let dbg = [];
         for (let i = 0; i < rows.length; i++) {
             let box = rows[i].get_allocation_box();
             let center = (box.y1 + box.y2) / 2;
-            dbg.push("r" + i + "[" + Math.round(box.y1) + "-" + Math.round(box.y2) + "]");
-            if (y < center) {
-                L.log("_dropSlotForY y=" + Math.round(y) + " -> slot " + i + " | " + dbg.join(","));
-                return i;
-            }
+            if (y < center) return i;
         }
-        L.log("_dropSlotForY y=" + Math.round(y) + " -> slot " + rows.length + " (end) | " + dbg.join(","));
         return rows.length;
     },
 
