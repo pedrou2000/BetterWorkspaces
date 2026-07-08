@@ -15,6 +15,9 @@ const Main = imports.ui.main;
 const Lang = imports.lang;
 const Mainloop = imports.mainloop;
 
+const AppletDir = imports.ui.appletManager.applets["better-workspaces@pedrou2000"];
+const IconRenderer = AppletDir.ui.IconRenderer.IconRenderer;
+
 const UUID = "better-workspaces@pedrou2000";
 function log(msg) { global.log(UUID + " [switcher]: " + msg); }
 
@@ -72,33 +75,27 @@ ProjectSwitcher.prototype = {
     _buildOverlay: function () {
         let monitor = Main.layoutManager.primaryMonitor;
 
-        // Outer vertical container holding one or more horizontal rows, so a
-        // long project list wraps instead of overflowing off-screen.
+        // Vertical list: one row per project (icon + name), so long names fit
+        // and it reads like the panel. Scrollable if the list is very tall.
         this._overlay = new St.BoxLayout({
             style_class: 'better-workspaces-switcher',
             vertical: true,
         });
 
-        let n = this._order.length;
-        // Cards per row: cap so the grid stays within ~85% of monitor width.
-        // ~150px per card is a safe estimate; also cap at 8 for a tidy grid.
-        let maxByWidth = Math.max(1, Math.floor((monitor.width * 0.85) / 150));
-        let perRow = Math.min(8, maxByWidth, n);
-        if (perRow < 1) perRow = 1;
-
         this._cards = [];
-        let row = null;
-        for (let i = 0; i < n; i++) {
-            if (i % perRow === 0) {
-                row = new St.BoxLayout({ style_class: 'better-workspaces-switcher-row', vertical: false });
-                this._overlay.add(row);
-            }
+        for (let i = 0; i < this._order.length; i++) {
             let p = this.controller.state.getProject(this._order[i]);
-            let card = new St.Label({
+            let card = new St.BoxLayout({
                 style_class: 'better-workspaces-switcher-card',
-                text: p ? p.name : "?",
+                vertical: false,
             });
-            row.add(card);
+            let icon = IconRenderer.makeActor(p ? p.icon : null, p ? p.name : "?", 20);
+            card.add(icon, { y_align: St.Align.MIDDLE, y_fill: false });
+            card.add(new St.Label({
+                style_class: 'better-workspaces-switcher-name',
+                text: p ? p.name : "?",
+            }), { y_align: St.Align.MIDDLE, y_fill: false });
+            this._overlay.add(card);
             this._cards.push(card);
         }
 

@@ -155,24 +155,24 @@
     background-color: rgba(0, 0, 0, 0.85);
     border: 2px solid rgba(255, 255, 255, 0.15);
     border-radius: 12px;
-    padding: 16px;
-    spacing: 10px;
-}
-
-.better-workspaces-switcher-row {
-    spacing: 10px;
+    padding: 12px;
+    spacing: 4px;
+    min-width: 280px;
 }
 
 .better-workspaces-switcher-card {
-    padding: 14px 20px;
+    padding: 8px 12px;
     border-radius: 8px;
+    spacing: 12px;
     color: #dddddd;
     font-size: 14px;
-    background-color: rgba(255, 255, 255, 0.05);
 }
 
 .better-workspaces-switcher-card:selected {
     background-color: rgba(120, 150, 255, 0.55);
     color: #ffffff;
-    font-weight: bold;
+}
+
+.better-workspaces-switcher-name {
+    font-size: 15px;
 }
