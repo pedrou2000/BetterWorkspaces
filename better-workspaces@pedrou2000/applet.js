@@ -27,12 +27,6 @@ const ProjectSwitcherModule = AppletDir.ui.ProjectSwitcher;
 const ProjectTogglePanelModule = AppletDir.ui.ProjectTogglePanel.ProjectTogglePanelModule;
 const SyncServiceModule = AppletDir.notion.SyncService.SyncServiceModule;
 const KeyBindings = AppletDir.lib.keybindings.KeyBindings;
-const Persistence = AppletDir.lib.persistence.Persistence;
-
-// Credentials live in our own config dir (not Cinnamon's settings JSON) so they
-// survive settings wipes / reinstalls. Plaintext — same risk as before, just a
-// more durable location. You enter the token once, ever.
-const CREDS_FILE = "credentials.json";
 
 function log(msg) { global.log(UUID + ": " + msg); }
 function logError(msg) { global.logError(UUID + ": " + msg); }
@@ -59,7 +53,7 @@ MyApplet.prototype = {
         Applet.Applet.prototype._init.call(this, orientation, panel_height, instanceId);
 
         try {
-            log("loaded (M9 toggle-panel v0.9.8 durable creds)");
+            log("loaded (M9 toggle-panel v0.9.7 settings-driven keys)");
 
             this.wm = new WorkspaceManager.WorkspaceManager();
             this.controller = new ControllerModule.Controller(this.wm);
@@ -144,20 +138,6 @@ MyApplet.prototype = {
         let dbId = this.settings.getValue("notionDatabaseId") || "";
         let interval = this.settings.getValue("syncIntervalSec") || 300;
 
-        // Restore credentials from our durable config file if the settings are
-        // empty (e.g. after a settings wipe). Persist to it whenever they change
-        // (see the bindProperty callbacks below), so re-entry is never needed.
-        let creds = Persistence.readJSON(CREDS_FILE, {}) || {};
-        if (!token && creds.notionToken) {
-            token = creds.notionToken;
-            this.settings.setValue("notionToken", token);
-            log("restored Notion token from credentials.json");
-        }
-        if (!dbId && creds.notionDatabaseId) {
-            dbId = creds.notionDatabaseId;
-            this.settings.setValue("notionDatabaseId", dbId);
-        }
-
         this.sync = new SyncServiceModule.SyncService(token, dbId, { intervalSec: interval });
 
         // A completed sync refreshes the on-disk cache (for the NEXT launch) and
@@ -175,33 +155,19 @@ MyApplet.prototype = {
             if (this.panelUI) this.panelUI.setStatus(status);
         }));
 
-        // Mirror to the durable file on first load (covers the case where it
-        // was set before this feature existed).
-        this._saveCreds();
-
         this.settings.bindProperty(Settings.BindingDirection.IN, "notionToken",
             "notionToken", Lang.bind(this, function () {
                 this.sync.setToken(this.settings.getValue("notionToken"));
-                this._saveCreds();
             }));
         this.settings.bindProperty(Settings.BindingDirection.IN, "notionDatabaseId",
             "notionDatabaseId", Lang.bind(this, function () {
                 this.sync.setDatabaseId(this.settings.getValue("notionDatabaseId"));
-                this._saveCreds();
             }));
 
         if (!token || !dbId) {
             log("Notion not configured — open settings, add your token, click "
                 + "'Sync now', then reload Cinnamon (Alt+F2, r) to load the deck.");
         }
-    },
-
-    // Persist credentials to our durable config file (survives settings wipes).
-    _saveCreds: function () {
-        let token = this.settings.getValue("notionToken") || "";
-        let dbId = this.settings.getValue("notionDatabaseId") || "";
-        if (!token && !dbId) return; // nothing to save
-        Persistence.writeJSON(CREDS_FILE, { notionToken: token, notionDatabaseId: dbId });
     },
 
     // settings-schema.json "syncNow" button callback.
