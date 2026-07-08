@@ -70,25 +70,41 @@ ProjectSwitcher.prototype = {
     },
 
     _buildOverlay: function () {
+        let monitor = Main.layoutManager.primaryMonitor;
+
+        // Outer vertical container holding one or more horizontal rows, so a
+        // long project list wraps instead of overflowing off-screen.
         this._overlay = new St.BoxLayout({
             style_class: 'better-workspaces-switcher',
-            vertical: false,
+            vertical: true,
         });
+
+        let n = this._order.length;
+        // Cards per row: cap so the grid stays within ~85% of monitor width.
+        // ~150px per card is a safe estimate; also cap at 8 for a tidy grid.
+        let maxByWidth = Math.max(1, Math.floor((monitor.width * 0.85) / 150));
+        let perRow = Math.min(8, maxByWidth, n);
+        if (perRow < 1) perRow = 1;
+
         this._cards = [];
-        for (let i = 0; i < this._order.length; i++) {
+        let row = null;
+        for (let i = 0; i < n; i++) {
+            if (i % perRow === 0) {
+                row = new St.BoxLayout({ style_class: 'better-workspaces-switcher-row', vertical: false });
+                this._overlay.add(row);
+            }
             let p = this.controller.state.getProject(this._order[i]);
             let card = new St.Label({
                 style_class: 'better-workspaces-switcher-card',
                 text: p ? p.name : "?",
             });
-            this._overlay.add(card);
+            row.add(card);
             this._cards.push(card);
         }
 
         Main.uiGroup.add_actor(this._overlay);
 
         // Center on the primary monitor.
-        let monitor = Main.layoutManager.primaryMonitor;
         let [w, h] = this._overlay.get_size();
         this._overlay.set_position(
             monitor.x + Math.floor((monitor.width - w) / 2),

@@ -159,6 +159,10 @@
     spacing: 10px;
 }
 
+.better-workspaces-switcher-row {
+    spacing: 10px;
+}
+
 .better-workspaces-switcher-card {
     padding: 14px 20px;
     border-radius: 8px;
