@@ -22,8 +22,8 @@ function log(msg) { global.log(UUID + " [panel]: " + msg); }
 
 const ICON_SIZE = 22;
 
-function PanelIndicator(appletActor, controller, orientation) {
-    this._init(appletActor, controller, orientation);
+function PanelIndicator(appletActor, controller, orientation, opts) {
+    this._init(appletActor, controller, orientation, opts);
 }
 
 PanelIndicator.prototype = {
