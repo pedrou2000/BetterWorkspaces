@@ -135,6 +135,25 @@ PanelIndicator.prototype = {
         this._statusTip = new Tooltips.PanelItemTooltip(
             { actor: this._statusDot }, "", this.orientation);
 
+        // Manage affordance (⋯) at the FRONT of the row — opens the project
+        // toggle panel. Leading so it's never clipped at the panel edge.
+        if (this._opts.onManage) {
+            let manage = new St.Button({
+                style_class: 'better-workspaces-manage',
+                reactive: true,
+            });
+            manage.set_child(new St.Label({
+                style_class: 'better-workspaces-manage-glyph',
+                text: "⋯",
+            }));
+            manage.connect('clicked', Lang.bind(this, function () {
+                try { this._opts.onManage(); } catch (e) { log("onManage: " + e.toString()); }
+            }));
+            manage._bwManageTip = new Tooltips.PanelItemTooltip(
+                { actor: manage }, "Manage workspace projects", this.orientation);
+            this.actor.add(manage, { y_align: St.Align.MIDDLE, y_fill: false });
+        }
+
         let nProjects = this.controller.state.projectCount();
         for (let i = 0; i < nProjects; i++) {
             let p = this.controller.state.getProject(i);
@@ -171,24 +190,6 @@ PanelIndicator.prototype = {
             text: '',
         });
         this.actor.add(this._posLabel, { y_align: St.Align.MIDDLE, y_fill: false });
-
-        // Manage affordance: opens the project toggle panel (add/reorder/remove).
-        if (this._opts.onManage) {
-            let manage = new St.Button({
-                style_class: 'better-workspaces-manage',
-                reactive: true,
-            });
-            manage.set_child(new St.Label({
-                style_class: 'better-workspaces-manage-glyph',
-                text: "⋯",
-            }));
-            manage.connect('clicked', Lang.bind(this, function () {
-                try { this._opts.onManage(); } catch (e) { log("onManage: " + e.toString()); }
-            }));
-            manage._bwManageTip = new Tooltips.PanelItemTooltip(
-                { actor: manage }, "Manage workspace projects", this.orientation);
-            this.actor.add(manage, { y_align: St.Align.MIDDLE, y_fill: false });
-        }
 
         this.update();
         this.setStatus(this._status); // re-apply after rebuild recreates the dot
