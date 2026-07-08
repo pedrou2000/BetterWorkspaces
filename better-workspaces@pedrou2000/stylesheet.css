@@ -40,6 +40,17 @@
     font-size: 15px;
 }
 
+/* Project-aware workspace OSD (replaces Cinnamon's flat "Workspace N") */
+.better-workspaces-osd {
+    background-color: rgba(0, 0, 0, 0.80);
+    border: 2px solid rgba(120, 150, 255, 0.35);
+    border-radius: 14px;
+    padding: 14px 28px;
+    color: #ffffff;
+    font-size: 18px;
+    font-weight: bold;
+}
+
 .better-workspaces-position {
     padding: 0 6px;
     color: #8899ff;

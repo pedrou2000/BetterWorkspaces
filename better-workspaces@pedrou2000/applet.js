@@ -95,7 +95,7 @@ MyApplet.prototype = {
         Applet.Applet.prototype._init.call(this, orientation, panel_height, instanceId);
 
         try {
-            log("loaded (M11 v0.11.14 manage-button-arg-fix)");
+            log("loaded (M11 v0.11.15 project-aware-osd)");
 
             this.wm = new WorkspaceManager.WorkspaceManager();
             this.controller = new ControllerModule.Controller(this.wm);
@@ -130,6 +130,7 @@ MyApplet.prototype = {
 
             this._registerKeybindings();
             this._buildContextMenu();
+            this._suppressBuiltinOSD();
             this._refresh();
 
             // Kick off a background sync to refresh the cache for NEXT launch.
@@ -178,6 +179,80 @@ MyApplet.prototype = {
         } catch (e) {
             logError("_refresh exception: " + e.toString());
         }
+    },
+
+    // After a deliberate navigation: refresh the panel and show our own OSD
+    // (project · workspace), instead of Cinnamon's flat "Workspace N" OSD.
+    _afterNav: function () {
+        this._refresh();
+        this._showOSD();
+    },
+
+    // Show a transient project-aware OSD reflecting the deck model, e.g.
+    // "Job 2026 · 2/3". Replaces the built-in linear workspace OSD.
+    _showOSD: function () {
+        try {
+            let loc = this.controller.currentLocation();
+            if (!loc) return;
+            let p = this.controller.state.getProject(loc.projectIdx);
+            if (!p) return;
+            let text = p.name + "  ·  " + (loc.localIdx + 1) + "/" + p.wsCount;
+
+            if (!this._osdLabel) {
+                this._osdLabel = new imports.gi.St.Label({ style_class: 'better-workspaces-osd' });
+                this._osdLabel.hide();
+                Main.uiGroup.add_actor(this._osdLabel);
+            }
+            this._osdLabel.set_text(text);
+
+            // Center on the primary monitor.
+            let mon = Main.layoutManager.primaryMonitor;
+            this._osdLabel.show();
+            let w = this._osdLabel.get_width();
+            this._osdLabel.set_position(
+                mon.x + Math.floor((mon.width - w) / 2),
+                mon.y + Math.floor(mon.height * 0.78));
+
+            // Auto-hide after a short delay (reset the timer on each nav).
+            if (this._osdTimer) imports.mainloop.source_remove(this._osdTimer);
+            this._osdTimer = imports.mainloop.timeout_add(900, Lang.bind(this, function () {
+                this._osdTimer = 0;
+                if (this._osdLabel) this._osdLabel.hide();
+                return false;
+            }));
+        } catch (e) {
+            logError("_showOSD: " + e.toString());
+        }
+    },
+
+    // Hide Cinnamon's built-in flat "Workspace N" OSD so only our project-aware
+    // OSD shows. org.cinnamon has a boolean 'workspace-osd-visible'. Saved and
+    // restored on unload.
+    _suppressBuiltinOSD: function () {
+        try {
+            let Gio = imports.gi.Gio;
+            let src = Gio.SettingsSchemaSource.get_default();
+            if (!src || !src.lookup("org.cinnamon", true)) return;
+            this._cinSettings = new Gio.Settings({ schema_id: "org.cinnamon" });
+            if (this._cinSettings.list_keys().indexOf("workspace-osd-visible") === -1) {
+                this._cinSettings = null;
+                return;
+            }
+            this._osdWasVisible = this._cinSettings.get_boolean("workspace-osd-visible");
+            this._cinSettings.set_boolean("workspace-osd-visible", false);
+            log("built-in workspace OSD suppressed (was " + this._osdWasVisible + ")");
+        } catch (e) {
+            logError("_suppressBuiltinOSD: " + e.toString());
+        }
+    },
+
+    _restoreBuiltinOSD: function () {
+        try {
+            if (this._cinSettings && this._osdWasVisible !== undefined) {
+                this._cinSettings.set_boolean("workspace-osd-visible", this._osdWasVisible);
+            }
+        } catch (e) {}
+        this._cinSettings = null;
     },
 
     // Bind settings and create the SyncService (does not start it — the caller
@@ -362,14 +437,14 @@ MyApplet.prototype = {
     _bindingSpecs: function () {
         let self = this;
         return [
-            { setting: "kbWorkspacePrev", name: "bw-ws-prev",    run: function () { self.controller.prevLocalWorkspace(); self._refresh(); } },
-            { setting: "kbWorkspaceNext", name: "bw-ws-next",    run: function () { self.controller.nextLocalWorkspace(); self._refresh(); } },
-            { setting: "kbProjectPrev",   name: "bw-proj-prev",  run: function () { self.controller.goToPrevProjectInOrder(); self._refresh(); } },
-            { setting: "kbProjectNext",   name: "bw-proj-next",  run: function () { self.controller.goToNextProjectInOrder(); self._refresh(); } },
-            { setting: "kbMoveWindowPrev",name: "bw-move-prev",  run: function () { self.controller.moveWindowToPrevLocal(); self._refresh(); } },
-            { setting: "kbMoveWindowNext",name: "bw-move-next",  run: function () { self.controller.moveWindowToNextLocal(); self._refresh(); } },
-            { setting: "kbMoveWindowProjectPrev", name: "bw-move-proj-prev", run: function () { self.controller.moveWindowToPrevProjectInOrder(); self._refresh(); } },
-            { setting: "kbMoveWindowProjectNext", name: "bw-move-proj-next", run: function () { self.controller.moveWindowToNextProjectInOrder(); self._refresh(); } },
+            { setting: "kbWorkspacePrev", name: "bw-ws-prev",    run: function () { self.controller.prevLocalWorkspace(); self._afterNav(); } },
+            { setting: "kbWorkspaceNext", name: "bw-ws-next",    run: function () { self.controller.nextLocalWorkspace(); self._afterNav(); } },
+            { setting: "kbProjectPrev",   name: "bw-proj-prev",  run: function () { self.controller.goToPrevProjectInOrder(); self._afterNav(); } },
+            { setting: "kbProjectNext",   name: "bw-proj-next",  run: function () { self.controller.goToNextProjectInOrder(); self._afterNav(); } },
+            { setting: "kbMoveWindowPrev",name: "bw-move-prev",  run: function () { self.controller.moveWindowToPrevLocal(); self._afterNav(); } },
+            { setting: "kbMoveWindowNext",name: "bw-move-next",  run: function () { self.controller.moveWindowToNextLocal(); self._afterNav(); } },
+            { setting: "kbMoveWindowProjectPrev", name: "bw-move-proj-prev", run: function () { self.controller.moveWindowToPrevProjectInOrder(); self._afterNav(); } },
+            { setting: "kbMoveWindowProjectNext", name: "bw-move-proj-next", run: function () { self.controller.moveWindowToNextProjectInOrder(); self._afterNav(); } },
             { setting: "kbSwitcher",      name: "bw-switcher",   run: function () { self.switcher.cycle(); } },
             { setting: "kbOpenNotion",    name: "bw-open-home",  run: function () { self.controller.openActiveProjectHome(); } },
             { setting: "kbTogglePanel",   name: "bw-toggle-panel", run: function () { self.openTogglePanel(); } },
@@ -519,6 +594,9 @@ MyApplet.prototype = {
     on_applet_removed_from_panel: function () {
         try {
             this._unregisterKeybindings();
+            this._restoreBuiltinOSD();
+            if (this._osdTimer) { imports.mainloop.source_remove(this._osdTimer); this._osdTimer = 0; }
+            if (this._osdLabel) { this._osdLabel.destroy(); this._osdLabel = null; }
             if (this._switchId) {
                 global.window_manager.disconnect(this._switchId);
                 this._switchId = 0;
