@@ -46,7 +46,7 @@ const DEFAULT_WS_PER_PROJECT = 1;
 // bump KB_SCHEME_VERSION; on load, if the user's stored scheme is older, we
 // reset the keybindings to these values (token/other settings untouched). This
 // lets default changes actually take effect without a manual settings wipe.
-const KB_SCHEME_VERSION = 3;
+const KB_SCHEME_VERSION = 4;
 const KB_DEFAULTS = {
     kbWorkspacePrev: "<Super>Left",
     kbWorkspaceNext: "<Super>Right",
@@ -59,20 +59,27 @@ const KB_DEFAULTS = {
     kbSwitcher: "<Super>Tab",
     kbOpenNotion: "<Super>n",
     kbTogglePanel: "<Super>p",
+    // Window-management actions (reassign Cinnamon's own — see WM_ASSIGN).
+    kbTileLeft: "<Super><Alt>Left",
+    kbTileRight: "<Super><Alt>Right",
+    kbTileUp: "<Super><Alt>Up",
+    kbTileDown: "<Super><Alt>Down",
+    kbMaximize: "<Alt>a",
+    kbMinimize: "<Alt>s",
 };
 
-// We also (re)assign some Cinnamon window-management shortcuts so the keys our
-// move-window bindings vacated are put to good use: tiling on Super+Alt+arrows,
-// plus maximize/minimize. These actions live in
-// org.cinnamon.desktop.keybindings.wm. All restored on unload.
+// These reassign Cinnamon's OWN window-management actions (not our handlers):
+// each maps a gsettings action key in org.cinnamon.desktop.keybindings.wm to
+// the applet setting holding the desired accelerator. Editable in Configure;
+// applied to gsettings on load and on change; restored on unload.
 const WM_SCHEMA = "org.cinnamon.desktop.keybindings.wm";
 const WM_ASSIGN = {
-    "push-tile-left":  ["<Super><Alt>Left"],
-    "push-tile-right": ["<Super><Alt>Right"],
-    "push-tile-up":    ["<Super><Alt>Up"],
-    "push-tile-down":  ["<Super><Alt>Down"],
-    "maximize":        ["<Alt>a"],
-    "minimize":        ["<Alt>s"],
+    "push-tile-left":  "kbTileLeft",
+    "push-tile-right": "kbTileRight",
+    "push-tile-up":    "kbTileUp",
+    "push-tile-down":  "kbTileDown",
+    "maximize":        "kbMaximize",
+    "minimize":        "kbMinimize",
 };
 
 function MyApplet(orientation, panel_height, instanceId) {
@@ -86,7 +93,7 @@ MyApplet.prototype = {
         Applet.Applet.prototype._init.call(this, orientation, panel_height, instanceId);
 
         try {
-            log("loaded (M10 keybindings v0.10.5 max-min)");
+            log("loaded (M10 keybindings v0.10.6 wm-in-settings)");
 
             this.wm = new WorkspaceManager.WorkspaceManager();
             this.controller = new ControllerModule.Controller(this.wm);
@@ -374,15 +381,24 @@ MyApplet.prototype = {
             this.settings.bindProperty(Settings.BindingDirection.IN, spec.setting,
                 spec.setting, Lang.bind(this, this._rebindKeys));
         }));
+        // Also re-apply when a window-management shortcut is edited.
+        for (let action in WM_ASSIGN) {
+            let setting = WM_ASSIGN[action];
+            this.settings.bindProperty(Settings.BindingDirection.IN, setting,
+                setting, Lang.bind(this, this._rebindKeys));
+        }
         this._assignTiling();
-        log("registered " + specs.length + " keybindings (settings-driven)");
+        log("registered " + (specs.length + Object.keys(WM_ASSIGN).length)
+            + " keybindings (settings-driven)");
     },
 
-    // Assign Cinnamon window tiling to Super+Alt+arrows (Option A). Recorded and
-    // restored on teardown/unload.
+    // Reassign Cinnamon's own window-management actions to the accelerators
+    // stored in our settings (Option A). Recorded and restored on unload.
     _assignTiling: function () {
-        for (let key in WM_ASSIGN) {
-            this._keybinder.assignGsettings(WM_SCHEMA, key, WM_ASSIGN[key]);
+        for (let action in WM_ASSIGN) {
+            let accel = this.settings.getValue(WM_ASSIGN[action]);
+            if (!accel) continue;
+            this._keybinder.assignGsettings(WM_SCHEMA, action, [accel]);
         }
     },
 

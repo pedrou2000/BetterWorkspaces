@@ -91,5 +91,39 @@
         "type": "keybinding",
         "default": "<Super>p",
         "description": "Open the project toggle panel"
+    },
+    "wmSection": {
+        "type": "section",
+        "description": "Window management (Cinnamon actions, reassigned)"
+    },
+    "kbTileLeft": {
+        "type": "keybinding",
+        "default": "<Super><Alt>Left",
+        "description": "Tile window left"
+    },
+    "kbTileRight": {
+        "type": "keybinding",
+        "default": "<Super><Alt>Right",
+        "description": "Tile window right"
+    },
+    "kbTileUp": {
+        "type": "keybinding",
+        "default": "<Super><Alt>Up",
+        "description": "Tile window up"
+    },
+    "kbTileDown": {
+        "type": "keybinding",
+        "default": "<Super><Alt>Down",
+        "description": "Tile window down"
+    },
+    "kbMaximize": {
+        "type": "keybinding",
+        "default": "<Alt>a",
+        "description": "Maximize window"
+    },
+    "kbMinimize": {
+        "type": "keybinding",
+        "default": "<Alt>s",
+        "description": "Minimize window"
     }
 }
