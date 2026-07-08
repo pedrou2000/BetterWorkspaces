@@ -111,13 +111,15 @@ ProjectTogglePanel.prototype = {
             handleDragOut: function () { self._clearDropHint(); },
             acceptDrop: function (source, actor, x, y, time) {
                 let from = (source && source._bwOnIdx !== undefined) ? source._bwOnIdx : -1;
-                let to = self._dropSlotForY(y);
+                let slot = self._dropSlotForY(y);
                 self._clearDropHint();
                 if (from < 0) return false;
-                // Dropping into slot `to` (0..count): moving down past self, the
-                // effective index shifts by one.
-                let target = to;
+                // slot is an insertion point 0..count. After removing `from`,
+                // the insertion index shifts down by one if slot was past it.
+                let target = slot;
                 if (target > from) target -= 1;
+                L.log("drop: from=" + from + " y=" + Math.round(y)
+                    + " slot=" + slot + " target=" + target);
                 if (target !== from && target >= 0) {
                     self._onReorder(from, target);
                     self._renderRows();
@@ -127,15 +129,21 @@ ProjectTogglePanel.prototype = {
         };
     },
 
-    // Given a y (in listBox coords), return the insertion slot 0..onCount by
-    // comparing against ON-row vertical centers.
+    // Given a y (in listBox local coords), return the insertion slot 0..onCount
+    // by comparing against ON-row vertical centers.
     _dropSlotForY: function (y) {
         let rows = this._onRowActors || [];
+        let dbg = [];
         for (let i = 0; i < rows.length; i++) {
-            let ry = rows[i].get_allocation_box().y1;
-            let rh = rows[i].height;
-            if (y < ry + rh / 2) return i;
+            let box = rows[i].get_allocation_box();
+            let center = (box.y1 + box.y2) / 2;
+            dbg.push("r" + i + "[" + Math.round(box.y1) + "-" + Math.round(box.y2) + "]");
+            if (y < center) {
+                L.log("_dropSlotForY y=" + Math.round(y) + " -> slot " + i + " | " + dbg.join(","));
+                return i;
+            }
         }
+        L.log("_dropSlotForY y=" + Math.round(y) + " -> slot " + rows.length + " (end) | " + dbg.join(","));
         return rows.length;
     },
 

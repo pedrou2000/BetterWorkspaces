@@ -98,14 +98,24 @@ SyncService.prototype = {
         });
     },
 
-    // Persist an ordered list of project ids to Notion by writing Workspace
-    // Order = 0,1,2,... in that sequence. Fire-and-forget per project; the local
-    // cache is updated as each write returns.
+    // Persist an ordered list of project ids as Workspace Order = 0,1,2,...
+    // First update the local cache SYNCHRONOUSLY (so an immediate re-render sees
+    // the new order), then fire the async Notion writes.
     persistOrder: function (orderedIds) {
+        // 1) Synchronous cache update.
+        let projects = this.readCache();
+        let orderById = {};
+        for (let i = 0; i < orderedIds.length; i++) orderById[orderedIds[i]] = i;
+        for (let i = 0; i < projects.length; i++) {
+            if (orderById[projects[i].id] !== undefined) projects[i].order = orderById[projects[i].id];
+        }
+        this._writeCache(projects);
+
+        // 2) Async Notion writes (each also re-updates the cache when it returns).
         for (let i = 0; i < orderedIds.length; i++) {
             this.setWorkspaceOrder(orderedIds[i], i, null);
         }
-        L.log("persistOrder: writing order for " + orderedIds.length + " projects");
+        L.log("persistOrder: cache updated + writing order for " + orderedIds.length + " projects");
     },
 
     // Trigger one sync now. Non-blocking; result flows via cache + onUpdate.
