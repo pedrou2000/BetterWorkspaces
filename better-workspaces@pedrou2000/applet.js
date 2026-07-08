@@ -94,7 +94,7 @@ MyApplet.prototype = {
         Applet.Applet.prototype._init.call(this, orientation, panel_height, instanceId);
 
         try {
-            log("loaded (M11 visual v0.11.2 compact-icons)");
+            log("loaded (M11 reorder v0.11.3 reorder-engine)");
 
             this.wm = new WorkspaceManager.WorkspaceManager();
             this.controller = new ControllerModule.Controller(this.wm);
@@ -109,6 +109,13 @@ MyApplet.prototype = {
 
             this.panelUI = new PanelIndicatorModule.PanelIndicator(this.actor, this.controller, orientation);
             this.switcher = new ProjectSwitcherModule.ProjectSwitcher(this.controller);
+
+            // When projects are reordered, rebuild the panel and persist the new
+            // order to Notion (Workspace Order = 0,1,2,...).
+            this.controller.onOrderChanged(Lang.bind(this, function (orderedIds) {
+                if (this.panelUI) this.panelUI.rebuild();
+                if (this.sync) this.sync.persistOrder(orderedIds);
+            }));
 
             // Initial status: unconfigured if no token, else neutral until sync.
             this.panelUI.setStatus(this._notionConfigured() ? "ok" : "unconfigured");
@@ -441,6 +448,16 @@ MyApplet.prototype = {
         });
         addAction("Open active project's Notion page (Super+N)", function () {
             this.controller.openActiveProjectHome();
+        });
+
+        menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
+        addAction("Move project left (reorder)", function () {
+            this.controller.moveActiveProjectBy(-1);
+            this.panelUI.update();
+        });
+        addAction("Move project right (reorder)", function () {
+            this.controller.moveActiveProjectBy(1);
+            this.panelUI.update();
         });
 
         // Submenu: move the focused window to another project.

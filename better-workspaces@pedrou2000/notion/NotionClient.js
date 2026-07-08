@@ -140,6 +140,13 @@ NotionClient.prototype = {
         props[propName] = { checkbox: !!value };
         this._patch("/pages/" + pageId, { properties: props }, cb);
     },
+
+    // Set a number property on a page. cb(err, parsedObjOrNull).
+    updatePageNumber: function (pageId, propName, value, cb) {
+        let props = {};
+        props[propName] = { number: value };
+        this._patch("/pages/" + pageId, { properties: props }, cb);
+    },
 };
 
 var NotionClientModule = { NotionClient: NotionClient, SOUP3: SOUP3 };

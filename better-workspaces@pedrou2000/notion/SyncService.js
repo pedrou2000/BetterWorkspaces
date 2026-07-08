@@ -79,6 +79,35 @@ SyncService.prototype = {
         });
     },
 
+    // Write the Workspace Order number for a project back to Notion and update
+    // the cached entry. cb(err) — err null on success.
+    setWorkspaceOrder: function (pageId, order, cb) {
+        if (!this.client.hasToken()) { cb && cb("no-token"); return; }
+        this.client.updatePageNumber(pageId, "Workspace Order", order, (err) => {
+            if (err) {
+                L.error("setWorkspaceOrder failed for " + pageId + ": " + err);
+                cb && cb(err);
+                return;
+            }
+            let projects = this.readCache();
+            for (let i = 0; i < projects.length; i++) {
+                if (projects[i].id === pageId) { projects[i].order = order; break; }
+            }
+            this._writeCache(projects);
+            cb && cb(null);
+        });
+    },
+
+    // Persist an ordered list of project ids to Notion by writing Workspace
+    // Order = 0,1,2,... in that sequence. Fire-and-forget per project; the local
+    // cache is updated as each write returns.
+    persistOrder: function (orderedIds) {
+        for (let i = 0; i < orderedIds.length; i++) {
+            this.setWorkspaceOrder(orderedIds[i], i, null);
+        }
+        L.log("persistOrder: writing order for " + orderedIds.length + " projects");
+    },
+
     // Trigger one sync now. Non-blocking; result flows via cache + onUpdate.
     syncNow: function () {
         if (!this.databaseId || !this.client.hasToken()) {

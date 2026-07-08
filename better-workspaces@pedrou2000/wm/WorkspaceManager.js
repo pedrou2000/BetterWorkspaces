@@ -191,6 +191,26 @@ WorkspaceManager.prototype = {
         return false;
     },
 
+    // List non-pinned windows on a single workspace index.
+    listWindowsOnWorkspace: function (index) {
+        let ws = this._wm().get_workspace_by_index(index);
+        if (!ws) return [];
+        let out = [];
+        let windows = ws.list_windows();
+        for (let i = 0; i < windows.length; i++) {
+            let w = windows[i];
+            if (w.is_on_all_workspaces && w.is_on_all_workspaces()) continue;
+            out.push(w);
+        }
+        return out;
+    },
+
+    // Move a specific window object to workspace `index`.
+    moveWindowTo: function (win, index) {
+        try { win.change_workspace_by_index(index, false); return true; }
+        catch (e) { logError("moveWindowTo: " + e.toString()); return false; }
+    },
+
     // Move EVERY window on workspace `from` to workspace `to`. Used when
     // inserting/removing a workspace in the middle of the flat list so a
     // project's partition can grow/shrink without scattering later projects.

@@ -24,6 +24,7 @@ const L = AppletDir.lib.logger.Logger.makeLogger("mapper");
 const TITLE_PROP = "Project";
 const WORKSPACE_PROP = "Workspace";
 const ARCHIVE_PROP = "Archive";
+const ORDER_PROP = "Workspace Order";
 
 // Notion API query body: fetch all non-archived projects (we tag each with its
 // Workspace flag in the mapper rather than filtering it out server-side).
@@ -56,6 +57,16 @@ function _checkbox(page, propName) {
         let prop = page.properties[propName];
         return !!(prop && prop.checkbox === true);
     } catch (e) { return false; }
+}
+
+// Read a number property; null if unset.
+function _number(page, propName) {
+    try {
+        let prop = page.properties[propName];
+        if (prop && prop.type === "number" && prop.number !== null && prop.number !== undefined)
+            return prop.number;
+    } catch (e) {}
+    return null;
 }
 
 function _isArchived(page) {
@@ -106,10 +117,22 @@ function mapPage(page) {
         icon: _icon(page),
         notionUrl: page.url || null,
         inWorkspace: _wantsWorkspace(page),
+        order: _number(page, ORDER_PROP), // Workspace Order; null if unset
     };
 }
 
-// Map a full query result -> array of Project{}.
+// Sort projects by Workspace Order (ascending); projects without an order go
+// last, tie-broken by title. Used so the deck & panel follow the Notion order.
+function sortByOrder(projects) {
+    return projects.slice().sort(function (a, b) {
+        let ao = (a.order === null || a.order === undefined) ? Infinity : a.order;
+        let bo = (b.order === null || b.order === undefined) ? Infinity : b.order;
+        if (ao !== bo) return ao - bo;
+        return (a.name || "").localeCompare(b.name || "");
+    });
+}
+
+// Map a full query result -> array of Project{}, sorted by Workspace Order.
 function mapResults(result) {
     if (!result || !result.results) return [];
     let out = [];
@@ -117,6 +140,7 @@ function mapResults(result) {
         let p = mapPage(result.results[i]);
         if (p) out.push(p);
     }
+    out = sortByOrder(out);
     L.log("mapResults: " + result.results.length + " pages -> " + out.length + " projects kept");
     return out;
 }
@@ -125,8 +149,10 @@ var ProjectMapper = {
     buildQueryBody: buildQueryBody,
     mapPage: mapPage,
     mapResults: mapResults,
+    sortByOrder: sortByOrder,
     // exported for reference/testing
     TITLE_PROP: TITLE_PROP,
     WORKSPACE_PROP: WORKSPACE_PROP,
     ARCHIVE_PROP: ARCHIVE_PROP,
+    ORDER_PROP: ORDER_PROP,
 };

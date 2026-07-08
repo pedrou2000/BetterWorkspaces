@@ -100,6 +100,89 @@ Controller.prototype = {
         return this.goToProject(this.state.previousProjectIdx());
     },
 
+    // Reorder projects: move the project at `from` to index `to`, physically
+    // relocating each project's window partition to match the new order, then
+    // persisting the new order to Notion (Workspace Order = 0,1,2,...).
+    //
+    // Approach: snapshot every project's windows and its current-local offset
+    // BEFORE moving anything (so window refs are captured up front), apply the
+    // model move, then for each project place its captured windows at their new
+    // flat base + saved local. Finally restore the active workspace.
+    reorderProject: function (from, to) {
+        let n = this.state.projectCount();
+        if (from < 0 || from >= n || to < 0 || to >= n || from === to) return false;
+
+        // Where are we now (project + local), so we can return there after.
+        let curLoc = this.currentLocation();
+
+        // Snapshot: for each project, the windows on each of its local workspaces.
+        let counts = this.state.counts();
+        let snapshot = []; // snapshot[oldProjIdx] = [ [win,...] per local ]
+        for (let pi = 0; pi < n; pi++) {
+            let base = Mapping.offsetOf(counts, pi);
+            let locals = [];
+            for (let l = 0; l < this.state.getProject(pi).wsCount; l++) {
+                locals.push(this.wm.listWindowsOnWorkspace(base + l));
+            }
+            snapshot.push(locals);
+        }
+
+        // Apply the model reorder (this remaps active/MRU by identity).
+        if (!this.state.moveProject(from, to)) return false;
+
+        // Build old->new project position map (same logic as State.moveProject).
+        let idxArr = [];
+        for (let i = 0; i < n; i++) idxArr.push(i);
+        let movedIdx = idxArr.splice(from, 1)[0];
+        idxArr.splice(to, 0, movedIdx);
+        // idxArr[newPos] = oldProjIdx.
+
+        // Relocate windows: for each new position, move that project's snapshot
+        // windows to the new partition's flat base + local.
+        let newCounts = this.state.counts();
+        for (let newPos = 0; newPos < n; newPos++) {
+            let oldProjIdx = idxArr[newPos];
+            let newBase = Mapping.offsetOf(newCounts, newPos);
+            let locals = snapshot[oldProjIdx];
+            for (let l = 0; l < locals.length; l++) {
+                let wins = locals[l];
+                for (let w = 0; w < wins.length; w++) {
+                    this.wm.moveWindowTo(wins[w], newBase + l);
+                }
+            }
+        }
+
+        // Return to the same (project,local) we were on, now at its new flat pos.
+        if (curLoc) {
+            // Find where the old active project landed.
+            let newActivePos = idxArr.indexOf(curLoc.projectIdx);
+            let flat = Mapping.globalIndex(this.state.counts(), newActivePos, curLoc.localIdx);
+            this.wm.goToWorkspace(flat);
+        }
+
+        // Persist the new order to Notion (ids in new order).
+        let orderedIds = [];
+        for (let i = 0; i < this.state.projectCount(); i++) {
+            orderedIds.push(this.state.getProject(i).id);
+        }
+        if (this._onOrderChanged) this._onOrderChanged(orderedIds);
+
+        log("reorderProject: " + from + " -> " + to + " done");
+        return true;
+    },
+
+    // Register a callback(orderedIds[]) invoked after a reorder, so the applet
+    // can persist the order to Notion.
+    onOrderChanged: function (cb) { this._onOrderChanged = cb; },
+
+    // Convenience: move a project one step left/right in the order.
+    moveActiveProjectBy: function (delta) {
+        let from = this.state.activeProjectIdx;
+        let to = from + delta;
+        if (to < 0 || to >= this.state.projectCount()) return false;
+        return this.reorderProject(from, to);
+    },
+
     // Open the active project's Notion page in a NEW browser window, so it
     // lands on the current (home) workspace instead of adding a tab to an
     // existing browser window on some other workspace. Manual by design.
