@@ -98,6 +98,24 @@ SyncService.prototype = {
         });
     },
 
+    // Clear a project's Workspace Order (set to null in Notion + cache), so it
+    // sorts last (nulls-last) once deactivated.
+    clearWorkspaceOrder: function (pageId, cb) {
+        this.setWorkspaceOrder(pageId, null, cb);
+    },
+
+    // Highest Workspace Order currently in the cache (among any project), or -1
+    // if none set. Used to place a newly-activated project at the bottom.
+    maxOrder: function () {
+        let projects = this.readCache();
+        let max = -1;
+        for (let i = 0; i < projects.length; i++) {
+            let o = projects[i].order;
+            if (typeof o === "number" && o > max) max = o;
+        }
+        return max;
+    },
+
     // Persist an ordered list of project ids as Workspace Order = 0,1,2,...
     // First update the local cache SYNCHRONOUSLY (so an immediate re-render sees
     // the new order), then fire the async Notion writes.

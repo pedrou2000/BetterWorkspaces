@@ -28,10 +28,11 @@ function PanelIndicator(appletActor, controller, orientation) {
 
 PanelIndicator.prototype = {
 
-    _init: function (appletActor, controller, orientation) {
+    _init: function (appletActor, controller, orientation, opts) {
         this.actor = appletActor;
         this.controller = controller;
         this.orientation = orientation;
+        this._opts = opts || {};
         this._buttons = [];
         this._posLabel = null;
         this._status = "ok";
@@ -170,6 +171,24 @@ PanelIndicator.prototype = {
             text: '',
         });
         this.actor.add(this._posLabel, { y_align: St.Align.MIDDLE, y_fill: false });
+
+        // Manage affordance: opens the project toggle panel (add/reorder/remove).
+        if (this._opts.onManage) {
+            let manage = new St.Button({
+                style_class: 'better-workspaces-manage',
+                reactive: true,
+            });
+            manage.set_child(new St.Label({
+                style_class: 'better-workspaces-manage-glyph',
+                text: "⋯",
+            }));
+            manage.connect('clicked', Lang.bind(this, function () {
+                try { this._opts.onManage(); } catch (e) { log("onManage: " + e.toString()); }
+            }));
+            manage._bwManageTip = new Tooltips.PanelItemTooltip(
+                { actor: manage }, "Manage workspace projects", this.orientation);
+            this.actor.add(manage, { y_align: St.Align.MIDDLE, y_fill: false });
+        }
 
         this.update();
         this.setStatus(this._status); // re-apply after rebuild recreates the dot

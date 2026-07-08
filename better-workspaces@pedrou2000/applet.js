@@ -95,7 +95,7 @@ MyApplet.prototype = {
         Applet.Applet.prototype._init.call(this, orientation, panel_height, instanceId);
 
         try {
-            log("loaded (M11 reorder v0.11.11 panel-drag-reorder)");
+            log("loaded (M11 v0.11.12 order-on-toggle + manage-affordance)");
 
             this.wm = new WorkspaceManager.WorkspaceManager();
             this.controller = new ControllerModule.Controller(this.wm);
@@ -108,7 +108,9 @@ MyApplet.prototype = {
             // Falls back to a placeholder if nothing is cached yet.
             this._loadDeckFromCache();
 
-            this.panelUI = new PanelIndicatorModule.PanelIndicator(this.actor, this.controller, orientation);
+            this.panelUI = new PanelIndicatorModule.PanelIndicator(
+                this.actor, this.controller, orientation,
+                { onManage: Lang.bind(this, this.openTogglePanel) });
             this.switcher = new ProjectSwitcherModule.ProjectSwitcher(this.controller);
 
             // When projects are reordered, rebuild the panel and persist the new
@@ -263,10 +265,12 @@ MyApplet.prototype = {
         if (!this.sync) { doneCb("no-sync"); return; }
 
         if (newValue) {
-            // Turning ON: write Notion, then add to the live deck immediately.
+            // Turning ON: write Notion, add to the live deck (appends to end),
+            // and assign Workspace Order = max+1 so "bottom" survives reload.
             this.sync.setWorkspaceFlag(project.id, true, Lang.bind(this, function (err) {
                 if (err) { doneCb(err); return; }
                 this.controller.addProjectLive(this._toDef(project));
+                this.sync.setWorkspaceOrder(project.id, this.sync.maxOrder() + 1, null);
                 this.panelUI.rebuild();
                 this._refresh();
                 doneCb(null);
@@ -292,7 +296,9 @@ MyApplet.prototype = {
                     if (rmErr) { doneCb(rmErr); return; }
                     this.panelUI.rebuild();
                     this._refresh();
-                    // Deck change succeeded; now persist Workspace=false.
+                    // Deck change succeeded; persist Workspace=false and clear
+                    // its order so it sorts last if reactivated later.
+                    this.sync.clearWorkspaceOrder(project.id, null);
                     this.sync.setWorkspaceFlag(project.id, false, function (wErr) {
                         doneCb(wErr); // if the write fails, panel reverts the toggle
                     });
