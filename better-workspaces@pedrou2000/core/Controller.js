@@ -151,6 +151,11 @@ Controller.prototype = {
     nextLocalWorkspace: function () {
         let loc = this.currentLocation();
         if (!loc) return false;
+        let p = this.state.getProject(loc.projectIdx);
+        // At the project's last workspace: grow the strip and land on the new one.
+        if (p && loc.localIdx >= p.wsCount - 1) {
+            return this.addWorkspaceToActiveProject();
+        }
         return this.goToLocalWorkspace(loc.localIdx + 1);
     },
 
@@ -183,6 +188,14 @@ Controller.prototype = {
     moveWindowToNextLocal: function () {
         let loc = this.currentLocation();
         if (!loc) return false;
+        let p = this.state.getProject(loc.projectIdx);
+        // At the project's last workspace: create a new one, then move the
+        // focused window there (and follow it).
+        if (p && loc.localIdx >= p.wsCount - 1) {
+            let pIdx = this.state.activeProjectIdx;
+            this._growActiveProjectStrip();
+            return this.moveWindowToLocalWorkspace(this.state.getProject(pIdx).wsCount - 1);
+        }
         return this.moveWindowToLocalWorkspace(loc.localIdx + 1);
     },
 
@@ -235,14 +248,17 @@ Controller.prototype = {
     // so we append there and then rotate the empty slot down into position by
     // shifting each later workspace's windows one index up. This keeps every
     // OTHER project's partition intact (fixes the M2 last-project-only limit).
-    addWorkspaceToActiveProject: function () {
+    // Grow the active project's strip by one workspace WITHOUT navigating.
+    // Returns the new last local index, or -1 on failure. Shared by the explicit
+    // add action and the auto-create-on-overflow navigation.
+    _growActiveProjectStrip: function () {
         let pIdx = this.state.activeProjectIdx;
         let counts = this.state.counts();
         let oldTotal = Mapping.totalWorkspaces(counts);
         let insertAt = Mapping.offsetOf(counts, pIdx) + counts[pIdx];
 
         // 1) Append a new (empty) workspace at the global end (index oldTotal).
-        if (this.wm.createWorkspace() < 0) return false;
+        if (this.wm.createWorkspace() < 0) return -1;
 
         // 2) Rotate the empty slot from the end down to insertAt: move windows
         //    high -> low so nothing is overwritten.
@@ -254,10 +270,15 @@ Controller.prototype = {
         this.state.incWorkspaceCount(pIdx);
         this._reconcileWorkspaceCount();
 
-        let newLocal = this.state.getProject(pIdx).wsCount - 1;
-        log("addWorkspaceToActiveProject: " + this.state.getProject(pIdx).name
+        log("_growActiveProjectStrip: " + this.state.getProject(pIdx).name
             + " now " + this.state.getProject(pIdx).wsCount
             + " (inserted at flat " + insertAt + ")");
+        return this.state.getProject(pIdx).wsCount - 1;
+    },
+
+    addWorkspaceToActiveProject: function () {
+        let newLocal = this._growActiveProjectStrip();
+        if (newLocal < 0) return false;
         return this.goToLocalWorkspace(newLocal);
     },
 
