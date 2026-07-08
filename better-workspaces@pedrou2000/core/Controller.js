@@ -318,8 +318,9 @@ Controller.prototype = {
     },
 
     // On-demand: remove ALL empty workspaces of the active project (including
-    // middle ones), keeping the home workspace (local 0) and the one currently
-    // focused. We gather target flats first, then remove them high -> low so the
+    // the home workspace and middle ones), keeping only the one currently
+    // focused. The active workspace is always kept, so the project retains >= 1.
+    // We gather target flats first, then remove them high -> low so the
     // remaining indices stay valid as Cinnamon reindexes. Returns count removed.
     removeEmptyWorkspacesOfActiveProject: function () {
         let pIdx = this.state.activeProjectIdx;
@@ -328,10 +329,10 @@ Controller.prototype = {
         let activeFlat = this.wm.getActiveIndex();
         let base = Mapping.offsetOf(this.state.counts(), pIdx);
 
-        // Collect flats to remove: local >= 1 (keep home), not the active one,
-        // and empty.
+        // Collect flats to remove: every workspace in the partition that is not
+        // the active one and is empty (home included).
         let toRemove = [];
-        for (let local = 1; local < p.wsCount; local++) {
+        for (let local = 0; local < p.wsCount; local++) {
             let flat = base + local;
             if (flat === activeFlat) continue;
             if (this.wm.countWindows(flat) > 0) continue;
