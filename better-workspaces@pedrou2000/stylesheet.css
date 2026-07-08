@@ -79,6 +79,10 @@
     min-width: 380px;
     padding: 6px 10px;
 }
+.better-workspaces-toggle-search StEntry,
+.better-workspaces-toggle-search .clutter-text {
+    padding-left: 6px;
+}
 .better-workspaces-toggle-scroll {
     max-height: 360px;
     min-width: 400px;
