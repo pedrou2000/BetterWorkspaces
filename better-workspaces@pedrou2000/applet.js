@@ -46,24 +46,25 @@ const DEFAULT_WS_PER_PROJECT = 1;
 // bump KB_SCHEME_VERSION; on load, if the user's stored scheme is older, we
 // reset the keybindings to these values (token/other settings untouched). This
 // lets default changes actually take effect without a manual settings wipe.
-const KB_SCHEME_VERSION = 4;
+const KB_SCHEME_VERSION = 5;
 const KB_DEFAULTS = {
+    // Super = navigate; +Alt = project axis; +Ctrl = carry the window.
     kbWorkspacePrev: "<Super>Left",
     kbWorkspaceNext: "<Super>Right",
-    kbProjectPrev: "<Super>Up",
-    kbProjectNext: "<Super>Down",
+    kbProjectPrev: "<Super><Alt>Left",
+    kbProjectNext: "<Super><Alt>Right",
     kbMoveWindowPrev: "<Primary><Super>Left",
     kbMoveWindowNext: "<Primary><Super>Right",
-    kbMoveWindowProjectPrev: "<Primary><Super>Up",
-    kbMoveWindowProjectNext: "<Primary><Super>Down",
+    kbMoveWindowProjectPrev: "<Primary><Super><Alt>Left",
+    kbMoveWindowProjectNext: "<Primary><Super><Alt>Right",
     kbSwitcher: "<Super>Tab",
     kbOpenNotion: "<Super>n",
     kbTogglePanel: "<Super>p",
-    // Window-management actions (reassign Cinnamon's own — see WM_ASSIGN).
-    kbTileLeft: "<Super><Alt>Left",
-    kbTileRight: "<Super><Alt>Right",
-    kbTileUp: "<Super><Alt>Up",
-    kbTileDown: "<Super><Alt>Down",
+    // Tiling on Super+Shift+arrows; maximize/minimize on Alt+A/S.
+    kbTileLeft: "<Super><Shift>Left",
+    kbTileRight: "<Super><Shift>Right",
+    kbTileUp: "<Super><Shift>Up",
+    kbTileDown: "<Super><Shift>Down",
     kbMaximize: "<Alt>a",
     kbMinimize: "<Alt>s",
 };
@@ -93,7 +94,7 @@ MyApplet.prototype = {
         Applet.Applet.prototype._init.call(this, orientation, panel_height, instanceId);
 
         try {
-            log("loaded (M10 keybindings v0.10.12 remove-all-empty-incl-home)");
+            log("loaded (M10 keybindings v0.11.0 linear-modifier-scheme)");
 
             this.wm = new WorkspaceManager.WorkspaceManager();
             this.controller = new ControllerModule.Controller(this.wm);

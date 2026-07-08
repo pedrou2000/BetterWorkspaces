@@ -49,12 +49,12 @@
     },
     "kbProjectPrev": {
         "type": "keybinding",
-        "default": "<Super>Up",
+        "default": "<Super><Alt>Left",
         "description": "Previous project (list order)"
     },
     "kbProjectNext": {
         "type": "keybinding",
-        "default": "<Super>Down",
+        "default": "<Super><Alt>Right",
         "description": "Next project (list order)"
     },
     "kbMoveWindowPrev": {
@@ -69,12 +69,12 @@
     },
     "kbMoveWindowProjectPrev": {
         "type": "keybinding",
-        "default": "<Primary><Super>Up",
+        "default": "<Primary><Super><Alt>Left",
         "description": "Move window to previous project (list order)"
     },
     "kbMoveWindowProjectNext": {
         "type": "keybinding",
-        "default": "<Primary><Super>Down",
+        "default": "<Primary><Super><Alt>Right",
         "description": "Move window to next project (list order)"
     },
     "kbSwitcher": {
@@ -98,22 +98,22 @@
     },
     "kbTileLeft": {
         "type": "keybinding",
-        "default": "<Super><Alt>Left",
+        "default": "<Super><Shift>Left",
         "description": "Tile window left"
     },
     "kbTileRight": {
         "type": "keybinding",
-        "default": "<Super><Alt>Right",
+        "default": "<Super><Shift>Right",
         "description": "Tile window right"
     },
     "kbTileUp": {
         "type": "keybinding",
-        "default": "<Super><Alt>Up",
+        "default": "<Super><Shift>Up",
         "description": "Tile window up"
     },
     "kbTileDown": {
         "type": "keybinding",
-        "default": "<Super><Alt>Down",
+        "default": "<Super><Shift>Down",
         "description": "Tile window down"
     },
     "kbMaximize": {
