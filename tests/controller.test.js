@@ -9,20 +9,33 @@ const { FakeWm, makeFakeMainloop } = require("./helpers/fakeWm");
 const Mapping = loadGjsModule("core/mapping.js", "Mapping");
 const State = loadGjsModule("core/State.js", "State");
 
-// Load the real Controller with its dependencies injected. Returns
+// Load the real Controller with its dependencies injected. Since M12 Stage C
+// the Controller is a façade over Navigation/DeckReorder/ProjectLifecycle, so
+// those real modules are loaded (with the same fakes) and injected too. Returns
 // {controller, wm, mainloop} for one test scenario.
 function makeController(defs, initialWsCount) {
     const mainloop = makeFakeMainloop();
+    const lib = {
+        browser: { Browser: { openUrlNewWindow() {} } },
+        constants: { Constants: { CLOSE_GRACE_MS: 0 } },
+    };
+    const coreDeps = { core: { mapping: { Mapping: Mapping } }, lib: lib };
+    const Navigation = loadGjsModule("core/Navigation.js", "Navigation",
+        { applet: coreDeps });
+    const DeckReorder = loadGjsModule("core/DeckReorder.js", "DeckReorder",
+        { applet: coreDeps });
+    const ProjectLifecycle = loadGjsModule("core/ProjectLifecycle.js", "ProjectLifecycle",
+        { applet: coreDeps, extraImports: { mainloop: mainloop } });
     const Controller = loadGjsModule("core/Controller.js", "Controller", {
         applet: {
             core: {
                 mapping: { Mapping: Mapping },
                 State: { State: State },
+                Navigation: { Navigation: Navigation },
+                DeckReorder: { DeckReorder: DeckReorder },
+                ProjectLifecycle: { ProjectLifecycle: ProjectLifecycle },
             },
-            lib: {
-                browser: { Browser: { openUrlNewWindow() {} } },
-                constants: { Constants: { CLOSE_GRACE_MS: 0 } },
-            },
+            lib: lib,
         },
         extraImports: { mainloop: mainloop },
     });
