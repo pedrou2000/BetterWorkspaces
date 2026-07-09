@@ -19,10 +19,10 @@
 const St = imports.gi.St;
 const Clutter = imports.gi.Clutter;
 const ModalDialog = imports.ui.modalDialog;
-const DND = imports.ui.dnd;
 
 const AppletDir = imports.ui.appletManager.applets["better-workspaces@pedrou2000"];
 const IconRenderer = AppletDir.ui.IconRenderer.IconRenderer;
+const DndReorderHelper = AppletDir.ui.DndReorder.DndReorderHelper;
 const L = AppletDir.lib.logger.Logger.makeLogger("toggle-panel");
 
 const ROW_ICON_SIZE = AppletDir.lib.constants.Constants.ROW_ICON_SIZE;
@@ -39,6 +39,16 @@ var ProjectTogglePanel = class ProjectTogglePanel {
         this._onReorder = onReorder;
         this._rows = [];
         this._filter = "";
+
+        // Drag-to-reorder for the ON rows (shared ui/DndReorder helper).
+        this._dnd = new DndReorderHelper({
+            axis: 'y',
+            getItems: () => this._onRowActors || [],
+            onReorder: (from, to) => {
+                this._onReorder(from, to);
+                this._renderRows();
+            },
+        });
     }
 
     open() {
@@ -84,7 +94,7 @@ var ProjectTogglePanel = class ProjectTogglePanel {
         box.add(this._scroll, { expand: true });
 
         // Make the list a DnD drop target so dragged ON rows can be reordered.
-        this._installDropTarget();
+        this._dnd.attachTo(this._listBox);
 
         this._renderRows();
 
@@ -96,63 +106,6 @@ var ProjectTogglePanel = class ProjectTogglePanel {
 
         this._dialog.open();
         global.stage.set_key_focus(this._search);
-    }
-
-    // Make the list box a Cinnamon DnD drop target. handleDragOver shows a drop
-    // hint and reports MOVE_DROP; acceptDrop computes the target slot from the
-    // pointer y (relative to ON-row centers) and calls onReorder.
-    _installDropTarget() {
-        this._listBox._delegate = {
-            handleDragOver: (source, actor, x, y, time) => {
-                this._showDropHint(this._dropSlotForY(y));
-                return DND.DragMotionResult.MOVE_DROP;
-            },
-            handleDragOut: () => { this._clearDropHint(); },
-            acceptDrop: (source, actor, x, y, time) => {
-                let from = (source && source._bwOnIdx !== undefined) ? source._bwOnIdx : -1;
-                let slot = this._dropSlotForY(y);
-                this._clearDropHint();
-                if (from < 0) return false;
-                // slot is an insertion point 0..count. After removing `from`,
-                // the insertion index shifts down by one if slot was past it.
-                let target = slot;
-                if (target > from) target -= 1;
-                if (target !== from && target >= 0) {
-                    this._onReorder(from, target);
-                    this._renderRows();
-                }
-                return true;
-            },
-        };
-    }
-
-    // Given a y (in listBox local coords), return the insertion slot 0..onCount
-    // by comparing against ON-row vertical centers.
-    _dropSlotForY(y) {
-        let rows = this._onRowActors || [];
-        for (let i = 0; i < rows.length; i++) {
-            let box = rows[i].get_allocation_box();
-            let center = (box.y1 + box.y2) / 2;
-            if (y < center) return i;
-        }
-        return rows.length;
-    }
-
-    _showDropHint(slot) {
-        this._clearDropHint();
-        let rows = this._onRowActors || [];
-        let idx = Math.min(slot, rows.length - 1);
-        if (idx >= 0 && rows[idx]) {
-            rows[idx].add_style_pseudo_class('drop-target');
-            this._hintedRow = rows[idx];
-        }
-    }
-
-    _clearDropHint() {
-        if (this._hintedRow) {
-            try { this._hintedRow.remove_style_pseudo_class('drop-target'); } catch (e) {}
-            this._hintedRow = null;
-        }
     }
 
     _renderRows() {
@@ -238,40 +191,15 @@ var ProjectTogglePanel = class ProjectTogglePanel {
         this._listBox.add(row);
         this._rows.push({ project: project, toggle: toggle });
 
-        // Make ON rows draggable to reorder, using Cinnamon's DnD protocol.
+        // Make ON rows draggable to reorder; the floating drag actor is a
+        // label with the project name.
         if (onIdx >= 0) {
-            row._bwOnIdx = onIdx;
             this._onRowActors.push(row);
-            this._makeRowDraggable(row);
+            this._dnd.makeDraggable(row, onIdx, () => new St.Label({
+                style_class: 'better-workspaces-drag-actor',
+                text: project.name,
+            }));
         }
-    }
-
-    // Attach drag behavior to an ON row. The row is its own DnD delegate: it
-    // provides a drag actor (a labeled clone); the reorder happens in the list's
-    // acceptDrop.
-    _makeRowDraggable(row) {
-        row._delegate = row;
-        row.getDragActor = () => new St.Label({
-            style_class: 'better-workspaces-drag-actor',
-            text: this._rowLabelText(row),
-        });
-        row.getDragActorSource = () => row;
-
-        let draggable = DND.makeDraggable(row);
-        draggable.connect('drag-end', () => this._clearDropHint());
-        draggable.connect('drag-cancelled', () => this._clearDropHint());
-    }
-
-    _rowLabelText(row) {
-        // Best-effort: pull the project name label out of the row's children.
-        try {
-            let kids = row.get_children();
-            for (let i = 0; i < kids.length; i++) {
-                if (kids[i].style_class === 'better-workspaces-toggle-name')
-                    return kids[i].get_text();
-            }
-        } catch (e) {}
-        return "project";
     }
 
     _paintToggle(toggle) {

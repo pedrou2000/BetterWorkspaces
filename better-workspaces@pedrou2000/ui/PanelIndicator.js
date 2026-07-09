@@ -11,10 +11,10 @@
  */
 const St = imports.gi.St;
 const Tooltips = imports.ui.tooltips;
-const DND = imports.ui.dnd;
 
 const AppletDir = imports.ui.appletManager.applets["better-workspaces@pedrou2000"];
 const IconRenderer = AppletDir.ui.IconRenderer.IconRenderer;
+const DndReorderHelper = AppletDir.ui.DndReorder.DndReorderHelper;
 const _L = AppletDir.lib.logger.Logger.makeLogger("panel");
 function log(msg) { _L.log(msg); }
 
@@ -30,61 +30,17 @@ var PanelIndicator = class PanelIndicator {
         this._buttons = [];
         this._posLabel = null;
         this._status = "ok";
-        this._installDropTarget();
+
+        // Drag-to-reorder across the button row (shared ui/DndReorder helper).
+        // onOrderChanged (applet) rebuilds the panel + persists the order.
+        this._dnd = new DndReorderHelper({
+            axis: 'x',
+            getItems: () => this._buttons,
+            onReorder: (from, to) => this.controller.reorderProject(from, to),
+        });
+        this._dnd.attachTo(this.actor);
+
         this.rebuild();
-    }
-
-    // Make the applet's button row a DnD drop target so dragged project icons
-    // can be reordered horizontally (Cinnamon protocol; the panel isn't modal,
-    // so DnD works here). acceptDrop computes the target slot from pointer x.
-    _installDropTarget() {
-        this.actor._delegate = {
-            handleDragOver: (source, actor, x, y, time) => {
-                this._showDropHint(this._dropSlotForX(x));
-                return DND.DragMotionResult.MOVE_DROP;
-            },
-            handleDragOut: () => { this._clearDropHint(); },
-            acceptDrop: (source, actor, x, y, time) => {
-                let from = (source && source._bwIdx !== undefined) ? source._bwIdx : -1;
-                let slot = this._dropSlotForX(x);
-                this._clearDropHint();
-                if (from < 0) return false;
-                let target = slot;
-                if (target > from) target -= 1;
-                if (target !== from && target >= 0) {
-                    this.controller.reorderProject(from, target);
-                    // onOrderChanged (applet) rebuilds panel + persists order.
-                }
-                return true;
-            },
-        };
-    }
-
-    // Insertion slot 0..count from pointer x, vs project button horizontal centers.
-    _dropSlotForX(x) {
-        let n = this._buttons.length;
-        for (let i = 0; i < n; i++) {
-            let box = this._buttons[i].get_allocation_box();
-            let center = (box.x1 + box.x2) / 2;
-            if (x < center) return i;
-        }
-        return n;
-    }
-
-    _showDropHint(slot) {
-        this._clearDropHint();
-        let idx = Math.min(slot, this._buttons.length - 1);
-        if (idx >= 0 && this._buttons[idx]) {
-            this._buttons[idx].add_style_pseudo_class('drop-target');
-            this._hintedBtn = this._buttons[idx];
-        }
-    }
-
-    _clearDropHint() {
-        if (this._hintedBtn) {
-            try { this._hintedBtn.remove_style_pseudo_class('drop-target'); } catch (e) {}
-            this._hintedBtn = null;
-        }
     }
 
     // Reflect Notion connection state: "unconfigured" | "loading" | "ok" |
@@ -104,15 +60,25 @@ var PanelIndicator = class PanelIndicator {
         if (this._statusTip) this._statusTip.set_text(s.tip);
     }
 
+    // Destroy every tooltip created during the last rebuild (tooltips aren't
+    // children of the actor, so destroy_all_children doesn't reach them).
+    _destroyTooltips() {
+        let tips = this._tooltips || [];
+        for (let i = 0; i < tips.length; i++) {
+            if (tips[i] && tips[i].destroy) { try { tips[i].destroy(); } catch (e) {} }
+        }
+        this._tooltips = [];
+    }
+
+    _addTooltip(actor, text) {
+        let tip = new Tooltips.PanelItemTooltip({ actor: actor }, text, this.orientation);
+        this._tooltips.push(tip);
+        return tip;
+    }
+
     // Full rebuild: one icon button per project + a trailing position label.
     rebuild() {
-        for (let i = 0; i < this._buttons.length; i++) {
-            let t = this._buttons[i]._bwTooltip;
-            if (t && t.destroy) { try { t.destroy(); } catch (e) {} }
-        }
-        if (this._statusTip && this._statusTip.destroy) {
-            try { this._statusTip.destroy(); } catch (e) {}
-        }
+        this._destroyTooltips();
         this.actor.destroy_all_children();
         this._buttons = [];
 
@@ -124,8 +90,7 @@ var PanelIndicator = class PanelIndicator {
         });
         this._statusDot.visible = false;
         this.actor.add(this._statusDot, { y_align: St.Align.MIDDLE, y_fill: false });
-        this._statusTip = new Tooltips.PanelItemTooltip(
-            { actor: this._statusDot }, "", this.orientation);
+        this._statusTip = this._addTooltip(this._statusDot, "");
 
         let nProjects = this.controller.state.projectCount();
         for (let i = 0; i < nProjects; i++) {
@@ -138,7 +103,7 @@ var PanelIndicator = class PanelIndicator {
 
             // Icon child (emoji/image/fallback). If it's an image that needs
             // downloading, swap it in when the download completes.
-            btn.set_child(this._makeIcon(p, i));
+            btn.set_child(this._makeIcon(p, btn));
 
             btn.connect('clicked', (b) => {
                 this.controller.goToProject(b._projectIdx);
@@ -147,12 +112,13 @@ var PanelIndicator = class PanelIndicator {
             // Hover tooltip with the project name. PanelItemTooltip is panel-
             // aware, so it positions relative to the panel (above, when the
             // panel is at the bottom) instead of always dropping downward.
-            btn._bwTooltip = new Tooltips.PanelItemTooltip(
-                { actor: btn }, p.name, this.orientation);
+            this._addTooltip(btn, p.name);
 
-            // Draggable to reorder (see _installDropTarget). Plain clicks still
-            // switch projects; drag only starts past the move threshold.
-            this._makeButtonDraggable(btn, p, i);
+            // Draggable to reorder; the floating drag actor is an icon clone.
+            // Plain clicks still switch projects; drag starts past the move
+            // threshold.
+            this._dnd.makeDraggable(btn, i,
+                () => IconRenderer.makeActor(p.icon, p.name, ICON_SIZE));
 
             this.actor.add(btn, { y_align: St.Align.MIDDLE, y_fill: false });
             this._buttons.push(btn);
@@ -177,8 +143,7 @@ var PanelIndicator = class PanelIndicator {
             manage.connect('clicked', () => {
                 try { this._opts.onManage(); } catch (e) { log("onManage: " + e.toString()); }
             });
-            manage._bwManageTip = new Tooltips.PanelItemTooltip(
-                { actor: manage }, "Manage workspace projects", this.orientation);
+            this._addTooltip(manage, "Manage workspace projects");
             this.actor.add(manage, { y_align: St.Align.MIDDLE, y_fill: false });
         }
 
@@ -186,34 +151,18 @@ var PanelIndicator = class PanelIndicator {
         this.setStatus(this._status); // re-apply after rebuild recreates the dot
     }
 
-    _makeIcon(project, idx) {
+    // Icon actor for a button. The download-finished callback captures the
+    // BUTTON (not its index), so a reorder while the download is in flight
+    // can't write the icon onto whichever button now sits at that index; a
+    // rebuild orphans the old button harmlessly (it's no longer in _buttons).
+    _makeIcon(project, btn) {
         return IconRenderer.makeActor(
             project.icon, project.name, ICON_SIZE,
             () => {
-                // Download finished: rebuild just this button's child.
-                let btn = this._buttons[idx];
-                if (btn) {
-                    try { btn.set_child(this._makeIcon(project, idx)); }
-                    catch (e) { log("icon swap failed: " + e.toString()); }
-                }
+                if (this._buttons.indexOf(btn) === -1) return; // rebuilt since
+                try { btn.set_child(this._makeIcon(project, btn)); }
+                catch (e) { log("icon swap failed: " + e.toString()); }
             });
-    }
-
-    // Make a panel project button draggable for reorder. It's its own DnD
-    // delegate: getDragActor provides a floating icon clone. The actual reorder
-    // happens in the row's acceptDrop (_installDropTarget).
-    _makeButtonDraggable(btn, project, idx) {
-        btn._bwIdx = idx;
-        btn._delegate = btn;
-        btn.getDragActor = () => IconRenderer.makeActor(project.icon, project.name, ICON_SIZE);
-        btn.getDragActorSource = () => btn;
-        try {
-            let draggable = DND.makeDraggable(btn);
-            draggable.connect('drag-end', () => this._clearDropHint());
-            draggable.connect('drag-cancelled', () => this._clearDropHint());
-        } catch (e) {
-            log("makeButtonDraggable: " + e.toString());
-        }
     }
 
     // Lightweight refresh: highlight active project, update position label.
@@ -251,12 +200,11 @@ var PanelIndicator = class PanelIndicator {
     }
 
     destroy() {
-        for (let i = 0; i < this._buttons.length; i++) {
-            let t = this._buttons[i]._bwTooltip;
-            if (t && t.destroy) { try { t.destroy(); } catch (e) {} }
-        }
+        this._destroyTooltips();
         if (this.actor) this.actor.destroy_all_children();
         this._buttons = [];
         this._posLabel = null;
+        this._statusDot = null;
+        this._statusTip = null;
     }
 };
