@@ -1,25 +1,10 @@
-/*
- * BetterWorkspaces — ui/DndReorder.js
- *
- * Shared drag-to-reorder machinery for a row of items (Cinnamon DnD protocol),
- * used by the panel's project buttons (horizontal) and the toggle panel's ON
- * rows (vertical). One instance per surface:
- *
- *   let dnd = new DndReorderHelper({
- *       axis: 'x' | 'y',          // which coordinate picks the insertion slot
- *       getItems: () => actors[], // current draggable items, in display order
- *       onReorder: (from, to) => {...},
- *   });
- *   dnd.attachTo(containerActor);            // container accepts drops
- *   dnd.makeDraggable(item, idx, getDragActor); // each item is a drag source
- *
- * The insertion slot is computed against item centers along the axis; the
- * slot -> target-index adjustment (removing `from` shifts later slots down by
- * one) lives here so both surfaces share the fiddly off-by-one logic. Drops
- * from a different surface (another helper instance) are rejected.
- *
- * Released under the GNU General Public License v2 (see LICENSE).
- */
+/* ui/DndReorder.js — shared drag-to-reorder for a row of items (panel + toggle panel). */
+
+// new DndReorderHelper({axis:'x'|'y', getItems:()=>actors, onReorder:(from,to)=>{}});
+// attachTo(container) makes it a drop target; makeDraggable(item, idx, getDragActor)
+// makes each item a source. The slot->target off-by-one lives here so both surfaces
+// share it; drops from another helper instance are rejected.
+
 const DND = imports.ui.dnd;
 
 const AppletDir = imports.ui.appletManager.applets["better-workspaces@pedrou2000"];
@@ -34,7 +19,6 @@ var DndReorderHelper = class DndReorderHelper {
         this._hinted = null;
     }
 
-    // Make `container` a drop target for this surface's items.
     attachTo(container) {
         container._delegate = {
             handleDragOver: (source, actor, x, y, time) => {
@@ -43,13 +27,12 @@ var DndReorderHelper = class DndReorderHelper {
             },
             handleDragOut: () => this.clearHint(),
             acceptDrop: (source, actor, x, y, time) => {
-                // Only accept items we made draggable ourselves.
                 let from = (source && source._bwReorder === this) ? source._bwDragIdx : -1;
                 let slot = this._slotFor(x, y);
                 this.clearHint();
-                if (from < 0) return false;
-                // slot is an insertion point 0..count. After removing `from`,
-                // the insertion index shifts down by one if slot was past it.
+                if (from < 0) return false; // not our draggable
+                // slot is an insertion point 0..count; removing `from` shifts it
+                // down by one when slot is past it.
                 let target = slot;
                 if (target > from) target -= 1;
                 if (target !== from && target >= 0) this._onReorder(from, target);
@@ -58,7 +41,6 @@ var DndReorderHelper = class DndReorderHelper {
         };
     }
 
-    // Register `actor` as the drag source for the item at `index`.
     // getDragActor() must return a floating clone to show under the pointer.
     makeDraggable(actor, index, getDragActor) {
         actor._bwReorder = this;
@@ -75,7 +57,7 @@ var DndReorderHelper = class DndReorderHelper {
         }
     }
 
-    // Insertion slot 0..count from the pointer position, vs item centers.
+    // Insertion slot 0..count from the pointer, vs item centers along the axis.
     _slotFor(x, y) {
         let items = this._getItems() || [];
         let pos = this._axis === 'y' ? y : x;
@@ -89,7 +71,6 @@ var DndReorderHelper = class DndReorderHelper {
         return items.length;
     }
 
-    // Lightweight hint: highlight the item currently at the target slot.
     _showHint(slot) {
         this.clearHint();
         let items = this._getItems() || [];

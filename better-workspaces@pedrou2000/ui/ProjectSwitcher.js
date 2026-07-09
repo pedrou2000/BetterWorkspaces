@@ -1,15 +1,8 @@
-/*
- * BetterWorkspaces — ui/ProjectSwitcher.js
- *
- * The Super+Tab MRU overlay (Design Doc §5.2). A transient centered popup
- * listing projects in recency order; each Tab advances the selection, and on
- * trigger it commits by switching to the selected project. M3 uses a simple
- * "show briefly, advance, auto-commit" model rather than a full modal key-grab
- * (that refinement is noted for later): every Super+Tab advances the highlight
- * and resets a short timer; when the timer fires, we switch.
- *
- * Released under the GNU General Public License v2 (see LICENSE).
- */
+/* ui/ProjectSwitcher.js — the Super+Tab MRU overlay. */
+
+// No modal key-grab: each press advances the highlight and resets a short timer;
+// when it fires, we commit the switch.
+
 const St = imports.gi.St;
 const Main = imports.ui.main;
 const Mainloop = imports.mainloop;
@@ -34,13 +27,10 @@ var ProjectSwitcher = class ProjectSwitcher {
 
     onCommit(cb) { this._onCommit = cb; }
 
-    // Called on each Super+Tab press. Opens the overlay on first press, then
-    // advances the highlighted selection and (re)arms the commit timer.
     cycle() {
         if (!this._overlay) {
             this._order = this.controller.state.mruOrder();
-            // Start the highlight on the *second* entry (Alt-Tab feel: first
-            // press targets the previous project, not the current one).
+            // Start on the 2nd entry (Alt-Tab feel: first press = previous project).
             this._selection = this._order.length > 1 ? 1 : 0;
             this._buildOverlay();
         } else {
@@ -68,8 +58,6 @@ var ProjectSwitcher = class ProjectSwitcher {
     _buildOverlay() {
         let monitor = Main.layoutManager.primaryMonitor;
 
-        // Vertical list: one row per project (icon + name), so long names fit
-        // and it reads like the panel.
         this._overlay = new St.BoxLayout({
             style_class: 'better-workspaces-switcher',
             vertical: true,
@@ -94,7 +82,6 @@ var ProjectSwitcher = class ProjectSwitcher {
 
         Main.uiGroup.add_actor(this._overlay);
 
-        // Center on the primary monitor.
         let [w, h] = this._overlay.get_size();
         this._overlay.set_position(
             monitor.x + Math.floor((monitor.width - w) / 2),

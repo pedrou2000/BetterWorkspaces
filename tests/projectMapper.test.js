@@ -31,7 +31,7 @@ function page(id, opts) {
     };
 }
 
-// ---- mapPage -----------------------------------------------------------------
+// mapPage
 
 test("mapPage maps the basic fields", () => {
     const p = ProjectMapper.mapPage(page("p1", { name: "Web App", workspace: true, order: 2 }));
@@ -86,7 +86,7 @@ test("mapPage missing url becomes null", () => {
     assert.equal(ProjectMapper.mapPage(page("p1", { url: null })).notionUrl, null);
 });
 
-// ---- icons -------------------------------------------------------------------
+// icons
 
 test("mapPage emoji icon", () => {
     const p = ProjectMapper.mapPage(page("p1", { icon: { type: "emoji", emoji: "🗂️" } }));
@@ -123,7 +123,7 @@ test("mapPage unknown or missing icon becomes null", () => {
     assert.equal(ProjectMapper.mapPage(page("p2", {})).icon, null);
 });
 
-// ---- sortByOrder ---------------------------------------------------------------
+// sortByOrder
 
 test("sortByOrder: ascending order, nulls last, title tie-break; input untouched", () => {
     const input = [
@@ -146,7 +146,7 @@ test("sortByOrder ties on the same order break by title", () => {
     assert.deepEqual(sorted.map(p => p.id), ["a", "b"]);
 });
 
-// ---- mapResults ----------------------------------------------------------------
+// mapResults
 
 test("mapResults filters archived and sorts by order", () => {
     const result = {
@@ -167,7 +167,7 @@ test("mapResults tolerates empty or malformed results", () => {
     assert.deepEqual(ProjectMapper.mapResults({ results: [] }), []);
 });
 
-// ---- buildQueryBody --------------------------------------------------------------
+// buildQueryBody
 
 test("buildQueryBody filters out archived and requests up to 100 pages", () => {
     const body = ProjectMapper.buildQueryBody();

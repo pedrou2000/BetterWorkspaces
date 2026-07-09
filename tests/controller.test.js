@@ -9,10 +9,8 @@ const { FakeWm, makeFakeMainloop } = require("./helpers/fakeWm");
 const Mapping = loadGjsModule("core/mapping.js", "Mapping");
 const State = loadGjsModule("core/State.js", "State");
 
-// Load the real Controller with its dependencies injected. Since M12 Stage C
-// the Controller is a façade over Navigation/DeckReorder/ProjectLifecycle, so
-// those real modules are loaded (with the same fakes) and injected too. Returns
-// {controller, wm, mainloop} for one test scenario.
+// The Controller is a façade over Navigation/DeckReorder/ProjectLifecycle, so
+// those real modules are loaded with the same fakes and injected too.
 function makeController(defs, initialWsCount) {
     const mainloop = makeFakeMainloop();
     const lib = {
@@ -52,7 +50,7 @@ function def(id, wsCount) {
 // Standard deck: a(2 ws), b(3 ws), c(1 ws) -> flat [a0 a1][b0 b1 b2][c0]
 const DECK = [def("a", 2), def("b", 3), def("c", 1)];
 
-// ---- loading & reconciliation ------------------------------------------------
+// loading & reconciliation
 
 test("loadProjects reconciles the flat count and lands on project 0", () => {
     const { controller, wm } = makeController(DECK, 1);
@@ -66,7 +64,7 @@ test("loadProjects shrinks an oversized flat list", () => {
     assert.equal(wm.getWorkspaceCount(), 2);
 });
 
-// ---- navigation ----------------------------------------------------------------
+// navigation
 
 test("goToProject lands on the last-used local workspace", () => {
     const { controller, wm } = makeController(DECK);
@@ -125,7 +123,7 @@ test("growing a MIDDLE project's strip inserts, not appends", () => {
     assert.deepEqual(wm.layout()[5], []);      // the new, empty b workspace
 });
 
-// ---- moving windows --------------------------------------------------------------
+// moving windows
 
 test("moveWindowToNextLocal carries the focused window and follows it", () => {
     const { controller, wm } = makeController(DECK);
@@ -165,7 +163,7 @@ test("moveWindowToProject with no focused window fails without navigating", () =
     assert.equal(controller.state.activeProjectIdx, 0);
 });
 
-// ---- reorder: the workspace-block choreography -------------------------------------
+// reorder: the workspace-block choreography
 
 test("reorderProject moves whole partitions with their windows", () => {
     const { controller, wm } = makeController(DECK);
@@ -213,7 +211,7 @@ test("moveActiveProjectBy respects deck edges", () => {
     assert.deepEqual(controller.state.projects.map(p => p.id), ["b", "a", "c"]);
 });
 
-// ---- shrinking strips ------------------------------------------------------------
+// shrinking strips
 
 test("removeLastWorkspaceOfActiveProject folds windows into the previous ws", () => {
     const { controller, wm } = makeController(DECK);
@@ -251,7 +249,7 @@ test("removeEmptyWorkspacesOfActiveProject ignores sticky windows", () => {
     assert.deepEqual(controller.state.counts(), [2, 1, 1]);
 });
 
-// ---- live add / remove of whole projects -------------------------------------------
+// live add / remove of whole projects
 
 test("addProjectLive appends a partition at the end", () => {
     const { controller, wm } = makeController(DECK);
@@ -279,9 +277,9 @@ test("addProjectLive is idempotent by project id", () => {
     assert.equal(controller.state.projectCount(), 4);
 });
 
-// removeProjectLive is async (Stage B): the grace-period timer is registered
-// synchronously before its first await, so the pattern is: start the call,
-// let (or don't let) windows close, flush the fake mainloop, then await.
+// removeProjectLive is async: the grace-period timer is registered synchronously
+// before its first await, so the pattern is — start the call, let (or don't let)
+// windows close, flush the fake mainloop, then await.
 
 test("removeProjectLive removes the partition after windows close", async () => {
     const { controller, wm, mainloop } = makeController(DECK);

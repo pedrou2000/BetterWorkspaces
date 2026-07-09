@@ -1,14 +1,5 @@
-/*
- * BetterWorkspaces — ui/PanelIndicator.js
- *
- * Always-on panel surface (Design Doc §5.1). Renders one clickable button per
- * project showing its Notion icon (M6, via ui/IconRenderer.js): emoji glyphs
- * render directly, image icons download+cache and swap in when ready. The
- * active project is highlighted; a trailing label shows within-project position
- * ("2/3"). Project name is the tooltip. Left-click a button -> switch project.
- *
- * Released under the GNU General Public License v2 (see LICENSE).
- */
+/* ui/PanelIndicator.js — the always-on panel: one icon button per project. */
+
 const St = imports.gi.St;
 const Tooltips = imports.ui.tooltips;
 
@@ -30,8 +21,7 @@ var PanelIndicator = class PanelIndicator {
         this._posLabel = null;
         this._status = "ok";
 
-        // Drag-to-reorder across the button row (shared ui/DndReorder helper).
-        // onOrderChanged (applet) rebuilds the panel + persists the order.
+        // Reorder handled by the controller; onOrderChanged rebuilds + persists.
         this._dnd = new DndReorderHelper({
             axis: 'x',
             getItems: () => this._buttons,
@@ -42,8 +32,7 @@ var PanelIndicator = class PanelIndicator {
         this.rebuild();
     }
 
-    // Reflect Notion connection state: "unconfigured" | "loading" | "ok" |
-    // "error". Shown as a small leading status dot with a tooltip.
+    // Status glyph + tooltip: "unconfigured" | "loading" | "ok" | "error".
     setStatus(status) {
         this._status = status;
         if (!this._statusDot) return;
@@ -51,8 +40,7 @@ var PanelIndicator = class PanelIndicator {
             unconfigured: { text: "⛓", tip: "Notion not connected — open settings to add your token" },
             loading:      { text: "⟳", tip: "Syncing with Notion…" },
             ok:           { text: "",       tip: "" },
-            // ⇄ + U+0338 combining slash: "sync broken". If a panel font
-            // renders the combo badly, fall back to "↯".
+            // "⇄" + U+0338 combining slash = sync broken; fall back to "↯" if a font renders it badly.
             error:        { text: "⇄̸", tip: "Notion sync failed — showing cached projects" },
         };
         let s = map[status] || map.ok;
@@ -61,8 +49,7 @@ var PanelIndicator = class PanelIndicator {
         if (this._statusTip) this._statusTip.set_text(s.tip);
     }
 
-    // Destroy every tooltip created during the last rebuild (tooltips aren't
-    // children of the actor, so destroy_all_children doesn't reach them).
+    // Tooltips aren't actor children, so destroy_all_children doesn't reach them.
     _destroyTooltips() {
         let tips = this._tooltips || [];
         for (let i = 0; i < tips.length; i++) {
@@ -77,9 +64,8 @@ var PanelIndicator = class PanelIndicator {
         return tip;
     }
 
-    // Full rebuild, in row order: project icons (stable click targets stay
-    // hard-left, unaffected by the transient status glyph), the position
-    // dots for the active project, then the meta zone — status glyph + ⋯.
+    // Row order: project icons, position dots, then meta zone (status glyph + ⋯).
+    // Icons stay hard-left so the transient status glyph never shifts click targets.
     rebuild() {
         this._destroyTooltips();
         this.actor.destroy_all_children();
@@ -94,22 +80,17 @@ var PanelIndicator = class PanelIndicator {
             });
             btn._projectIdx = i;
 
-            // Icon child (emoji/image/fallback). If it's an image that needs
-            // downloading, swap it in when the download completes.
             btn.set_child(this._makeIcon(p, btn));
 
             btn.connect('clicked', (b) => {
                 this.controller.goToProject(b._projectIdx);
                 this.update();
             });
-            // Hover tooltip with the project name. PanelItemTooltip is panel-
-            // aware, so it positions relative to the panel (above, when the
-            // panel is at the bottom) instead of always dropping downward.
+            // PanelItemTooltip is panel-aware (positions above when the panel's at
+            // the bottom, not always downward).
             this._addTooltip(btn, p.name);
 
-            // Draggable to reorder; the floating drag actor is an icon clone.
-            // Plain clicks still switch projects; drag starts past the move
-            // threshold.
+            // Draggable to reorder; plain clicks still switch (drag starts past threshold).
             this._dnd.makeDraggable(btn, i,
                 () => IconRenderer.makeActor(p.icon, p.name, ICON_SIZE));
 
@@ -123,18 +104,15 @@ var PanelIndicator = class PanelIndicator {
         });
         this.actor.add(this._posLabel, { y_align: St.Align.MIDDLE, y_fill: false });
 
-        // Status glyph (hidden when OK) in the meta zone, just before ⋯ —
-        // its appearing/disappearing must not shift the project icons.
         this._statusDot = new St.Label({
             style_class: 'better-workspaces-status',
             text: '',
-            reactive: true, // needed so hover tooltips fire (labels aren't reactive by default)
+            reactive: true, // labels aren't reactive by default; needed for hover tooltips
         });
         this._statusDot.visible = false;
         this.actor.add(this._statusDot, { y_align: St.Align.MIDDLE, y_fill: false });
         this._statusTip = this._addTooltip(this._statusDot, "");
 
-        // Manage affordance (⋯) at the RIGHT end.
         if (this._opts.onManage) {
             let manage = new St.Button({
                 style_class: 'better-workspaces-manage',
@@ -155,10 +133,8 @@ var PanelIndicator = class PanelIndicator {
         this.setStatus(this._status); // re-apply after rebuild recreates the dot
     }
 
-    // Icon actor for a button. The download-finished callback captures the
-    // BUTTON (not its index), so a reorder while the download is in flight
-    // can't write the icon onto whichever button now sits at that index; a
-    // rebuild orphans the old button harmlessly (it's no longer in _buttons).
+    // Capture the BUTTON, not its index: a reorder mid-download must not paint
+    // the icon onto whatever button now sits at that index.
     _makeIcon(project, btn) {
         return IconRenderer.makeActor(
             project.icon, project.name, ICON_SIZE,
@@ -169,7 +145,7 @@ var PanelIndicator = class PanelIndicator {
             });
     }
 
-    // Lightweight refresh: highlight active project, update position label.
+    // Highlight the active project, update the position dots.
     update() {
         let loc = this.controller.currentLocation();
         let activeProjectIdx = loc ? loc.projectIdx : this.controller.state.activeProjectIdx;
@@ -184,20 +160,17 @@ var PanelIndicator = class PanelIndicator {
         if (this._posLabel) {
             let dots = loc ? this._dotsFor(loc) : "";
             this._posLabel.set_text(dots);
-            // Hide entirely when empty: an empty St.Label still occupies its
-            // CSS padding, leaving a phantom gap before the manage button.
+            // Hide when empty: an empty St.Label still occupies its CSS padding.
             this._posLabel.visible = (dots.length > 0);
         }
     }
 
-    // Carousel dots for the current project's strip: the active workspace is a
-    // large filled dot, the others small dots — e.g. "· ● ·". Hidden entirely
-    // when the project has only one workspace (a bare "1/1" carries no info).
-    // Falls back to compact text if the strip is very long.
+    // Carousel dots "· ● ·" for the strip; nothing for a 1-workspace project,
+    // compact "n/m" when the strip is too long for dots.
     _dotsFor(loc) {
         let p = this.controller.state.getProject(loc.projectIdx);
-        if (!p || p.wsCount <= 1) return "";           // single workspace -> nothing
-        if (p.wsCount > 12) {                          // too many for dots
+        if (!p || p.wsCount <= 1) return "";
+        if (p.wsCount > 12) {
             return "  " + (loc.localIdx + 1) + "/" + p.wsCount;
         }
         let parts = [];

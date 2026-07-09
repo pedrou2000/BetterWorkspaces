@@ -100,7 +100,7 @@ function rawPage(id, name, inWorkspace, order) {
     };
 }
 
-// ---- push: the store's writer interface ------------------------------------------
+// push: the store's writer interface
 
 test("setWorkspaceFlag/-Order are plain Notion writes with the right property names", async () => {
     const { sync, client } = makeSync();
@@ -126,7 +126,7 @@ test("pushes without a token reject with no-token", async () => {
     await assert.rejects(sync.setWorkspaceFlag("p1", true), /no-token/);
 });
 
-// ---- pull ---------------------------------------------------------------------------
+// pull
 
 test("syncNow: loading -> ok, onPull gets the mapped+sorted projects", async () => {
     const { sync, client, statuses } = makeSync();
@@ -173,7 +173,7 @@ test("setToken/setDatabaseId make a previously unconfigured sync work", async ()
     assert.equal(client.calls[0].dbId, "db2");
 });
 
-// ---- start / stop ---------------------------------------------------------------------
+// start / stop
 
 test("start pulls immediately and arms the interval timer; stop disarms it", async () => {
     const { sync, client, mainloop } = makeSync();
@@ -197,7 +197,7 @@ test("destroy stops the timer", () => {
     assert.equal(mainloop.pendingCount(), 0);
 });
 
-// ---- reconnect ------------------------------------------------------------------------
+// reconnect
 
 test("offline->online transition triggers an immediate pull", async () => {
     const { sync, client, netMonitor } = makeSync({ online: false });

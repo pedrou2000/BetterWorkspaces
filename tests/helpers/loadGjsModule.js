@@ -1,15 +1,6 @@
-/*
- * Test loader: evaluate a GJS applet module under Node.
- *
- * The applet files are written for Cinnamon's GJS module system (a global
- * `imports` object; exports via top-level `var`/`function` declarations).
- * This loader fakes just enough of `imports` (the logger lookup) and runs the
- * file in a vm context, then hands back the named export. The applet source
- * is loaded verbatim — no test-only edits needed.
- *
- * Only works for the Cinnamon-free modules (core/mapping.js, core/State.js,
- * notion/ProjectMapper.js); anything touching St/Gio/Main needs more shims.
- */
+/* Test loader: evaluate a GJS applet module under Node with a faked `imports`. */
+
+// Only for Cinnamon-free modules; anything touching St/Gio/Main needs more shims.
 "use strict";
 
 const fs = require("fs");
@@ -36,10 +27,7 @@ function makeImportsShim() {
     };
 }
 
-// Merge test-provided module shims into the AppletDir / imports trees.
-// `applet` is a two-level map like {core: {mapping: {Mapping}}, lib: {...}};
-// second-level entries are assigned per key so lib.logger survives a lib merge.
-// `extraImports` adds top-level GJS imports (e.g. mainloop).
+// Second-level entries are assigned per key so lib.logger survives a lib merge.
 function mergeShims(shim, applet, extraImports) {
     const appletDir = shim.ui.appletManager.applets[UUID];
     for (const top of Object.keys(applet || {})) {
@@ -49,16 +37,10 @@ function mergeShims(shim, applet, extraImports) {
     return shim;
 }
 
-// Load `relPath` (relative to the applet dir) and return its `exportName`
-// top-level binding. The file is compiled as a function in THIS realm (not a
-// separate vm context) so the objects it creates share our prototypes and
-// deepStrictEqual works on them. GJS exports via top-level `var`, which
-// inside a function becomes a local — so we append a return of the export.
-//
-// opts (all optional):
-//   applet:       AppletDir modules the file imports, e.g.
-//                 {core: {mapping: {Mapping}}, lib: {constants: {Constants}}}
-//   extraImports: top-level GJS imports, e.g. {mainloop: fakeMainloop}
+// Compiled in THIS realm (not a separate vm context) so created objects share
+// our prototypes and deepStrictEqual works. GJS's top-level `var` export becomes
+// a function local, so we append a `return` of it.
+// opts: {applet: shim tree the file imports, extraImports: top-level GJS imports}.
 function loadGjsModule(relPath, exportName, opts) {
     opts = opts || {};
     const file = path.join(APPLET_DIR, relPath);

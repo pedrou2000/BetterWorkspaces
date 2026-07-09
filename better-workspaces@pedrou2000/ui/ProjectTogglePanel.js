@@ -1,25 +1,9 @@
-/*
- * BetterWorkspaces — ui/ProjectTogglePanel.js
- *
- * The Project Toggle Panel (Design Doc §9). A modal, searchable, scrollable
- * list of ALL non-archived Notion projects, each with a toggle bound to its
- * Workspace checkbox. Handlers are ID-KEYED (never row/deck positions, which
- * can drift when a background sync refreshes the list):
- *
- *   onToggle(project, newValue) -> Promise
- *       applet updates the store + deck (with confirmation on destructive
- *       removal); rejection reverts the toggle's visual state.
- *   onReorder(movedId, toOnPos)
- *       reorder the ON project with id `movedId` to position `toOnPos`.
- *
- * refresh() re-renders from getProjects() while open (no-op when closed) —
- * called by the applet after a sync merge changes the catalog.
- *
- * The panel is pure UI: it renders rows and reflects state; it owns none of the
- * Notion/WM logic.
- *
- * Released under the GNU General Public License v2 (see LICENSE).
- */
+/* ui/ProjectTogglePanel.js — modal searchable list toggling projects on/off. */
+
+// Handlers are ID-KEYED, never row/deck positions (a background sync can refresh
+// the list under the panel): onToggle(project, newValue)->Promise (reject reverts
+// the switch), onReorder(movedId, toOnPos). refresh() re-renders while open.
+
 const St = imports.gi.St;
 const Clutter = imports.gi.Clutter;
 const ModalDialog = imports.ui.modalDialog;
@@ -33,11 +17,8 @@ const ROW_ICON_SIZE = AppletDir.lib.constants.Constants.ROW_ICON_SIZE;
 
 var ProjectTogglePanel = class ProjectTogglePanel {
 
-    // getProjects(): returns the current array of {id,name,icon,inWorkspace,...},
-    //   with the ON (inWorkspace) projects already in deck order.
-    // onToggle(project, newValue): performs the change; returns a Promise.
-    // onReorder(movedId, toOnPos): reorder the ON project `movedId` to position
-    //   `toOnPos` among the ON projects.
+    // getProjects() returns {id,name,icon,inWorkspace,...} with the ON projects
+    // already in deck order.
     constructor(getProjects, onToggle, onReorder) {
         this._getProjects = getProjects;
         this._onToggle = onToggle;
@@ -45,10 +26,8 @@ var ProjectTogglePanel = class ProjectTogglePanel {
         this._rows = [];
         this._filter = "";
 
-        // Drag-to-reorder for the ON rows (shared ui/DndReorder helper). The
-        // DnD layer works in row positions; translate the source position to
-        // the project ID here, at drop time, so the applet never sees an index
-        // that could have drifted.
+        // DnD works in row positions; we translate the source position to the
+        // project id at drop time so the applet never sees a drifted index.
         this._dnd = new DndReorderHelper({
             axis: 'y',
             getItems: () => this._onRowActors || [],
@@ -60,7 +39,6 @@ var ProjectTogglePanel = class ProjectTogglePanel {
         });
     }
 
-    // Re-render from getProjects() if open (called after a sync merge).
     refresh() {
         if (this._dialog) this._renderRows();
     }
@@ -79,9 +57,7 @@ var ProjectTogglePanel = class ProjectTogglePanel {
             text: "Workspace projects",
         }));
 
-        // Search box: a magnifier icon on the left (reads as a search field),
-        // plus a leading space in the hint so the placeholder text clears the
-        // caret (caret + hint share the text origin while empty).
+        // Leading space in the hint so the placeholder clears the caret.
         this._search = new St.Entry({
             style_class: 'better-workspaces-toggle-search',
             hint_text: " Search projects…",
@@ -100,14 +76,12 @@ var ProjectTogglePanel = class ProjectTogglePanel {
         });
         box.add(this._search);
 
-        // Scrollable list.
         this._scroll = new St.ScrollView({ style_class: 'better-workspaces-toggle-scroll' });
         this._scroll.set_policy(St.PolicyType.NEVER, St.PolicyType.AUTOMATIC);
         this._listBox = new St.BoxLayout({ vertical: true });
         this._scroll.add_actor(this._listBox);
         box.add(this._scroll, { expand: true });
 
-        // Make the list a DnD drop target so dragged ON rows can be reordered.
         this._dnd.attachTo(this._listBox);
 
         this._renderRows();
@@ -130,12 +104,9 @@ var ProjectTogglePanel = class ProjectTogglePanel {
         let projects = this._getProjects() || [];
         let matches = (p) => !this._filter || p.name.toLowerCase().indexOf(this._filter) !== -1;
 
-        // ON projects in deck order (getProjects returns them sorted); an ON
-        // project's position here == its deck index.
         let onProjects = projects.filter((p) => p.inWorkspace);
         let offProjects = projects.filter((p) => !p.inWorkspace);
 
-        // --- Active section: draggable to reorder ---
         this._listBox.add(this._sectionHeader("In workspaces — drag to reorder"));
         let shownOn = 0;
         for (let i = 0; i < onProjects.length; i++) {
@@ -150,7 +121,6 @@ var ProjectTogglePanel = class ProjectTogglePanel {
             }));
         }
 
-        // --- Other projects section ---
         this._listBox.add(this._sectionHeader("Other projects"));
         let shownOff = 0;
         for (let i = 0; i < offProjects.length; i++) {
@@ -170,7 +140,7 @@ var ProjectTogglePanel = class ProjectTogglePanel {
         return new St.Label({ style_class: 'better-workspaces-toggle-section', text: text });
     }
 
-    // onIdx: index among ON projects (deck index) if this is an ON row, else -1.
+    // onIdx: position among ON projects if this is an ON row, else -1.
     _addRow(project, onIdx) {
         let row = new St.BoxLayout({
             style_class: 'better-workspaces-toggle-row',
@@ -178,7 +148,6 @@ var ProjectTogglePanel = class ProjectTogglePanel {
             reactive: true, // needed for DnD to receive button-press
         });
 
-        // Drag handle glyph (ON rows only) as an affordance.
         row.add(new St.Label({
             style_class: 'better-workspaces-drag-handle',
             text: onIdx >= 0 ? "⋮⋮" : "",
@@ -205,9 +174,7 @@ var ProjectTogglePanel = class ProjectTogglePanel {
         this._listBox.add(row);
         this._rows.push({ project: project, toggle: toggle });
 
-        // Make ON rows draggable to reorder; the floating drag actor is a
-        // label with the project name. The row carries its project ID so the
-        // drop handler reports ids, not positions.
+        // Row carries its project id so the drop handler reports ids, not positions.
         if (onIdx >= 0) {
             row._bwProjectId = project.id;
             this._onRowActors.push(row);
@@ -231,10 +198,7 @@ var ProjectTogglePanel = class ProjectTogglePanel {
 
         this._onToggle(project, newValue).then(() => {
             toggle.reactive = true;
-            // Membership changed — re-render so the row moves between the
-            // "In workspaces" and "Other projects" sections. (The store is the
-            // source of truth; _renderRows re-reads it via getProjects.)
-            this._renderRows();
+            this._renderRows(); // re-read the store: the row moves between sections
         }).catch((e) => {
             toggle.reactive = true;
             L.log("toggle for '" + project.name + "' failed ("

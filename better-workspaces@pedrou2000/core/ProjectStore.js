@@ -1,36 +1,14 @@
-/*
- * BetterWorkspaces — core/ProjectStore.js
- *
- * The single owner of the project CATALOG: every non-archived Notion project
- * ({id, name, icon, notionUrl, inWorkspace, order}), loaded once from the disk
- * cache at construction and persisted back on every change. Everything else is
- * a reader or a transport:
- *
- *   - disk cache: written ONLY here (single writer — no read-modify-write races)
- *   - Notion:     mutations are applied optimistically (store + cache update
- *                 immediately) and pushed through a writer via a serialized
- *                 FIFO queue. Push failures are CLASSIFIED: transient ones
- *                 (network down, 5xx, 429) HOLD the write — the entry goes
- *                 back to the queue, the queue pauses, and retryPending()
- *                 (called when connectivity/sync recovers) resumes it, so
- *                 offline mutations survive and land on reconnect. Permanent
- *                 rejections (4xx, no-token) revert the field to its last
- *                 acknowledged value and fire onWriteError.
- *   - sync pulls: merge(remote, protectedIds) folds a fresh pull into the
- *                 catalog — catalog fields (name/icon/url) always take the
- *                 remote value; deck-relevant fields (inWorkspace/order) take
- *                 it only when no local write is pending (local wins while
- *                 dirty). Ids missing from remote are dropped unless protected
- *                 (i.e. currently in the live deck).
- *
- * Pending writes are NOT persisted: if Cinnamon unloads mid-queue the write is
- * lost and the next session's pull restores remote truth (by design).
- *
- * No Cinnamon/GTK dependencies — persistence and writer are injected, so this
- * is fully testable under Node.
- *
- * Released under the GNU General Public License v2 (see LICENSE).
- */
+/* core/ProjectStore.js — single owner of the project catalog + disk cache. */
+
+// Catalog = {id -> {id,name,icon,notionUrl,inWorkspace,order}}. Sole writer of
+// the cache, so setFlag/setOrder have no read-modify-write races. Mutations are
+// optimistic (store+cache update now) and pushed via a serialized FIFO queue:
+//   - transient failure (network/5xx/429) HOLDS the write, pauses the queue, and
+//     retryPending() resumes it on reconnect — offline edits land later.
+//   - permanent rejection (4xx/no-token) reverts the field and fires onWriteError.
+// merge(): catalog fields take remote; deck fields (inWorkspace/order) take remote
+// only when no local write is pending (local wins while dirty). Pending writes
+// are not persisted across unload — next pull restores remote truth.
 
 const AppletDir = imports.ui.appletManager.applets["better-workspaces@pedrou2000"];
 const ProjectMapper = AppletDir.notion.ProjectMapper.ProjectMapper;
@@ -64,9 +42,7 @@ var ProjectStore = class ProjectStore {
     onChange(cb) { this._onChange = cb; }
     onWriteError(cb) { this._onWriteError = cb; }
 
-    // ---- reads ---------------------------------------------------------------
-
-    // The whole catalog, sorted by Workspace Order (nulls last, title tiebreak).
+    // Sorted by Workspace Order (nulls last, title tiebreak).
     all() {
         return ProjectMapper.sortByOrder(Array.from(this._byId.values()));
     }
@@ -75,7 +51,7 @@ var ProjectStore = class ProjectStore {
         return this._byId.get(id) || null;
     }
 
-    // Highest numeric order in the catalog, or -1 (for append-at-bottom).
+    // Highest order, or -1 (for append-at-bottom).
     maxOrder() {
         let max = -1;
         for (let p of this._byId.values()) {
@@ -83,8 +59,6 @@ var ProjectStore = class ProjectStore {
         }
         return max;
     }
-
-    // ---- optimistic mutations --------------------------------------------------
 
     setInWorkspace(id, value) {
         this._set(id, "inWorkspace", !!value);
@@ -94,15 +68,12 @@ var ProjectStore = class ProjectStore {
         this._set(id, "order", order);
     }
 
-    // Assign Workspace Order = 0,1,2,... following `orderedIds` (the deck order
-    // after a reorder). One queued push per changed id.
+    // Order = 0,1,2,... following the deck order; one queued push per id.
     setOrders(orderedIds) {
         for (let i = 0; i < orderedIds.length; i++) this._set(orderedIds[i], "order", i);
     }
 
-    // Apply a field change locally (store + cache + notify), then queue the
-    // Notion push. No-ops when the value is already current and nothing is
-    // pending (avoids redundant writes on repeated calls).
+    // No-op when the value is already current and nothing is pending.
     _set(id, field, value) {
         let p = this._byId.get(id);
         if (!p) { L.error("_set: unknown project " + id); return; }
@@ -131,8 +102,7 @@ var ProjectStore = class ProjectStore {
         return null;
     }
 
-    // Push queue: strictly one write in flight; FIFO order. Pauses on a
-    // transient failure (retryPending() resumes); reverts on a permanent one.
+    // One write in flight, FIFO. Pauses on transient failure, reverts on permanent.
     _pump() {
         if (this._inFlight || this._paused || this._queue.length === 0 || !this._writer) return;
         let entry = this._queue.shift();
@@ -149,11 +119,8 @@ var ProjectStore = class ProjectStore {
             if (!this._queuedFor(key)) this._dirty.delete(key);
         }).catch((e) => {
             if (this._isTransient(e)) {
-                // Network-shaped failure: HOLD the write. Put the entry back
-                // at the head (unless a newer value for the same field is
-                // already queued), pause the queue, keep the field dirty so
-                // merge() keeps protecting the local value. onWriteError still
-                // fires so the UI can show the error dot.
+                // Hold: requeue at the head (unless a newer value is queued) and
+                // pause; the field stays dirty so merge() keeps protecting it.
                 L.log("push held (transient " + (e && e.message ? e.message : e)
                     + "): " + entry.field + " " + entry.id);
                 if (!this._queuedFor(key)) this._queue.unshift(entry);
@@ -172,10 +139,8 @@ var ProjectStore = class ProjectStore {
         });
     }
 
-    // Transient = worth retrying later: transport-level errors (libsoup
-    // throws GLib errors whose messages aren't our "http-NNN"/"no-token"
-    // shapes), server errors (5xx), and rate limiting (429). Permanent =
-    // Notion actively rejected it (other 4xx) or we have no token.
+    // Transient (retry): transport/GLib errors, 5xx, 429. Permanent (revert):
+    // no-token or a real 4xx rejection.
     _isTransient(e) {
         let msg = (e && e.message) ? e.message : String(e);
         if (msg === "no-token") return false;
@@ -189,9 +154,8 @@ var ProjectStore = class ProjectStore {
         return false;                            // real 4xx rejection: revert
     }
 
-    // Resume a queue paused by a transient failure. The applet calls this when
-    // connectivity/sync recovers (e.g. sync status turns "ok"). Safe to call
-    // anytime — no-op when nothing is held.
+    // Resume a queue paused by a transient failure; the applet calls this when
+    // sync recovers. No-op when nothing is held.
     retryPending() {
         if (!this._paused) return;
         this._paused = false;
@@ -199,13 +163,11 @@ var ProjectStore = class ProjectStore {
         this._pump();
     }
 
-    // True when writes are held waiting for connectivity.
     hasPendingWrites() {
         return this._queue.length > 0 || this._inFlight;
     }
 
-    // Revert a field to its last acknowledged value after a failed push, and
-    // drop any queued newer pushes for it (they'd fail the same way).
+    // Revert to the last acknowledged value and drop queued newer pushes for it.
     _revert(id, field, key) {
         this._queue = this._queue.filter((e) => e.id + "\0" + e.field !== key);
         this._dirty.delete(key);
@@ -217,13 +179,9 @@ var ProjectStore = class ProjectStore {
         }
     }
 
-    // ---- sync merge -----------------------------------------------------------
-
-    // Fold a fresh remote pull into the catalog. `protectedIds` (array) are ids
-    // that must survive even if missing from remote (the live deck's projects).
-    // Returns {added, removed, newlyInWorkspace}: newlyInWorkspace lists project
-    // records whose inWorkspace went false/absent -> true via THIS merge (the
-    // applet may auto-append them to the deck).
+    // Fold a remote pull into the catalog. protectedIds survive even if missing
+    // from remote (the live deck). Returns {added, removed, newlyInWorkspace} —
+    // newlyInWorkspace = records flipped off->on here, for the applet to append.
     merge(remoteProjects, protectedIds) {
         let keep = new Set(protectedIds || []);
         let remoteIds = new Set();
@@ -239,12 +197,11 @@ var ProjectStore = class ProjectStore {
                 if (r.inWorkspace) newlyOn.push(this._byId.get(r.id));
                 continue;
             }
-            // Catalog fields: remote wins unconditionally (they can't move
-            // workspaces, and Notion is their source of truth).
+            // Catalog fields: remote wins (they can't move workspaces).
             local.name = r.name;
             local.icon = r.icon;
             local.notionUrl = r.notionUrl;
-            // Deck-relevant fields: remote wins unless a local write is pending.
+            // Deck fields: remote wins unless a local write is pending.
             if (!this._dirty.has(r.id + "\0inWorkspace")) {
                 if (!local.inWorkspace && r.inWorkspace) newlyOn.push(local);
                 local.inWorkspace = r.inWorkspace;
@@ -256,7 +213,6 @@ var ProjectStore = class ProjectStore {
             }
         }
 
-        // Drop ids gone from remote, unless protected (in the live deck).
         let removed = [];
         for (let id of Array.from(this._byId.keys())) {
             if (remoteIds.has(id)) continue;
@@ -274,8 +230,6 @@ var ProjectStore = class ProjectStore {
             + " -" + removed.length + ", newly-on " + newlyOn.length);
         return { added: added, removed: removed, newlyInWorkspace: newlyOn };
     }
-
-    // ---- internals ------------------------------------------------------------
 
     _persist() {
         this._persistence.writeJSON(CACHE_FILE, { projects: Array.from(this._byId.values()) });

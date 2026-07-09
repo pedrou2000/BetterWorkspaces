@@ -1,26 +1,10 @@
-/*
- * BetterWorkspaces — Cinnamon applet (entry point)
- *
- * Organizes virtual workspaces by project: each project from the user's Notion
- * Projects database owns a contiguous strip of workspaces, and the deck of
- * projects drives navigation, the panel indicator, and the Super+Tab switcher.
- *
- * This file is the wiring layer. It owns lifecycle (settings, keybindings,
- * signals, cleanup) and composes the real parts:
- *   core/*   — the model (State/mapping), the Controller façade, and the
- *              ProjectStore (single owner of the project catalog + disk cache)
- *   wm/*     — the only code allowed to touch Cinnamon workspace APIs
- *   notion/* — the Notion transport (pull loop + writes for the store's queue)
- *   ui/*     — panel indicator, switcher overlay, toggle panel, OSD, dialogs
- *
- * The deck loads from the store at startup (instant, offline). Mutations are
- * optimistic: store + UI update immediately, Notion writes are queued (a
- * failed write reverts the field and shows the error dot). Background pulls
- * merge into the store — names/icons update live, a project newly checked in
- * Notion auto-appends to the deck end, and nothing is ever auto-removed.
- *
- * Released under the GNU General Public License v2 (see LICENSE).
- */
+/* applet.js — entry point + wiring: settings, keybindings, signals, cleanup. */
+
+// Composes core/ (model + Controller + ProjectStore), wm/ (workspace APIs),
+// notion/ (transport), ui/ (panel, switcher, toggle panel, OSD, dialogs). The
+// deck loads from the store at startup; mutations are optimistic (store + UI
+// update now, Notion writes queued), and background pulls merge into the store.
+
 const Applet = imports.ui.applet;
 const Settings = imports.ui.settings;
 const PopupMenu = imports.ui.popupMenu;
@@ -43,20 +27,15 @@ const Constants = AppletDir.lib.constants.Constants;
 
 const L = AppletDir.lib.logger.Logger.makeLogger("applet");
 
-// Shown only when no Notion cache exists yet (first run / unconfigured), so the
-// applet is never empty. Replaced by the real deck as soon as a sync lands.
+// Keeps the applet non-empty on first run/unconfigured; replaced by the real deck.
 const PLACEHOLDER_PROJECTS = [
     { id: "placeholder", name: "Connect Notion", wsCount: 1 },
 ];
 
-// Each synced Notion project starts with just its home workspace; grow a
-// project's strip on demand. Keeps startup sane (N projects -> N workspaces).
 const DEFAULT_WS_PER_PROJECT = Constants.DEFAULT_WS_PER_PROJECT;
 
-// Default keybindings, and a scheme version. When we change these defaults we
-// bump KB_SCHEME_VERSION; on load, if the user's stored scheme is older, we
-// reset the keybindings to these values (token/other settings untouched). This
-// lets default changes actually take effect without a manual settings wipe.
+// Bumping KB_SCHEME_VERSION resets shortcuts to KB_DEFAULTS on next load (other
+// settings untouched), so changed defaults take effect without a manual wipe.
 const KB_SCHEME_VERSION = 5;
 const KB_DEFAULTS = {
     // Super = navigate; +Alt = project axis; +Ctrl = carry the window.
@@ -80,10 +59,8 @@ const KB_DEFAULTS = {
     kbMinimize: "<Alt>s",
 };
 
-// These reassign Cinnamon's OWN window-management actions (not our handlers):
-// each maps a gsettings action key in org.cinnamon.desktop.keybindings.wm to
-// the applet setting holding the desired accelerator. Editable in Configure;
-// applied to gsettings on load and on change; restored on unload.
+// Reassign Cinnamon's OWN wm actions (gsettings action key -> our setting),
+// applied on load/change and restored on unload.
 const WM_SCHEMA = "org.cinnamon.desktop.keybindings.wm";
 const WM_ASSIGN = {
     "push-tile-left":  "kbTileLeft",
@@ -106,15 +83,11 @@ var MyApplet = class MyApplet extends Applet.Applet {
             this.controller = new Controller(this.wm);
             this.osd = new OSD();
 
-            // The store owns the project catalog (loads the disk cache once).
             this.store = new ProjectStore(Persistence);
 
-            // Settings first: we need the token before we decide the deck.
-            // This also creates this.sync and wires it to the store.
+            // Settings first — we need the token before deciding the deck; this
+            // also creates this.sync and wires it to the store.
             this._initSettingsAndSync(instanceId);
-
-            // Load the deck from the store (instant, offline). Falls back to a
-            // placeholder if the catalog is empty.
             this._loadDeckFromStore();
 
             this.panelUI = new PanelIndicator(
@@ -123,8 +96,6 @@ var MyApplet = class MyApplet extends Applet.Applet {
             this.switcher = new ProjectSwitcher(this.controller);
             this.switcher.onCommit(() => this._afterNav());
 
-            // When projects are reordered, rebuild the panel and persist the
-            // new order (store applies it optimistically and pushes to Notion).
             this.controller.onOrderChanged((orderedIds) => {
                 if (this.panelUI) this.panelUI.rebuild();
                 if (this.store) this.store.setOrders(orderedIds);
@@ -143,7 +114,6 @@ var MyApplet = class MyApplet extends Applet.Applet {
             this.osd.suppressBuiltin();
             this._refresh();
 
-            // Kick off a background sync to refresh the cache for NEXT launch.
             if (this.sync && this._notionConfigured()) this.sync.start();
         } catch (e) {
             L.error("init exception: " + e.toString());
@@ -156,7 +126,6 @@ var MyApplet = class MyApplet extends Applet.Applet {
             && this.settings.getValue("notionDatabaseId");
     }
 
-    // Convert a cached project entry to a controller project def.
     _toDef(p) {
         return {
             id: p.id,
@@ -167,10 +136,7 @@ var MyApplet = class MyApplet extends Applet.Applet {
         };
     }
 
-    // Build the deck from the store's catalog, filtered to the projects whose
-    // Workspace checkbox is true (inWorkspace). The catalog holds ALL non-
-    // archived projects (for the toggle panel); the DECK is the inWorkspace
-    // subset, in Workspace Order (store.all() is sorted).
+    // The deck is the inWorkspace subset of the catalog, in Workspace Order.
     _loadDeckFromStore() {
         let inDeck = this.store.all().filter((p) => p.inWorkspace);
         if (inDeck.length === 0) {
@@ -190,15 +156,12 @@ var MyApplet = class MyApplet extends Applet.Applet {
         }
     }
 
-    // After a deliberate navigation: refresh the panel and show our own OSD
-    // (project · workspace), instead of Cinnamon's flat "Workspace N" OSD.
     _afterNav() {
         this._refresh();
         this.osd.show(this.controller);
     }
 
-    // Bind settings and create the SyncService (does not start it — the caller
-    // decides when, after the deck is loaded).
+    // Binds settings and creates SyncService; the caller starts it after the deck loads.
     _initSettingsAndSync(instanceId) {
         this.settings = new Settings.AppletSettings(this, UUID, instanceId);
 
@@ -208,19 +171,14 @@ var MyApplet = class MyApplet extends Applet.Applet {
 
         this.sync = new SyncService(token, dbId, { intervalSec: interval });
 
-        // The store pushes its optimistic mutations to Notion through the sync
-        // transport; failed pushes revert the field and surface the error dot.
         this.store.setWriter(this.sync);
         this.store.onWriteError(() => {
             if (this.panelUI) this.panelUI.setStatus("error");
         });
 
-        // Make store REVERTS visible immediately: when a failed push rolls a
-        // field back, re-render the open toggle panel (the optimistic ON/OFF
-        // it showed is no longer true) and the panel indicator. Deliberately
-        // only revert:* — set:* changes come from UI actions whose handlers
-        // already re-render, and re-rendering mid-click would destroy the row
-        // actors the in-flight toggle callback still references.
+        // Only revert:* — set:* comes from UI handlers that already re-render, and
+        // re-rendering mid-click would destroy the row actors the in-flight toggle
+        // callback still references. A revert means the optimistic ON/OFF is stale.
         this.store.onChange((reason) => {
             if (reason.indexOf("revert:") !== 0) return;
             if (this._togglePanel) this._togglePanel.refresh();
@@ -228,12 +186,9 @@ var MyApplet = class MyApplet extends Applet.Applet {
             this._refresh();
         });
 
-        // A completed pull merges into the store: catalog fields (name/icon/
-        // url) update live; deck-relevant fields keep local pending writes.
-        // Deck projects are protected from removal. A project newly checked in
-        // Notion (e.g. from another device) auto-APPENDS to the deck end —
-        // append never moves existing workspaces. Unchecking in Notion never
-        // auto-removes; that stays behind the explicit toggle-off flow.
+        // Deck ids are protected from removal on merge; a project newly checked in
+        // Notion auto-appends (append never moves existing workspaces). Unchecking
+        // never auto-removes — that stays behind the explicit toggle-off flow.
         this.sync.onPull((projects) => {
             let deckIds = [];
             let n = this.controller.state.projectCount();
@@ -253,11 +208,8 @@ var MyApplet = class MyApplet extends Applet.Applet {
             this._refresh();
         });
 
-        // Reflect sync status in the panel (degraded-state feedback), and use
-        // recovery as the retry trigger: a successful pull proves Notion is
-        // reachable again, so any writes held by a transient failure (e.g.
-        // toggles made offline) are resumed. The reconnect watcher fires the
-        // pull; the pull's "ok" lands here; retryPending() drains the queue.
+        // "ok" doubles as the retry trigger: a successful pull proves Notion is
+        // reachable, so writes held by a transient failure (offline toggles) resume.
         this.sync.onStatus((status) => {
             if (this.panelUI) this.panelUI.setStatus(status);
             if (status === "ok" && this.store) this.store.retryPending();
@@ -291,11 +243,7 @@ var MyApplet = class MyApplet extends Applet.Applet {
         }
     }
 
-    // ---- M9: Project Toggle Panel ------------------------------------------
-
-    // Open the searchable toggle panel over the store's catalog (sorted, so ON
-    // rows match the deck). Toggles go through _handleToggle; reorders arrive
-    // id-keyed and resolve to deck indices here, at action time.
+    // Reorders arrive id-keyed and resolve to a deck index here, at action time.
     openTogglePanel() {
         try {
             let panel = new ProjectTogglePanel(
@@ -312,16 +260,13 @@ var MyApplet = class MyApplet extends Applet.Applet {
         }
     }
 
-    // Perform a Workspace toggle OPTIMISTICALLY: the store + deck update
-    // immediately and the Notion write is queued (store reverts the field and
-    // shows the error dot if the push later fails). Resolves on success;
-    // rejects only when the change didn't happen (cancelled / windows open).
+    // Optimistic: store + deck update now, Notion writes queued by the store.
+    // Resolves on success; rejects only when nothing changed (cancelled/windows-open).
     async _handleToggle(project, newValue) {
         if (!this.store) throw new Error("no-store");
 
         if (newValue) {
-            // Turning ON: append to the deck and the store, Workspace Order =
-            // max+1 so "bottom" survives reload. Writes are queued by the store.
+            // Order = max+1 so "bottom" survives reload.
             this.controller.addProjectLive(this._toDef(project));
             this.store.setInWorkspace(project.id, true);
             this.store.setOrder(project.id, this.store.maxOrder() + 1);
@@ -330,13 +275,11 @@ var MyApplet = class MyApplet extends Applet.Applet {
             return;
         }
 
-        // Turning OFF: destructive — confirm, then remove from the deck (which
-        // gracefully closes windows). Only after the deck removal succeeds does
-        // the store flip the flag (and queue the Notion writes).
+        // Destructive: confirm, remove from the deck (closes windows), then flip
+        // the store flag only once the removal actually succeeds.
         let deckIdx = this.controller.state.indexOfProjectId(project.id);
         if (deckIdx < 0) {
-            // Not in the live deck (shouldn't happen) — just flip the flag.
-            this.store.setInWorkspace(project.id, false);
+            this.store.setInWorkspace(project.id, false); // not in deck (shouldn't happen)
             return;
         }
         let confirmed = await this._confirmRemoval(project);
@@ -351,12 +294,10 @@ var MyApplet = class MyApplet extends Applet.Applet {
         }
         this.panelUI.rebuild();
         this._refresh();
-        // Clear the order so it sorts last if reactivated later.
         this.store.setInWorkspace(project.id, false);
-        this.store.setOrder(project.id, null);
+        this.store.setOrder(project.id, null); // clear order so it sorts last if reactivated
     }
 
-    // Confirm destructive removal via a modal. Resolves to true/false.
     _confirmRemoval(project) {
         let deckIdx = this.controller.state.indexOfProjectId(project.id);
         let p = this.controller.state.getProject(deckIdx);
@@ -374,10 +315,7 @@ var MyApplet = class MyApplet extends Applet.Applet {
             "Please close these window(s) first, then try again:\n" + titles);
     }
 
-    // The full binding table: settings key -> hotkey name + handler. All
-    // bindings are settings-driven and grabbed via KeyBinder.force(), which
-    // clears any conflicting Cinnamon binding (restored on teardown) so our
-    // grab reliably wins even for combos Cinnamon already owns.
+    // settings key -> hotkey name + handler; grabbed via KeyBinder.force().
     _bindingSpecs() {
         return [
             { setting: "kbWorkspacePrev", name: "bw-ws-prev",    run: () => { this.controller.prevLocalWorkspace(); this._afterNav(); } },
@@ -394,9 +332,6 @@ var MyApplet = class MyApplet extends Applet.Applet {
         ];
     }
 
-    // If the stored keybinding scheme is older than the current one, overwrite
-    // the shortcut values with the current defaults (token/other settings are
-    // untouched). This makes changed defaults take effect without a manual wipe.
     _applyKeybindingScheme() {
         let stored = this.settings.getValue("kbSchemeVersion") || 0;
         if (stored >= KB_SCHEME_VERSION) return;
@@ -408,9 +343,8 @@ var MyApplet = class MyApplet extends Applet.Applet {
             + " (was v" + stored + ")");
     }
 
-    // Grab every non-empty binding from current settings into a fresh
-    // KeyBinder (tearing down the previous one), and re-apply the tiling
-    // gsettings assignments. Shared by first registration and every rebind.
+    // Fresh KeyBinder + grab every non-empty binding + reapply tiling. Shared by
+    // first registration and every rebind.
     _forceBindAll() {
         if (this._keybinder) this._keybinder.teardown();
         this._keybinder = new KeyBinder();
@@ -428,15 +362,13 @@ var MyApplet = class MyApplet extends Applet.Applet {
     _registerKeybindings() {
         this._applyKeybindingScheme();
 
-        // Re-bind live when the user edits any shortcut in settings. Listeners
-        // are bound for EVERY spec — including ones whose accel is currently
-        // empty — so filling in a blank shortcut takes effect immediately.
+        // Bind a listener for EVERY spec, including empty ones, so filling in a
+        // blank shortcut later takes effect immediately (not just on reload).
         let specs = this._bindingSpecs();
         specs.forEach((spec) => {
             this.settings.bindProperty(Settings.BindingDirection.IN, spec.setting,
                 spec.setting, () => this._rebindKeys());
         });
-        // Also re-apply when a window-management shortcut is edited.
         for (let action in WM_ASSIGN) {
             let setting = WM_ASSIGN[action];
             this.settings.bindProperty(Settings.BindingDirection.IN, setting,
@@ -448,8 +380,6 @@ var MyApplet = class MyApplet extends Applet.Applet {
             + " keybindings (settings-driven)");
     }
 
-    // Reassign Cinnamon's own window-management actions to the accelerators
-    // stored in our settings (Option A). Recorded and restored on unload.
     _assignTiling() {
         for (let action in WM_ASSIGN) {
             let accel = this.settings.getValue(WM_ASSIGN[action]);
@@ -458,7 +388,6 @@ var MyApplet = class MyApplet extends Applet.Applet {
         }
     }
 
-    // Re-register all keybindings from current settings (called on any change).
     _rebindKeys() {
         this._forceBindAll();
         L.log("re-registered keybindings after settings change");
@@ -498,7 +427,6 @@ var MyApplet = class MyApplet extends Applet.Applet {
             this.panelUI.update();
         });
 
-        // Submenu: move the focused window to another project.
         let moveMenu = new PopupMenu.PopupSubMenuMenuItem("Move focused window to project");
         let nProjects = this.controller.state.projectCount();
         for (let i = 0; i < nProjects; i++) {
@@ -532,7 +460,6 @@ var MyApplet = class MyApplet extends Applet.Applet {
         });
     }
 
-    // Base Applet has no default click action; use it as "next project".
     on_applet_clicked() {
         this.controller.goToNextProjectInOrder();
         this._refresh();

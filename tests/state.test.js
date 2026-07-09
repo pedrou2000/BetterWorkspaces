@@ -106,7 +106,7 @@ test("appendProject adds at the end, least-recent in MRU", () => {
     assert.deepEqual(s.mruOrder(), [1, 0, 2, 3]);
 });
 
-// ---- removeProject: index fixups --------------------------------------------
+// removeProject: index fixups
 
 test("removeProject drops the project and reindexes MRU", () => {
     const s = makeState();
@@ -145,7 +145,7 @@ test("removeProject rejects invalid indices", () => {
     assert.equal(s.projectCount(), 3);
 });
 
-// ---- moveProject: the reorder map -------------------------------------------
+// moveProject: the reorder map
 
 test("moveProject reorders the array and returns order[newPos] = oldIdx", () => {
     const s = makeState();

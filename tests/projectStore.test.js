@@ -82,7 +82,7 @@ const cacheOf = (persistence) =>
 
 const drain = () => new Promise((r) => setImmediate(r));
 
-// ---- loading & reads -----------------------------------------------------------
+// loading & reads
 
 test("loads the catalog from the cache once; all() is sorted by order", () => {
     const { store } = makeStore([proj("b", 1, true), proj("a", 0, true), proj("c", null)]);
@@ -102,7 +102,7 @@ test("maxOrder over mixed null/numeric", () => {
     assert.equal(store.maxOrder(), 3);
 });
 
-// ---- optimistic mutations ---------------------------------------------------------
+// optimistic mutations
 
 test("setInWorkspace applies to store + cache immediately, before the push lands", () => {
     const writer = makeManualWriter();
@@ -198,7 +198,7 @@ test("failed push notifies onChange with revert:<field>", async () => {
     assert.deepEqual(reasons, ["set:inWorkspace", "revert:inWorkspace"]);
 });
 
-// ---- merge ---------------------------------------------------------------------
+// merge
 
 test("merge adds new ids and reports newly-inWorkspace ones", () => {
     const { store } = makeStore([proj("a", 0, true)]);
@@ -261,7 +261,7 @@ test("merge acks the remote value: post-merge failure reverts to the merged valu
     assert.equal(store.get("a").order, 9);            // reverts to merged 9, not stale 3
 });
 
-// ---- transient failures: hold + retry (offline writes) -----------------------------
+// transient failures: hold + retry (offline writes)
 
 test("transient failure HOLDS the write: no revert, field stays dirty", async () => {
     const writer = makeManualWriter();
@@ -341,7 +341,7 @@ test("transient vs permanent classification", async () => {
     }
 });
 
-// ---- destroy -------------------------------------------------------------------
+// destroy
 
 test("destroy drops queued pushes (by design)", async () => {
     const writer = makeManualWriter();

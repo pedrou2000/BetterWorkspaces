@@ -1,23 +1,10 @@
-/*
- * BetterWorkspaces — ui/Dialogs.js
- *
- * Small modal dialogs (title + message + buttons) built on Cinnamon's
- * ModalDialog, styled like the toggle panel. One internal builder; two
- * public shapes:
- *
- *   confirm(title, message)        -> Promise<boolean>
- *   notify(title, message)         -> void (single OK button)
- *
- * Pure UI — no model or Notion knowledge; callers compose the text.
- *
- * Released under the GNU General Public License v2 (see LICENSE).
- */
+/* ui/Dialogs.js — confirm(title,msg)->Promise<bool> and notify(title,msg) modals. */
+
 const St = imports.gi.St;
 const Clutter = imports.gi.Clutter;
 const ModalDialog = imports.ui.modalDialog;
 
-// Build and open a modal with the shared title+message layout and the given
-// buttons ([{label, action, key?}]); each button's action also closes.
+// buttons: [{label, action?, key?}]; each button's action also closes.
 function _open(title, message, buttons) {
     let dialog = new ModalDialog.ModalDialog();
     let box = new St.BoxLayout({
@@ -39,8 +26,7 @@ function _open(title, message, buttons) {
     return dialog;
 }
 
-// Two-button confirmation; Escape cancels. Resolves true iff confirmed.
-// confirmLabel defaults to "OK".
+// Escape cancels; confirmLabel defaults to "OK".
 function confirm(title, message, confirmLabel) {
     return new Promise((resolve) => {
         _open(title, message, [
@@ -50,7 +36,6 @@ function confirm(title, message, confirmLabel) {
     });
 }
 
-// Single-OK notification; Escape also dismisses.
 function notify(title, message) {
     _open(title, message, [{ label: "OK", key: Clutter.KEY_Escape }]);
 }

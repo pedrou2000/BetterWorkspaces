@@ -1,20 +1,8 @@
-/*
- * BetterWorkspaces — ui/IconRenderer.js
- *
- * Shared icon rendering (Design Doc §5, "Icon rendering"). Turns a normalized
- * Notion icon ({type:"emoji"|"url", value}) into an St actor for any surface
- * (panel now; switcher/overview later), so everything looks identical.
- *
- *   - emoji  -> an St.Label showing the glyph
- *   - url    -> downloaded once to a disk cache, then an St.Icon from the file;
- *               until the download lands (or if it fails) we show a fallback
- *   - null   -> a fallback glyph derived from the project name's first letter
- *
- * Image downloads are async and cached under ~/.config/better-workspaces/icons,
- * so the panel never blocks and offline reuse is free.
- *
- * Released under the GNU General Public License v2 (see LICENSE).
- */
+/* ui/IconRenderer.js — normalized Notion icon -> St actor (emoji | cached image | fallback). */
+
+// URL icons download once to ~/.config/better-workspaces/icons and swap in via
+// onReady when ready, so the panel never blocks and offline reuse is free.
+
 const St = imports.gi.St;
 const Gio = imports.gi.Gio;
 const GLib = imports.gi.GLib;
@@ -33,8 +21,7 @@ function _iconsDir() {
     return dir;
 }
 
-// Deterministic cache filename for a URL (no Math.random / Date). Uses a simple
-// string hash + a best-effort extension from the URL.
+// djb2; deterministic so the cache filename is stable (no Math.random/Date).
 function _hashString(s) {
     let h = 5381;
     for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
@@ -50,13 +37,12 @@ function _cachePathFor(url) {
     return GLib.build_filenamev([_iconsDir(), _hashString(url) + _extFor(url)]);
 }
 
-// A simple text fallback: the first character of the project name, uppercased.
+// Fallback glyph: the project name's first character, uppercased.
 function _fallbackLabel(name) {
     let ch = (name && name.length) ? name.trim().charAt(0).toUpperCase() : "?";
     return new St.Label({ style_class: 'better-workspaces-icon-fallback', text: ch });
 }
 
-// Build an St.Icon from a cached file path.
 function _iconFromFile(path, size) {
     let gicon = new Gio.FileIcon({ file: Gio.File.new_for_path(path) });
     return new St.Icon({
@@ -66,7 +52,7 @@ function _iconFromFile(path, size) {
     });
 }
 
-// Download `url` to `dest` asynchronously; call cb(true) on success.
+// cb(true) on success.
 function _download(url, dest, cb) {
     Http.request("GET", url).then((res) => {
         try {
@@ -87,15 +73,9 @@ function _download(url, dest, cb) {
     });
 }
 
-// Public: return an St actor for `icon` right now, and if it's a URL not yet
-// cached, download it and call onReady() when the file is available so the
-// caller can swap in the real icon.
-//   icon: {type, value} | null
-//   name: project name (for fallback)
-//   size: pixel size for image icons
-//   onReady: optional callback() fired after a successful async download
+// icon: {type,value}|null. onReady() fires after a successful async download so
+// the caller can swap in the real icon (returns a fallback meanwhile).
 function makeActor(icon, name, size, onReady) {
-    // Emoji: render the glyph directly.
     if (icon && icon.type === "emoji" && icon.value) {
         return new St.Label({
             style_class: 'better-workspaces-icon-emoji',
@@ -103,14 +83,12 @@ function makeActor(icon, name, size, onReady) {
         });
     }
 
-    // URL image: use cache if present; else kick off a download + fallback now.
     if (icon && icon.type === "url" && icon.value) {
         let path = _cachePathFor(icon.value);
         if (Gio.File.new_for_path(path).query_exists(null)) {
             try { return _iconFromFile(path, size || 22); }
             catch (e) { L.error("iconFromFile: " + e.toString()); }
         }
-        // Not cached yet: start the download, show a fallback meanwhile.
         _download(icon.value, path, function (ok) {
             if (ok && onReady) {
                 try { onReady(); } catch (e) { L.error("onReady: " + e.toString()); }
@@ -119,7 +97,6 @@ function makeActor(icon, name, size, onReady) {
         return _fallbackLabel(name);
     }
 
-    // No icon: fallback glyph.
     return _fallbackLabel(name);
 }
 

@@ -1,20 +1,8 @@
-/*
- * Test double for wm/WorkspaceManager: simulates Muffin's flat workspace list
- * in memory so Controller's model<->reality choreography can be tested without
- * Cinnamon. Mirrors the real class's API and semantics:
- *
- *   - workspaces are OBJECTS that survive reorders (identity matters for
- *     reorderWorkspaceObject, like real MetaWorkspaces)
- *   - each workspace holds a list of window objects ({title})
- *   - removeWorkspace refuses to drop the last one; out-of-range is a no-op
- *   - removing a workspace moves its windows nowhere (they vanish with it),
- *     matching Muffin's behavior of reparenting only on some paths — the
- *     Controller is responsible for moving windows FIRST, which is exactly
- *     what these tests need to catch.
- *
- * Also provides a fake `mainloop` whose timers are captured and flushed
- * manually, so removeProjectLive's grace period is deterministic.
- */
+/* Test double for wm/WorkspaceManager + a flushable fake mainloop. */
+
+// Workspaces are OBJECTS (identity survives reorders, like real MetaWorkspaces).
+// Removing a workspace drops its windows with it — the Controller must move them
+// FIRST, which is exactly what these tests verify.
 "use strict";
 
 let _wsSeq = 0;
@@ -36,9 +24,6 @@ class FakeWm {
         this.focusedWindow = null; // {title}, assumed on the active workspace
     }
 
-    // ---- test conveniences ---------------------------------------------------
-
-    // Place a window (created here) on workspace `index`; returns it.
     // Windows expose get_title() like real MetaWindows.
     addWindow(index, title, sticky) {
         const w = {
@@ -51,7 +36,7 @@ class FakeWm {
         return w;
     }
 
-    // The per-workspace window titles, for whole-layout assertions.
+    // Per-workspace window titles, for whole-layout assertions.
     layout() {
         return this.workspaces.map(ws => ws.windows.filter(w => !w.sticky).map(w => w.title));
     }
@@ -63,8 +48,6 @@ class FakeWm {
     _indexOfWindow(win) {
         return this.workspaces.findIndex(ws => ws.windows.indexOf(win) !== -1);
     }
-
-    // ---- WorkspaceManager API --------------------------------------------------
 
     getWorkspaceCount() { return this.workspaces.length; }
     getActiveIndex() { return this.activeIndex; }
