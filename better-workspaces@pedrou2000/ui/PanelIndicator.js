@@ -51,7 +51,9 @@ var PanelIndicator = class PanelIndicator {
             unconfigured: { text: "⛓", tip: "Notion not connected — open settings to add your token" },
             loading:      { text: "⟳", tip: "Syncing with Notion…" },
             ok:           { text: "",       tip: "" },
-            error:        { text: "⚠", tip: "Notion sync failed — showing cached projects" },
+            // ⇄ + U+0338 combining slash: "sync broken". If a panel font
+            // renders the combo badly, fall back to "↯".
+            error:        { text: "⇄̸", tip: "Notion sync failed — showing cached projects" },
         };
         let s = map[status] || map.ok;
         this._statusDot.set_text(s.text);
