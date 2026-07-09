@@ -1,22 +1,9 @@
-/*
- * BetterWorkspaces — notion/SyncService.js
- *
- * Notion TRANSPORT only (Design Doc §3.A). Since the ProjectStore redesign it
- * owns no state and never touches the disk cache:
- *
- *   - pull loop: queryDatabase -> ProjectMapper.mapResults -> onPull(projects)
- *     (the applet feeds the result into ProjectStore.merge)
- *   - push: setWorkspaceFlag/setWorkspaceOrder are plain Notion writes used as
- *     the store's writer; the store owns queueing, optimism, and reverts
- *   - reconnect: while started, Gio.NetworkMonitor is watched and the
- *     offline->online transition triggers an immediate pull, so stale state
- *     and the error dot recover right away instead of waiting out the
- *     interval timer
- *
- * Status callback states: "unconfigured" | "loading" | "ok" | "error".
- *
- * Released under the GNU General Public License v2 (see LICENSE).
- */
+/* notion/SyncService.js — Notion transport: pull loop + push writer. Owns no state. */
+
+// Pull: queryDatabase -> ProjectMapper.mapResults -> onPull (the applet feeds it
+// into ProjectStore.merge). Push: setWorkspaceFlag/Order are the store's writer.
+// Status states: "unconfigured" | "loading" | "ok" | "error".
+
 const Mainloop = imports.mainloop;
 const Gio = imports.gi.Gio;
 
@@ -51,23 +38,15 @@ var SyncService = class SyncService {
         }
     }
 
-    // ---- push: the ProjectStore's writer interface -------------------------
-
-    // Write the Workspace checkbox for a project. Rejects on failure.
     setWorkspaceFlag(pageId, value) {
         return this.client.updatePageCheckbox(pageId, "Workspace", value);
     }
 
-    // Write the Workspace Order number (null clears it). Rejects on failure.
     setWorkspaceOrder(pageId, order) {
         return this.client.updatePageNumber(pageId, "Workspace Order", order);
     }
 
-    // ---- pull ----------------------------------------------------------------
-
-    // One pull now. Resolves after onPull has run (or on error/unconfigured —
-    // status reflects the outcome; errors never reject, cached data keeps
-    // serving).
+    // Errors never reject — status reflects the outcome and cached data serves on.
     async syncNow() {
         if (!this.databaseId || !this.client.hasToken()) {
             L.log("syncNow: not configured, skipping");
@@ -95,8 +74,6 @@ var SyncService = class SyncService {
         }
     }
 
-    // Start periodic background pulls (and do one immediately), and watch the
-    // network so the offline->online transition pulls right away.
     start() {
         this.stop();
         this.syncNow();
@@ -106,10 +83,9 @@ var SyncService = class SyncService {
         L.log("started: interval " + this.intervalSec + "s");
     }
 
-    // Subscribe to Gio.NetworkMonitor. Only the offline->online EDGE triggers
-    // a pull (the monitor fires network-changed for many reasons — routes,
-    // VPNs, metered flips — and we don't want a pull storm). Fully guarded:
-    // on platforms where the monitor is unavailable we just keep the timer.
+    // Only the offline->online EDGE pulls: network-changed fires for many reasons
+    // (routes, VPNs, metered flips) and we don't want a pull storm. Guarded so a
+    // missing monitor just leaves the interval timer running.
     _watchNetwork() {
         try {
             this._netMonitor = Gio.NetworkMonitor.get_default();

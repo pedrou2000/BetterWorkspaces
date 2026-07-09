@@ -1,17 +1,9 @@
-/*
- * BetterWorkspaces — lib/keybindings.js
- *
- * Force-claim keyboard shortcuts even when Cinnamon already binds them.
- *
- * Why this exists: on X11 a key+modifier combo can be grabbed by only one
- * client. If Cinnamon already grabs e.g. <Super>n (notifications), our
- * Main.keybindingManager.addHotKey grab silently fails and Cinnamon keeps the
- * key. To reliably override, we first CLEAR the conflicting binding from
- * Cinnamon's gsettings (saving the original), then register ours. On teardown
- * we restore every original so the user's system is left exactly as it was.
- *
- * Released under the GNU General Public License v2 (see LICENSE).
- */
+/* lib/keybindings.js — force-claim shortcuts Cinnamon already binds. */
+
+// On X11 a key+mods combo is grabbed by one client, so addHotKey silently loses
+// to an existing grab (e.g. <Super>n). We clear the conflicting binding first
+// (saving the original) then register ours, and restore everything on teardown.
+
 const Gio = imports.gi.Gio;
 const Gtk = imports.gi.Gtk;
 const Main = imports.ui.main;
@@ -19,8 +11,7 @@ const Main = imports.ui.main;
 const AppletDir = imports.ui.appletManager.applets["better-workspaces@pedrou2000"];
 const L = AppletDir.lib.logger.Logger.makeLogger("keys");
 
-// Fixed (non-relocatable) Cinnamon schemas that hold keybinding arrays. We scan
-// each key whose value is an array of accelerator strings ("as").
+// Fixed schemas holding keybinding arrays; we scan each "as"-typed key.
 const KB_SCHEMAS = [
     "org.cinnamon.desktop.keybindings.wm",
     "org.cinnamon.desktop.keybindings.media-keys",
@@ -29,11 +20,11 @@ const KB_SCHEMAS = [
     "org.gnome.settings-daemon.plugins.media-keys",
 ];
 
-// Parse an accelerator ("<Super>o") to a normalized [keyval, mods] key, or null.
+// "<Super>o" -> normalized "keyval:mods" string, or null.
 function _parse(accel) {
     try {
         let res = Gtk.accelerator_parse(accel);
-        // GTK3: [keyval, mods]; GTK4: [ok, keyval, mods].
+        // GTK3 returns [keyval, mods]; GTK4 returns [ok, keyval, mods].
         let keyval, mods;
         if (res.length === 3) { keyval = res[1]; mods = res[2]; }
         else { keyval = res[0]; mods = res[1]; }
@@ -59,8 +50,8 @@ var KeyBinder = class KeyBinder {
         this._added = [];   // hotkey names we registered
     }
 
-    // Save a gsettings key's current value ONCE, so teardown restores the true
-    // original even if we both clear and reassign the same key.
+    // Save ONCE so teardown restores the true original even if we clear AND
+    // reassign the same key.
     _recordOriginal(schema, key, settings) {
         let id = schema + "\0" + key;
         if (this._touched[id] !== undefined) return;
@@ -105,19 +96,13 @@ var KeyBinder = class KeyBinder {
         }
         try { Gio.Settings.sync(); } catch (e) {}
 
-        // Also clear XLET hotkeys (applets register these via addXletHotKey in
-        // keybindingManager.applet_bindings, invisible to gsettings) bound to
-        // the same accel — general, not app-specific.
+        // Xlet hotkeys live in keybindingManager.bindings, invisible to gsettings.
         this._clearXletConflicts(want);
     }
 
-    // Remove any hotkey registered via keybindingManager whose accelerator
-    // matches `want` ([keyval,mods]) but that we didn't register ourselves.
-    // These include applet/media/custom hotkeys that live in the manager's
-    // `bindings` Map (entries: {name, bindings:[accel...], callback}) rather
-    // than gsettings — e.g. the notifications applet's <Super>n. We call the
-    // public removeHotKey(name). Not restored on teardown (the owning applet
-    // re-registers on its next load). Fully guarded.
+    // Remove xlet/applet/media hotkeys matching `want` that live in the manager's
+    // `bindings` Map (e.g. the notifications applet's <Super>n) — not ours ("bw-").
+    // Not restored on teardown; the owning applet re-registers on its next load.
     _clearXletConflicts(want) {
         try {
             let km = Main.keybindingManager;
@@ -128,8 +113,8 @@ var KeyBinder = class KeyBinder {
             while (!e.done) {
                 let entry = e.value;
                 if (entry && entry.name && Array.isArray(entry.bindings)) {
-                    // Skip our own hotkeys (names start with "bw-").
-                    if (entry.name.indexOf("bw-") !== 0) {
+                    if (entry.name.indexOf("bw-") !== 0) { // skip our own
+
                         let hit = entry.bindings.some(function (a) {
                             return a && _parse(a) === want;
                         });
@@ -147,7 +132,6 @@ var KeyBinder = class KeyBinder {
         }
     }
 
-    // Force-register a hotkey: clear conflicts, then add ours.
     force(name, accel, handler) {
         this._clearConflicts(accel);
         try {
@@ -159,10 +143,8 @@ var KeyBinder = class KeyBinder {
         }
     }
 
-    // Assign a Cinnamon gsettings keybinding to specific accelerators (e.g. put
-    // window tiling on Super+Shift+arrows). Clears any OTHER action holding the
-    // same accel first (so ours wins — e.g. move-to-monitor-down also claiming
-    // Super+Shift+Down), records originals for restore. Returns true on success.
+    // Point a Cinnamon gsettings action at `accels`, first freeing them from any
+    // competing action so ours wins (e.g. tiling vs move-to-monitor on Super+Shift+Down).
     assignGsettings(schema, key, accels) {
         let settings = _open(schema);
         if (!settings) { L.error("assign: schema not found " + schema); return false; }
@@ -171,8 +153,8 @@ var KeyBinder = class KeyBinder {
                 L.error("assign: key not found " + schema + " " + key);
                 return false;
             }
-            // Free the accel from any competing action (but not this key itself).
-            let selfId = schema + "\0" + key;
+            let selfId = schema + "\0" + key; // don't clear the key we're setting
+
             for (let i = 0; i < accels.length; i++) this._clearConflicts(accels[i], selfId);
 
             this._recordOriginal(schema, key, settings);
@@ -186,7 +168,6 @@ var KeyBinder = class KeyBinder {
         }
     }
 
-    // Remove our hotkeys and restore every touched gsettings key to its original.
     teardown() {
         for (let i = 0; i < this._added.length; i++) {
             try { Main.keybindingManager.removeHotKey(this._added[i]); } catch (e) {}

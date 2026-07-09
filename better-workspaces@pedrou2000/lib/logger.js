@@ -1,8 +1,4 @@
-/*
- * BetterWorkspaces — lib/logger.js
- * Tiny shared logging helper so every module tags its output consistently.
- * Released under the GNU General Public License v2 (see LICENSE).
- */
+/* lib/logger.js — tagged global.log/logError wrappers, one per module. */
 
 const UUID = "better-workspaces@pedrou2000";
 

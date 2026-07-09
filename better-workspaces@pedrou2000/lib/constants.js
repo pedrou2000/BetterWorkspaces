@@ -1,14 +1,7 @@
-/*
- * BetterWorkspaces — lib/constants.js
- *
- * Centralized TUNABLES — the timing/size/default knobs a maintainer might want
- * to adjust in one place. Deliberately NOT a god-config: values that belong to
- * a single module and its meaning (Notion property names, gsettings schema
- * lists, the bootstrap UUID) stay where they're used. Version lives in
- * metadata.json (read from the object Cinnamon passes to main()).
- *
- * Released under the GNU General Public License v2 (see LICENSE).
- */
+/* lib/constants.js — shared tunables (timings, sizes, defaults) only. */
+
+// Deliberately not a god-config: single-module values (Notion prop names,
+// gsettings schemas, the UUID) stay where they're used.
 
 var Constants = {
     // Timings (ms)

@@ -1,14 +1,7 @@
-/*
- * BetterWorkspaces — notion/NotionClient.js
- *
- * The Notion REST API surface (Design Doc §3.A). Knows tokens, endpoints, and
- * JSON semantics — the HTTP transport (including libsoup version differences)
- * lives in lib/http.js. Exposes async queryDatabase(dbId, body) which POSTs to
- * /v1/databases/{id}/query and resolves to the parsed result (rejecting with
- * Error("no-token" | "http-<status>" | "bad-json") on failure).
- *
- * Released under the GNU General Public License v2 (see LICENSE).
- */
+/* notion/NotionClient.js — Notion REST surface (tokens, endpoints, JSON). */
+
+// The HTTP transport (incl. libsoup version differences) lives in lib/http.js.
+
 const AppletDir = imports.ui.appletManager.applets["better-workspaces@pedrou2000"];
 const Http = AppletDir.lib.http.Http;
 const L = AppletDir.lib.logger.Logger.makeLogger("notion-http");
@@ -30,8 +23,7 @@ var NotionClient = class NotionClient {
         return this.token && this.token.length > 0;
     }
 
-    // Send a JSON request with the given HTTP method. Resolves to the parsed
-    // response object; rejects with Error("no-token"|"http-<status>"|"bad-json").
+    // Resolves the parsed body; rejects Error("no-token"|"http-<status>"|"bad-json").
     async _request(method, path, bodyObj) {
         if (!this.hasToken()) throw new Error("no-token");
 
@@ -56,15 +48,11 @@ var NotionClient = class NotionClient {
         }
     }
 
-    // Query a database. `body` is the Notion query payload (filter/sorts).
-    // Handles a single page of results (up to 100); pagination can be added
-    // later if the project list ever exceeds that.
+    // One page of results (up to 100); pagination TODO if the list ever exceeds it.
     queryDatabase(dbId, body) {
         return this._request("POST", "/databases/" + dbId + "/query", body);
     }
 
-    // Set a checkbox property on a page.
-    // Requires the integration to have update-content capability.
     updatePageCheckbox(pageId, propName, value) {
         let props = {};
         props[propName] = { checkbox: !!value };

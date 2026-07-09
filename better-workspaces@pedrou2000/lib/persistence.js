@@ -1,12 +1,7 @@
-/*
- * BetterWorkspaces — lib/persistence.js
- *
- * Read/write JSON to the applet's config dir (Design Doc §7). Used for the
- * Notion project cache and (later) session state. Uses GLib/Gio; all failures
- * degrade to null / false + a log line rather than throwing.
- *
- * Released under the GNU General Public License v2 (see LICENSE).
- */
+/* lib/persistence.js — read/write JSON under the applet's config dir. */
+
+// All failures degrade to null/false + a log line rather than throwing.
+
 const GLib = imports.gi.GLib;
 const Gio = imports.gi.Gio;
 
@@ -34,7 +29,6 @@ function pathFor(filename) {
     return GLib.build_filenamev([configDir(), filename]);
 }
 
-// Write a JS object as pretty JSON. Returns true on success.
 function writeJSON(filename, obj) {
     try {
         _ensureDir();
@@ -49,8 +43,7 @@ function writeJSON(filename, obj) {
     }
 }
 
-// Read + parse JSON. Returns the object, or `fallback` (default null) on any
-// failure (missing file, bad JSON).
+// Returns `fallback` (default null) on any failure (missing file, bad JSON).
 function readJSON(filename, fallback) {
     if (fallback === undefined) fallback = null;
     try {

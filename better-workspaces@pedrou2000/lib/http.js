@@ -1,20 +1,9 @@
-/*
- * BetterWorkspaces — lib/http.js
- *
- * The one place that knows libsoup, including the Soup 2.4 vs 3.0 API split
- * (session setup, send_and_read_async vs queue_message, status extraction,
- * byte decoding). Callers get a Promise API and never touch Soup:
- *
- *   await Http.request("GET", url)                          -> {status, bytes, text}
- *   await Http.request("POST", url, {headers, body})        -> body is a string
- *
- * `bytes` is a Uint8Array (for binary payloads like icons); `text` is the
- * UTF-8 decode (for JSON). The Promise rejects only on transport errors;
- * HTTP error statuses resolve normally — status handling is the caller's
- * semantics, not the transport's.
- *
- * Released under the GNU General Public License v2 (see LICENSE).
- */
+/* lib/http.js — the one place that knows libsoup (incl. the Soup 2.4/3.0 split). */
+
+// Http.request(method, url, {headers, body}) -> Promise<{status, bytes, text}>.
+// Rejects only on transport errors; HTTP error statuses resolve (status handling
+// is the caller's semantics). `bytes` is for binary (icons), `text` for JSON.
+
 const Soup = imports.gi.Soup;
 const GLib = imports.gi.GLib;
 const ByteArray = imports.byteArray;
@@ -35,10 +24,7 @@ function _getSession() {
     return _session;
 }
 
-// Send an HTTP request. opts (all optional):
-//   headers: {name: value} appended to the request
-//   body:    string request body (its Content-Type should be in headers)
-// Resolves {status, bytes, text}; rejects on transport failure.
+// opts: {headers:{name:value}, body:string}. body's Content-Type comes from headers.
 function request(method, url, opts) {
     opts = opts || {};
     return new Promise((resolve, reject) => {
@@ -87,8 +73,7 @@ function request(method, url, opts) {
     });
 }
 
-// Normalize a raw payload (Uint8Array on Soup3, string on Soup2) into
-// {status, bytes, text}.
+// Soup3 hands back a Uint8Array, Soup2 a string; expose both shapes.
 function _result(status, data) {
     let bytes, text;
     if (data instanceof Uint8Array) {
