@@ -262,18 +262,15 @@ test("merge acks the remote value: post-merge failure reverts to the merged valu
 });
 
 test("merge never downgrades a protected (in-deck) id to inWorkspace=false", () => {
-    // A pull whose query predates a just-landed ON write still says false. If
-    // the id is in the live deck (protected), merge must keep it ON — else the
-    // project shows ON in Notion/deck but OFF in the catalog (the modal).
+    // Stale pull says false, but the id is in the deck -> stays ON.
     const { store } = makeStore([proj("x", 0, true)]);
-    store.merge([proj("x", 0, false)], ["x"]);   // stale false, but protected
+    store.merge([proj("x", 0, false)], ["x"]);
     assert.equal(store.get("x").inWorkspace, true);
 });
 
 test("merge still lets a NON-protected id go inWorkspace=false", () => {
-    // A project not in the deck legitimately follows remote off.
     const { store } = makeStore([proj("y", 0, true)]);
-    store.merge([proj("y", 0, false)], []);      // not protected
+    store.merge([proj("y", 0, false)], []);
     assert.equal(store.get("y").inWorkspace, false);
 });
 
