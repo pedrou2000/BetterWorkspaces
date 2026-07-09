@@ -208,5 +208,3 @@ var KeyBinder = class KeyBinder {
         try { Gio.Settings.sync(); } catch (e) {}
     }
 };
-
-var KeyBindings = { KeyBinder: KeyBinder };

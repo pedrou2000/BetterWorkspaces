@@ -10,7 +10,6 @@
  * Released under the GNU General Public License v2 (see LICENSE).
  */
 const Applet = imports.ui.applet;
-const Lang = imports.lang;
 const Main = imports.ui.main;
 const Settings = imports.ui.settings;
 const PopupMenu = imports.ui.popupMenu;
@@ -20,14 +19,14 @@ const Clutter = imports.gi.Clutter;
 const UUID = "better-workspaces@pedrou2000";
 
 const AppletDir = imports.ui.appletManager.applets[UUID];
-const WorkspaceManager = AppletDir.wm.WorkspaceManager;
-const ControllerModule = AppletDir.core.Controller;
-const PanelIndicatorModule = AppletDir.ui.PanelIndicator;
-const ProjectSwitcherModule = AppletDir.ui.ProjectSwitcher;
+const WorkspaceManager = AppletDir.wm.WorkspaceManager.WorkspaceManager;
+const Controller = AppletDir.core.Controller.Controller;
+const PanelIndicator = AppletDir.ui.PanelIndicator.PanelIndicator;
+const ProjectSwitcher = AppletDir.ui.ProjectSwitcher.ProjectSwitcher;
 const ProjectTogglePanel = AppletDir.ui.ProjectTogglePanel.ProjectTogglePanel;
 const SyncService = AppletDir.notion.SyncService.SyncService;
 const ProjectMapper = AppletDir.notion.ProjectMapper.ProjectMapper;
-const KeyBindings = AppletDir.lib.keybindings.KeyBindings;
+const KeyBinder = AppletDir.lib.keybindings.KeyBinder;
 const Constants = AppletDir.lib.constants.Constants;
 
 const _L = AppletDir.lib.logger.Logger.makeLogger("applet");
@@ -85,21 +84,16 @@ const WM_ASSIGN = {
     "minimize":        "kbMinimize",
 };
 
-function MyApplet(metadata, orientation, panel_height, instanceId) {
-    this._init(metadata, orientation, panel_height, instanceId);
-}
+var MyApplet = class MyApplet extends Applet.Applet {
 
-MyApplet.prototype = {
-    __proto__: Applet.Applet.prototype,
-
-    _init: function (metadata, orientation, panel_height, instanceId) {
-        Applet.Applet.prototype._init.call(this, orientation, panel_height, instanceId);
+    constructor(metadata, orientation, panel_height, instanceId) {
+        super(orientation, panel_height, instanceId);
 
         try {
             log("loaded v" + (metadata && metadata.version ? metadata.version : "?"));
 
-            this.wm = new WorkspaceManager.WorkspaceManager();
-            this.controller = new ControllerModule.Controller(this.wm);
+            this.wm = new WorkspaceManager();
+            this.controller = new Controller(this.wm);
 
             // Settings first: we need the token before we decide the deck.
             // This also creates this.sync.
@@ -109,26 +103,26 @@ MyApplet.prototype = {
             // Falls back to a placeholder if nothing is cached yet.
             this._loadDeckFromCache();
 
-            this.panelUI = new PanelIndicatorModule.PanelIndicator(
+            this.panelUI = new PanelIndicator(
                 this.actor, this.controller, orientation,
-                { onManage: Lang.bind(this, this.openTogglePanel) });
-            this.switcher = new ProjectSwitcherModule.ProjectSwitcher(this.controller);
-            this.switcher.onCommit(Lang.bind(this, this._afterNav));
+                { onManage: () => this.openTogglePanel() });
+            this.switcher = new ProjectSwitcher(this.controller);
+            this.switcher.onCommit(() => this._afterNav());
 
             // When projects are reordered, rebuild the panel and persist the new
             // order to Notion (Workspace Order = 0,1,2,...).
-            this.controller.onOrderChanged(Lang.bind(this, function (orderedIds) {
+            this.controller.onOrderChanged((orderedIds) => {
                 if (this.panelUI) this.panelUI.rebuild();
                 if (this.sync) this.sync.persistOrder(orderedIds);
-            }));
+            });
 
             // Initial status: unconfigured if no token, else neutral until sync.
             this.panelUI.setStatus(this._notionConfigured() ? "ok" : "unconfigured");
 
             this._switchId = global.window_manager.connect(
-                'switch-workspace', Lang.bind(this, this._refresh));
+                'switch-workspace', () => this._refresh());
             this._nWorkspacesId = global.workspace_manager.connect(
-                'notify::n-workspaces', Lang.bind(this, this._refresh));
+                'notify::n-workspaces', () => this._refresh());
 
             this._registerKeybindings();
             this._buildContextMenu();
@@ -140,16 +134,16 @@ MyApplet.prototype = {
         } catch (e) {
             logError("init exception: " + e.toString());
         }
-    },
+    }
 
-    _notionConfigured: function () {
+    _notionConfigured() {
         return this.settings
             && this.settings.getValue("notionToken")
             && this.settings.getValue("notionDatabaseId");
-    },
+    }
 
     // Convert a cached project entry to a controller project def.
-    _toDef: function (p) {
+    _toDef(p) {
         return {
             id: p.id,
             name: p.name,
@@ -157,42 +151,42 @@ MyApplet.prototype = {
             icon: p.icon,
             notionUrl: p.notionUrl,
         };
-    },
+    }
 
     // Build the deck from cached Notion projects, filtered to the ones whose
     // Workspace checkbox is true (inWorkspace). The cache holds ALL non-archived
     // projects (for the toggle panel); the DECK is the inWorkspace subset.
-    _loadDeckFromCache: function () {
+    _loadDeckFromCache() {
         let cached = this.sync ? this.sync.readCache() : [];
-        let inDeck = cached.filter(function (p) { return p.inWorkspace; });
+        let inDeck = cached.filter((p) => p.inWorkspace);
         if (!inDeck || inDeck.length === 0) {
             log("_loadDeckFromCache: no in-workspace projects cached -> placeholder deck");
             this.controller.loadProjects(PLACEHOLDER_PROJECTS);
             return;
         }
-        this.controller.loadProjects(inDeck.map(Lang.bind(this, this._toDef)));
+        this.controller.loadProjects(inDeck.map((p) => this._toDef(p)));
         log("_loadDeckFromCache: loaded " + inDeck.length + " in-workspace projects (of "
             + cached.length + " cached)");
-    },
+    }
 
-    _refresh: function () {
+    _refresh() {
         try {
             if (this.panelUI) this.panelUI.update();
         } catch (e) {
             logError("_refresh exception: " + e.toString());
         }
-    },
+    }
 
     // After a deliberate navigation: refresh the panel and show our own OSD
     // (project · workspace), instead of Cinnamon's flat "Workspace N" OSD.
-    _afterNav: function () {
+    _afterNav() {
         this._refresh();
         this._showOSD();
-    },
+    }
 
     // Show a transient project-aware OSD reflecting the deck model, e.g.
     // "Job 2026 · 2/3". Replaces the built-in linear workspace OSD.
-    _showOSD: function () {
+    _showOSD() {
         try {
             let loc = this.controller.currentLocation();
             if (!loc) return;
@@ -217,20 +211,20 @@ MyApplet.prototype = {
 
             // Auto-hide after a short delay (reset the timer on each nav).
             if (this._osdTimer) imports.mainloop.source_remove(this._osdTimer);
-            this._osdTimer = imports.mainloop.timeout_add(Constants.OSD_HIDE_MS, Lang.bind(this, function () {
+            this._osdTimer = imports.mainloop.timeout_add(Constants.OSD_HIDE_MS, () => {
                 this._osdTimer = 0;
                 if (this._osdLabel) this._osdLabel.hide();
                 return false;
-            }));
+            });
         } catch (e) {
             logError("_showOSD: " + e.toString());
         }
-    },
+    }
 
     // Hide Cinnamon's built-in flat "Workspace N" OSD so only our project-aware
     // OSD shows. org.cinnamon has a boolean 'workspace-osd-visible'. Saved and
     // restored on unload.
-    _suppressBuiltinOSD: function () {
+    _suppressBuiltinOSD() {
         try {
             let Gio = imports.gi.Gio;
             let src = Gio.SettingsSchemaSource.get_default();
@@ -246,20 +240,20 @@ MyApplet.prototype = {
         } catch (e) {
             logError("_suppressBuiltinOSD: " + e.toString());
         }
-    },
+    }
 
-    _restoreBuiltinOSD: function () {
+    _restoreBuiltinOSD() {
         try {
             if (this._cinSettings && this._osdWasVisible !== undefined) {
                 this._cinSettings.set_boolean("workspace-osd-visible", this._osdWasVisible);
             }
         } catch (e) {}
         this._cinSettings = null;
-    },
+    }
 
     // Bind settings and create the SyncService (does not start it — the caller
     // decides when, after the deck is loaded).
-    _initSettingsAndSync: function (instanceId) {
+    _initSettingsAndSync(instanceId) {
         this.settings = new Settings.AppletSettings(this, UUID, instanceId);
 
         let token = this.settings.getValue("notionToken") || "";
@@ -272,34 +266,34 @@ MyApplet.prototype = {
         // logs the result. We deliberately do NOT reshape the live deck mid-
         // session — that could move workspaces and scatter your open windows.
         // New Notion changes take effect on the next Cinnamon reload/login.
-        this.sync.onUpdate(Lang.bind(this, function (projects) {
+        this.sync.onUpdate((projects) => {
             log("sync refreshed cache: " + projects.length + " projects ["
-                + projects.map(function (p) { return p.name; }).join(", ")
+                + projects.map((p) => p.name).join(", ")
                 + "] — applies on next reload");
-        }));
+        });
 
         // Reflect sync status in the panel (degraded-state feedback).
-        this.sync.onStatus(Lang.bind(this, function (status) {
+        this.sync.onStatus((status) => {
             if (this.panelUI) this.panelUI.setStatus(status);
-        }));
+        });
 
         this.settings.bindProperty(Settings.BindingDirection.IN, "notionToken",
-            "notionToken", Lang.bind(this, function () {
+            "notionToken", () => {
                 this.sync.setToken(this.settings.getValue("notionToken"));
-            }));
+            });
         this.settings.bindProperty(Settings.BindingDirection.IN, "notionDatabaseId",
-            "notionDatabaseId", Lang.bind(this, function () {
+            "notionDatabaseId", () => {
                 this.sync.setDatabaseId(this.settings.getValue("notionDatabaseId"));
-            }));
+            });
 
         if (!token || !dbId) {
             log("Notion not configured — open settings, add your token, click "
                 + "'Sync now', then reload Cinnamon (Alt+F2, r) to load the deck.");
         }
-    },
+    }
 
     // settings-schema.json "syncNow" button callback.
-    onSyncNowClicked: function () {
+    onSyncNowClicked() {
         try {
             if (this.sync) {
                 this.sync.setToken(this.settings.getValue("notionToken"));
@@ -309,49 +303,49 @@ MyApplet.prototype = {
         } catch (e) {
             logError("onSyncNowClicked: " + e.toString());
         }
-    },
+    }
 
     // ---- M9: Project Toggle Panel ------------------------------------------
 
     // Open the searchable toggle panel. Reads the full cached project list
     // (sorted by Workspace Order so ON rows match the deck); toggles go through
     // _handleToggle, reorders through reorderProject.
-    openTogglePanel: function () {
+    openTogglePanel() {
         try {
             let panel = new ProjectTogglePanel(
-                Lang.bind(this, function () {
+                () => {
                     let cache = this.sync ? this.sync.readCache() : [];
                     return ProjectMapper.sortByOrder(cache);
-                }),
-                Lang.bind(this, this._handleToggle),
-                Lang.bind(this, function (fromOnIdx, toOnIdx) {
+                },
+                (project, newValue, doneCb) => this._handleToggle(project, newValue, doneCb),
+                (fromOnIdx, toOnIdx) => {
                     // ON-project index == deck index; reorder relocates windows
                     // and persists Workspace Order.
                     this.controller.reorderProject(fromOnIdx, toOnIdx);
-                }));
+                });
             this._togglePanel = panel;
             panel.open();
         } catch (e) {
             logError("openTogglePanel: " + e.toString());
         }
-    },
+    }
 
     // Perform a Workspace toggle: write to Notion, then add/remove the project
     // from the live deck. doneCb(err) — err non-null reverts the toggle.
-    _handleToggle: function (project, newValue, doneCb) {
+    _handleToggle(project, newValue, doneCb) {
         if (!this.sync) { doneCb("no-sync"); return; }
 
         if (newValue) {
             // Turning ON: write Notion, add to the live deck (appends to end),
             // and assign Workspace Order = max+1 so "bottom" survives reload.
-            this.sync.setWorkspaceFlag(project.id, true, Lang.bind(this, function (err) {
+            this.sync.setWorkspaceFlag(project.id, true, (err) => {
                 if (err) { doneCb(err); return; }
                 this.controller.addProjectLive(this._toDef(project));
                 this.sync.setWorkspaceOrder(project.id, this.sync.maxOrder() + 1, null);
                 this.panelUI.rebuild();
                 this._refresh();
                 doneCb(null);
-            }));
+            });
         } else {
             // Turning OFF: destructive. Find the deck index, confirm, then
             // remove (which gracefully closes windows). Only on success do we
@@ -359,12 +353,12 @@ MyApplet.prototype = {
             let deckIdx = this._deckIndexOf(project.id);
             if (deckIdx < 0) {
                 // Not in the live deck (shouldn't happen) — just write the flag.
-                this.sync.setWorkspaceFlag(project.id, false, function (err) { doneCb(err); });
+                this.sync.setWorkspaceFlag(project.id, false, (err) => doneCb(err));
                 return;
             }
-            this._confirmRemoval(project, Lang.bind(this, function (confirmed) {
+            this._confirmRemoval(project, (confirmed) => {
                 if (!confirmed) { doneCb("cancelled"); return; }
-                this.controller.removeProjectLive(deckIdx, Lang.bind(this, function (rmErr, info) {
+                this.controller.removeProjectLive(deckIdx, (rmErr, info) => {
                     if (rmErr === "windows-open") {
                         this._notifyWindowsOpen(project, info);
                         doneCb("windows-open");
@@ -376,26 +370,26 @@ MyApplet.prototype = {
                     // Deck change succeeded; persist Workspace=false and clear
                     // its order so it sorts last if reactivated later.
                     this.sync.clearWorkspaceOrder(project.id, null);
-                    this.sync.setWorkspaceFlag(project.id, false, function (wErr) {
+                    this.sync.setWorkspaceFlag(project.id, false, (wErr) => {
                         doneCb(wErr); // if the write fails, panel reverts the toggle
                     });
-                }));
-            }));
+                });
+            });
         }
-    },
+    }
 
     // Index of a project in the live controller deck by Notion id, or -1.
-    _deckIndexOf: function (projectId) {
+    _deckIndexOf(projectId) {
         let n = this.controller.state.projectCount();
         for (let i = 0; i < n; i++) {
             let p = this.controller.state.getProject(i);
             if (p && p.id === projectId) return i;
         }
         return -1;
-    },
+    }
 
     // Confirm destructive removal via a modal. cb(confirmedBool).
-    _confirmRemoval: function (project, cb) {
+    _confirmRemoval(project, cb) {
         let deckIdx = this._deckIndexOf(project.id);
         let p = this.controller.state.getProject(deckIdx);
         let wsCount = p ? p.wsCount : 1;
@@ -410,13 +404,13 @@ MyApplet.prototype = {
         }));
         dialog.contentLayout.add(box);
         dialog.setButtons([
-            { label: "Cancel", action: function () { dialog.close(); cb(false); }, key: Clutter.KEY_Escape },
-            { label: "Remove", action: function () { dialog.close(); cb(true); } },
+            { label: "Cancel", action: () => { dialog.close(); cb(false); }, key: Clutter.KEY_Escape },
+            { label: "Remove", action: () => { dialog.close(); cb(true); } },
         ]);
         dialog.open();
-    },
+    }
 
-    _notifyWindowsOpen: function (project, info) {
+    _notifyWindowsOpen(project, info) {
         let titles = (info && info.openTitles) ? info.openTitles.join(", ") : "";
         let dialog = new ModalDialog.ModalDialog();
         let box = new (imports.gi.St.BoxLayout)({ vertical: true, style_class: 'better-workspaces-toggle-panel' });
@@ -428,35 +422,34 @@ MyApplet.prototype = {
             text: "Please close these window(s) first, then try again:\n" + titles,
         }));
         dialog.contentLayout.add(box);
-        dialog.setButtons([{ label: "OK", action: function () { dialog.close(); }, key: Clutter.KEY_Escape }]);
+        dialog.setButtons([{ label: "OK", action: () => dialog.close(), key: Clutter.KEY_Escape }]);
         dialog.open();
-    },
+    }
 
     // The full binding table: settings key -> hotkey name + handler. All
     // bindings are settings-driven and grabbed via KeyBinder.force(), which
     // clears any conflicting Cinnamon binding (restored on teardown) so our
     // grab reliably wins even for combos Cinnamon already owns.
-    _bindingSpecs: function () {
-        let self = this;
+    _bindingSpecs() {
         return [
-            { setting: "kbWorkspacePrev", name: "bw-ws-prev",    run: function () { self.controller.prevLocalWorkspace(); self._afterNav(); } },
-            { setting: "kbWorkspaceNext", name: "bw-ws-next",    run: function () { self.controller.nextLocalWorkspace(); self._afterNav(); } },
-            { setting: "kbProjectPrev",   name: "bw-proj-prev",  run: function () { self.controller.goToPrevProjectInOrder(); self._afterNav(); } },
-            { setting: "kbProjectNext",   name: "bw-proj-next",  run: function () { self.controller.goToNextProjectInOrder(); self._afterNav(); } },
-            { setting: "kbMoveWindowPrev",name: "bw-move-prev",  run: function () { self.controller.moveWindowToPrevLocal(); self._afterNav(); } },
-            { setting: "kbMoveWindowNext",name: "bw-move-next",  run: function () { self.controller.moveWindowToNextLocal(); self._afterNav(); } },
-            { setting: "kbMoveWindowProjectPrev", name: "bw-move-proj-prev", run: function () { self.controller.moveWindowToPrevProjectInOrder(); self._afterNav(); } },
-            { setting: "kbMoveWindowProjectNext", name: "bw-move-proj-next", run: function () { self.controller.moveWindowToNextProjectInOrder(); self._afterNav(); } },
-            { setting: "kbSwitcher",      name: "bw-switcher",   run: function () { self.switcher.cycle(); } },
-            { setting: "kbOpenNotion",    name: "bw-open-home",  run: function () { self.controller.openActiveProjectHome(); } },
-            { setting: "kbTogglePanel",   name: "bw-toggle-panel", run: function () { self.openTogglePanel(); } },
+            { setting: "kbWorkspacePrev", name: "bw-ws-prev",    run: () => { this.controller.prevLocalWorkspace(); this._afterNav(); } },
+            { setting: "kbWorkspaceNext", name: "bw-ws-next",    run: () => { this.controller.nextLocalWorkspace(); this._afterNav(); } },
+            { setting: "kbProjectPrev",   name: "bw-proj-prev",  run: () => { this.controller.goToPrevProjectInOrder(); this._afterNav(); } },
+            { setting: "kbProjectNext",   name: "bw-proj-next",  run: () => { this.controller.goToNextProjectInOrder(); this._afterNav(); } },
+            { setting: "kbMoveWindowPrev",name: "bw-move-prev",  run: () => { this.controller.moveWindowToPrevLocal(); this._afterNav(); } },
+            { setting: "kbMoveWindowNext",name: "bw-move-next",  run: () => { this.controller.moveWindowToNextLocal(); this._afterNav(); } },
+            { setting: "kbMoveWindowProjectPrev", name: "bw-move-proj-prev", run: () => { this.controller.moveWindowToPrevProjectInOrder(); this._afterNav(); } },
+            { setting: "kbMoveWindowProjectNext", name: "bw-move-proj-next", run: () => { this.controller.moveWindowToNextProjectInOrder(); this._afterNav(); } },
+            { setting: "kbSwitcher",      name: "bw-switcher",   run: () => this.switcher.cycle() },
+            { setting: "kbOpenNotion",    name: "bw-open-home",  run: () => this.controller.openActiveProjectHome() },
+            { setting: "kbTogglePanel",   name: "bw-toggle-panel", run: () => this.openTogglePanel() },
         ];
-    },
+    }
 
     // If the stored keybinding scheme is older than the current one, overwrite
     // the shortcut values with the current defaults (token/other settings are
     // untouched). This makes changed defaults take effect without a manual wipe.
-    _applyKeybindingScheme: function () {
+    _applyKeybindingScheme() {
         let stored = this.settings.getValue("kbSchemeVersion") || 0;
         if (stored >= KB_SCHEME_VERSION) return;
         for (let key in KB_DEFAULTS) {
@@ -465,90 +458,90 @@ MyApplet.prototype = {
         this.settings.setValue("kbSchemeVersion", KB_SCHEME_VERSION);
         log("keybindings reset to scheme v" + KB_SCHEME_VERSION
             + " (was v" + stored + ")");
-    },
+    }
 
-    _registerKeybindings: function () {
+    _registerKeybindings() {
         this._applyKeybindingScheme();
-        this._keybinder = new KeyBindings.KeyBinder();
+        this._keybinder = new KeyBinder();
         let specs = this._bindingSpecs();
-        specs.forEach(Lang.bind(this, function (spec) {
+        specs.forEach((spec) => {
             let accel = this.settings.getValue(spec.setting);
             if (!accel) return;
-            this._keybinder.force(spec.name, accel, Lang.bind(this, function () {
+            this._keybinder.force(spec.name, accel, () => {
                 try { spec.run(); }
                 catch (e) { logError("hotkey " + spec.name + ": " + e.toString()); }
-            }));
+            });
             // Re-bind live when the user edits this shortcut in settings.
             this.settings.bindProperty(Settings.BindingDirection.IN, spec.setting,
-                spec.setting, Lang.bind(this, this._rebindKeys));
-        }));
+                spec.setting, () => this._rebindKeys());
+        });
         // Also re-apply when a window-management shortcut is edited.
         for (let action in WM_ASSIGN) {
             let setting = WM_ASSIGN[action];
             this.settings.bindProperty(Settings.BindingDirection.IN, setting,
-                setting, Lang.bind(this, this._rebindKeys));
+                setting, () => this._rebindKeys());
         }
         this._assignTiling();
         log("registered " + (specs.length + Object.keys(WM_ASSIGN).length)
             + " keybindings (settings-driven)");
-    },
+    }
 
     // Reassign Cinnamon's own window-management actions to the accelerators
     // stored in our settings (Option A). Recorded and restored on unload.
-    _assignTiling: function () {
+    _assignTiling() {
         for (let action in WM_ASSIGN) {
             let accel = this.settings.getValue(WM_ASSIGN[action]);
             if (!accel) continue;
             this._keybinder.assignGsettings(WM_SCHEMA, action, [accel]);
         }
-    },
+    }
 
     // Re-register all keybindings from current settings (called on any change).
-    _rebindKeys: function () {
+    _rebindKeys() {
         if (this._keybinder) this._keybinder.teardown();
-        this._keybinder = new KeyBindings.KeyBinder();
-        this._bindingSpecs().forEach(Lang.bind(this, function (spec) {
+        this._keybinder = new KeyBinder();
+        this._bindingSpecs().forEach((spec) => {
             let accel = this.settings.getValue(spec.setting);
             if (!accel) return;
-            this._keybinder.force(spec.name, accel, Lang.bind(this, function () {
+            this._keybinder.force(spec.name, accel, () => {
                 try { spec.run(); }
                 catch (e) { logError("hotkey " + spec.name + ": " + e.toString()); }
-            }));
-        }));
+            });
+        });
         this._assignTiling();
         log("re-registered keybindings after settings change");
-    },
+    }
 
-    _unregisterKeybindings: function () {
+    _unregisterKeybindings() {
         if (this._keybinder) {
             this._keybinder.teardown();
             this._keybinder = null;
         }
-    },
+    }
 
-    _buildContextMenu: function () {
+    _buildContextMenu() {
         let menu = this._applet_context_menu;
-        let addAction = Lang.bind(this, function (label, fn) {
+        let addAction = (label, fn) => {
             let item = new PopupMenu.PopupMenuItem(label);
-            item.connect('activate', Lang.bind(this, function () {
-                try { fn.call(this); } catch (e) { logError("menu: " + e.toString()); }
+            item.connect('activate', () => {
+                try { fn(); } catch (e) { logError("menu: " + e.toString()); }
                 this._refresh();
-            }));
+            });
             menu.addMenuItem(item);
-        });
-        addAction("Manage workspace projects… (Super+P)", function () {
+        };
+        addAction("Manage workspace projects… (Super+P)", () => {
             this.openTogglePanel();
         });
-        addAction("Open active project's Notion page (Super+N)", function () {
+        addAction("Open active project's Notion page (Super+N)", () => {
             this.controller.openActiveProjectHome();
         });
 
         menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
-        addAction("Move project left (reorder)", function () {
+        addAction("Move project left (reorder)", () => {
             this.controller.moveActiveProjectBy(-1);
             this.panelUI.update();
         });
-        addAction("Move project right (reorder)", function () {
+        addAction("Move project right (reorder)", () => {
             this.controller.moveActiveProjectBy(1);
             this.panelUI.update();
         });
@@ -560,40 +553,40 @@ MyApplet.prototype = {
             let p = this.controller.state.getProject(i);
             let idx = i;
             let sub = new PopupMenu.PopupMenuItem(p.name);
-            sub.connect('activate', Lang.bind(this, function () {
+            sub.connect('activate', () => {
                 try { this.controller.moveWindowToProject(idx); }
                 catch (e) { logError("move-to-project menu: " + e.toString()); }
                 this._refresh();
-            }));
+            });
             moveMenu.menu.addMenuItem(sub);
         }
         menu.addMenuItem(moveMenu);
 
         menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
-        addAction("Add workspace to active project", function () {
+        addAction("Add workspace to active project", () => {
             this.controller.addWorkspaceToActiveProject();
             this.panelUI.update();
         });
-        addAction("Remove last workspace of active project", function () {
+        addAction("Remove last workspace of active project", () => {
             this.controller.removeLastWorkspaceOfActiveProject();
             this.panelUI.update();
         });
-        addAction("Remove empty workspaces of active project", function () {
+        addAction("Remove empty workspaces of active project", () => {
             this.controller.removeEmptyWorkspacesOfActiveProject();
             this.panelUI.update();
         });
-        addAction("Log current state", function () {
+        addAction("Log current state", () => {
             log(this.controller.describe());
         });
-    },
+    }
 
     // Base Applet has no default click action; use it as "next project".
-    on_applet_clicked: function () {
+    on_applet_clicked() {
         this.controller.goToNextProjectInOrder();
         this._refresh();
-    },
+    }
 
-    on_applet_removed_from_panel: function () {
+    on_applet_removed_from_panel() {
         try {
             this._unregisterKeybindings();
             this._restoreBuiltinOSD();
@@ -618,7 +611,7 @@ MyApplet.prototype = {
         } catch (e) {
             logError("cleanup exception: " + e.toString());
         }
-    },
+    }
 };
 
 function main(metadata, orientation, panel_height, instanceId) {

@@ -15,7 +15,7 @@
 const UUID = "better-workspaces@pedrou2000";
 const AppletDir = imports.ui.appletManager.applets[UUID];
 const Mapping = AppletDir.core.mapping.Mapping;
-const StateModule = AppletDir.core.State;
+const State = AppletDir.core.State.State;
 const Browser = AppletDir.lib.browser.Browser;
 const Mainloop = imports.mainloop;
 const CLOSE_GRACE_MS = AppletDir.lib.constants.Constants.CLOSE_GRACE_MS;
@@ -28,7 +28,7 @@ var Controller = class Controller {
 
     constructor(wm) {
         this.wm = wm;                       // wm/WorkspaceManager instance
-        this.state = new StateModule.State();
+        this.state = new State();
     }
 
     // Seed the deck (M2: hardcoded). Ensures the WM has exactly as many flat
