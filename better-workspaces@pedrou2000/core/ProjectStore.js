@@ -201,11 +201,17 @@ var ProjectStore = class ProjectStore {
             local.name = r.name;
             local.icon = r.icon;
             local.notionUrl = r.notionUrl;
-            // Deck fields: remote wins unless a local write is pending.
+            // Deck fields: remote wins unless a local write is pending. But a
+            // protected (in-deck) id is NEVER downgraded to false here: the live
+            // deck is authoritative for membership (unchecking in Notion doesn't
+            // auto-remove), and a pull whose query predates a just-landed ON
+            // write still carries the stale false — applying it would leave the
+            // project ON in the deck/Notion yet OFF in the catalog (the modal).
             if (!this._dirty.has(r.id + "\0inWorkspace")) {
-                if (!local.inWorkspace && r.inWorkspace) newlyOn.push(local);
-                local.inWorkspace = r.inWorkspace;
-                this._acked.set(r.id + "\0inWorkspace", r.inWorkspace);
+                let remoteInW = (keep.has(r.id) && !r.inWorkspace) ? true : r.inWorkspace;
+                if (!local.inWorkspace && remoteInW) newlyOn.push(local);
+                local.inWorkspace = remoteInW;
+                this._acked.set(r.id + "\0inWorkspace", remoteInW);
             }
             if (!this._dirty.has(r.id + "\0order")) {
                 local.order = r.order;
