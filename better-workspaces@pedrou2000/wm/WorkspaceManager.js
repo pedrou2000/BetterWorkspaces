@@ -112,6 +112,39 @@ WorkspaceManager.prototype = {
         }
     },
 
+    // The MetaWorkspace object at `index` (or null). Hold onto the OBJECT when
+    // doing several reorders in a row, since indices shift after each move.
+    getWorkspace: function (index) {
+        return this._wm().get_workspace_by_index(index);
+    },
+
+    // Move a specific workspace OBJECT to `toIndex`, carrying its windows, via
+    // Muffin's native reorder_workspace (no per-window shuffling).
+    reorderWorkspaceObject: function (ws, toIndex) {
+        try {
+            if (!ws) return false;
+            this._wm().reorder_workspace(ws, toIndex);
+            return true;
+        } catch (e) {
+            logError("reorderWorkspaceObject(-> " + toIndex + "): " + e.toString());
+            return false;
+        }
+    },
+
+    // Move the workspace at `fromIndex` to `toIndex` (single move). No-op if
+    // equal/out of range.
+    reorderWorkspace: function (fromIndex, toIndex) {
+        let count = this.getWorkspaceCount();
+        if (fromIndex === toIndex) return true;
+        if (fromIndex < 0 || fromIndex >= count || toIndex < 0 || toIndex >= count) {
+            log("reorderWorkspace: index out of range " + fromIndex + "->" + toIndex);
+            return false;
+        }
+        let ok = this.reorderWorkspaceObject(this.getWorkspace(fromIndex), toIndex);
+        if (ok) log("reorderWorkspace: " + fromIndex + " -> " + toIndex);
+        return ok;
+    },
+
     // Remove the workspace at `index`. Guards:
     //   - refuses to remove the last remaining workspace (Cinnamon needs >= 1)
     //   - out-of-range index is a logged no-op
@@ -175,12 +208,6 @@ WorkspaceManager.prototype = {
     // List non-pinned windows on a single workspace index.
     listWindowsOnWorkspace: function (index) {
         return realWindows(this._wm().get_workspace_by_index(index));
-    },
-
-    // Move a specific window object to workspace `index`.
-    moveWindowTo: function (win, index) {
-        try { win.change_workspace_by_index(index, false); return true; }
-        catch (e) { logError("moveWindowTo: " + e.toString()); return false; }
     },
 
     // Move EVERY window on workspace `from` to workspace `to`. Used when
