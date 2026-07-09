@@ -24,49 +24,45 @@ const _L = AppletDir.lib.logger.Logger.makeLogger("ctrl");
 function log(msg) { _L.log(msg); }
 function logError(msg) { _L.error(msg); }
 
-function Controller(wm) {
-    this._init(wm);
-}
+var Controller = class Controller {
 
-Controller.prototype = {
-
-    _init: function (wm) {
+    constructor(wm) {
         this.wm = wm;                       // wm/WorkspaceManager instance
         this.state = new StateModule.State();
-    },
+    }
 
     // Seed the deck (M2: hardcoded). Ensures the WM has exactly as many flat
     // workspaces as the model requires, then activates project 0 / local 0.
-    loadProjects: function (defs) {
+    loadProjects(defs) {
         this.state.setProjects(defs);
         this._reconcileWorkspaceCount();
         this.goToProject(0);
-    },
+    }
 
     // Make the real flat workspace count equal the sum of all project strips.
-    _reconcileWorkspaceCount: function () {
+    _reconcileWorkspaceCount() {
         let need = Mapping.totalWorkspaces(this.state.counts());
         let have = this.wm.getWorkspaceCount();
         while (this.wm.getWorkspaceCount() < need) this.wm.createWorkspace();
         while (this.wm.getWorkspaceCount() > need) this.wm.removeLastWorkspace();
         log("_reconcileWorkspaceCount: need " + need + ", had " + have
             + ", now " + this.wm.getWorkspaceCount());
-    },
+    }
 
     // ---- Deriving "where am I" --------------------------------------------
 
     // Ask the WM for the true active flat index, reverse-map to (project,local).
     // This keeps us correct even if the user switched via some external means.
-    currentLocation: function () {
+    currentLocation() {
         let flat = this.wm.getActiveIndex();
         let loc = Mapping.locationOf(this.state.counts(), flat);
         return loc; // {projectIdx, localIdx} or null
-    },
+    }
 
     // ---- Intents: switching projects --------------------------------------
 
     // Switch to a project, landing on the local workspace we last used there.
-    goToProject: function (projectIdx) {
+    goToProject(projectIdx) {
         if (!this.state.setActiveProject(projectIdx)) {
             log("goToProject: invalid project " + projectIdx);
             return false;
@@ -78,7 +74,7 @@ Controller.prototype = {
         log("goToProject: project " + projectIdx + " (" + p.name
             + ") -> local " + local + " -> flat " + flat);
         return this.wm.goToWorkspace(flat);
-    },
+    }
 
     // Reorder projects: move the project at `from` to index `to`. Each project
     // owns a contiguous block of workspaces; we move those blocks (with their
@@ -90,7 +86,7 @@ Controller.prototype = {
     // Apply the model move, compute the desired flat sequence of those objects,
     // then walk target positions left->right, reordering the right object into
     // each slot. Finally restore the active (project, local).
-    reorderProject: function (from, to) {
+    reorderProject(from, to) {
         let n = this.state.projectCount();
         if (from < 0 || from >= n || to < 0 || to >= n || from === to) return false;
 
@@ -142,24 +138,24 @@ Controller.prototype = {
 
         log("reorderProject: " + from + " -> " + to + " done");
         return true;
-    },
+    }
 
     // Register a callback(orderedIds[]) invoked after a reorder, so the applet
     // can persist the order to Notion.
-    onOrderChanged: function (cb) { this._onOrderChanged = cb; },
+    onOrderChanged(cb) { this._onOrderChanged = cb; },
 
     // Convenience: move a project one step left/right in the order.
-    moveActiveProjectBy: function (delta) {
+    moveActiveProjectBy(delta) {
         let from = this.state.activeProjectIdx;
         let to = from + delta;
         if (to < 0 || to >= this.state.projectCount()) return false;
         return this.reorderProject(from, to);
-    },
+    }
 
     // Open the active project's Notion page in a NEW browser window, so it
     // lands on the current (home) workspace instead of adding a tab to an
     // existing browser window on some other workspace. Manual by design.
-    openActiveProjectHome: function () {
+    openActiveProjectHome() {
         let p = this.state.activeProject();
         if (!p || !p.notionUrl) {
             log("openActiveProjectHome: no Notion URL for active project");
@@ -168,30 +164,30 @@ Controller.prototype = {
         Browser.openUrlNewWindow(p.notionUrl);
         log("openActiveProjectHome: opened " + p.notionUrl + " in a new window");
         return true;
-    },
+    }
 
     // The project index `delta` steps from the active one, wrapping. Returns -1
     // if there are no projects.
-    _stepProjectIdx: function (delta) {
+    _stepProjectIdx(delta) {
         let n = this.state.projectCount();
         if (n === 0) return -1;
         return (this.state.activeProjectIdx + delta + n) % n;
-    },
+    }
 
     // Cycle to the next/previous project in list order (wrapping).
-    goToNextProjectInOrder: function () {
+    goToNextProjectInOrder() {
         let idx = this._stepProjectIdx(1);
         return idx < 0 ? false : this.goToProject(idx);
-    },
+    }
 
-    goToPrevProjectInOrder: function () {
+    goToPrevProjectInOrder() {
         let idx = this._stepProjectIdx(-1);
         return idx < 0 ? false : this.goToProject(idx);
-    },
+    }
 
     // ---- Intents: navigating within the active project ---------------------
 
-    goToLocalWorkspace: function (localIdx) {
+    goToLocalWorkspace(localIdx) {
         let pIdx = this.state.activeProjectIdx;
         let p = this.state.getProject(pIdx);
         if (!p || localIdx < 0 || localIdx > p.wsCount - 1) {
@@ -202,9 +198,9 @@ Controller.prototype = {
         let flat = Mapping.globalIndex(this.state.counts(), pIdx, localIdx);
         this.state.setLastLocal(pIdx, localIdx);
         return this.wm.goToWorkspace(flat);
-    },
+    }
 
-    nextLocalWorkspace: function () {
+    nextLocalWorkspace() {
         let loc = this.currentLocation();
         if (!loc) return false;
         let p = this.state.getProject(loc.projectIdx);
@@ -213,19 +209,19 @@ Controller.prototype = {
             return this.addWorkspaceToActiveProject();
         }
         return this.goToLocalWorkspace(loc.localIdx + 1);
-    },
+    }
 
-    prevLocalWorkspace: function () {
+    prevLocalWorkspace() {
         let loc = this.currentLocation();
         if (!loc) return false;
         return this.goToLocalWorkspace(loc.localIdx - 1);
-    },
+    }
 
     // ---- Intents: moving the focused window --------------------------------
 
     // Move the focused window to a local workspace within the CURRENT project,
     // then follow it there. Bounds-checked against the active project's strip.
-    moveWindowToLocalWorkspace: function (localIdx) {
+    moveWindowToLocalWorkspace(localIdx) {
         let pIdx = this.state.activeProjectIdx;
         let p = this.state.getProject(pIdx);
         if (!p || localIdx < 0 || localIdx > p.wsCount - 1) {
@@ -239,9 +235,9 @@ Controller.prototype = {
             return true;
         }
         return false;
-    },
+    }
 
-    moveWindowToNextLocal: function () {
+    moveWindowToNextLocal() {
         let loc = this.currentLocation();
         if (!loc) return false;
         let p = this.state.getProject(loc.projectIdx);
@@ -253,17 +249,17 @@ Controller.prototype = {
             return this.moveWindowToLocalWorkspace(this.state.getProject(pIdx).wsCount - 1);
         }
         return this.moveWindowToLocalWorkspace(loc.localIdx + 1);
-    },
+    }
 
-    moveWindowToPrevLocal: function () {
+    moveWindowToPrevLocal() {
         let loc = this.currentLocation();
         if (!loc) return false;
         return this.moveWindowToLocalWorkspace(loc.localIdx - 1);
-    },
+    }
 
     // Move the focused window to another PROJECT (landing on that project's
     // last-used local workspace), and switch there with it.
-    moveWindowToProject: function (projectIdx) {
+    moveWindowToProject(projectIdx) {
         let p = this.state.getProject(projectIdx);
         if (!p) {
             log("moveWindowToProject: invalid project " + projectIdx);
@@ -280,19 +276,19 @@ Controller.prototype = {
             return true;
         }
         return false;
-    },
+    }
 
     // Move the focused window to the next/previous project in list order
     // (wrapping), following it there.
-    moveWindowToNextProjectInOrder: function () {
+    moveWindowToNextProjectInOrder() {
         let idx = this._stepProjectIdx(1);
         return idx < 0 ? false : this.moveWindowToProject(idx);
-    },
+    }
 
-    moveWindowToPrevProjectInOrder: function () {
+    moveWindowToPrevProjectInOrder() {
         let idx = this._stepProjectIdx(-1);
         return idx < 0 ? false : this.moveWindowToProject(idx);
-    },
+    }
 
     // ---- Intents: adding/removing a workspace to the active project --------
 
@@ -302,7 +298,7 @@ Controller.prototype = {
     // end, so we append there, then use the native reorder to slide the new
     // (empty) workspace into insertAt — no per-window shuffling. Returns the new
     // last local index, or -1 on failure.
-    _growActiveProjectStrip: function () {
+    _growActiveProjectStrip() {
         let pIdx = this.state.activeProjectIdx;
         let counts = this.state.counts();
         let oldTotal = Mapping.totalWorkspaces(counts);
@@ -320,19 +316,19 @@ Controller.prototype = {
             + " now " + this.state.getProject(pIdx).wsCount
             + " (inserted at flat " + insertAt + ")");
         return this.state.getProject(pIdx).wsCount - 1;
-    },
+    }
 
-    addWorkspaceToActiveProject: function () {
+    addWorkspaceToActiveProject() {
         let newLocal = this._growActiveProjectStrip();
         if (newLocal < 0) return false;
         return this.goToLocalWorkspace(newLocal);
-    },
+    }
 
     // Remove the last workspace of a project's strip. Move its windows into the
     // previous workspace (same project — safe, since we keep >=1 home), then
     // remove that specific flat index. Cinnamon reindexes; other partitions
     // stay intact.
-    removeLastWorkspaceOfActiveProject: function () {
+    removeLastWorkspaceOfActiveProject() {
         let pIdx = this.state.activeProjectIdx;
         let p = this.state.getProject(pIdx);
         if (!p) return false;
@@ -361,14 +357,14 @@ Controller.prototype = {
         log("removeLastWorkspaceOfActiveProject: " + p.name + " now "
             + this.state.getProject(pIdx).wsCount + " (removed flat " + removeAt + ")");
         return true;
-    },
+    }
 
     // On-demand: remove ALL empty workspaces of the active project (including
     // the home workspace and middle ones), keeping only the one currently
     // focused. The active workspace is always kept, so the project retains >= 1.
     // We gather target flats first, then remove them high -> low so the
     // remaining indices stay valid as Cinnamon reindexes. Returns count removed.
-    removeEmptyWorkspacesOfActiveProject: function () {
+    removeEmptyWorkspacesOfActiveProject() {
         let pIdx = this.state.activeProjectIdx;
         let p = this.state.getProject(pIdx);
         if (!p) return 0;
@@ -395,21 +391,21 @@ Controller.prototype = {
         log("removeEmptyWorkspacesOfActiveProject: " + p.name + " removed "
             + toRemove.length + ", now " + this.state.getProject(pIdx).wsCount);
         return toRemove.length;
-    },
+    }
 
     // ---- M9: live add / remove of whole projects ---------------------------
 
     // Add a project to the live deck: append its partition at the end of the
     // flat list (safe — no window shifting), grow the model. Stays put; open the
     // project's Notion page manually with the keybinding when you want it.
-    addProjectLive: function (def) {
+    addProjectLive(def) {
         let idx = this.state.appendProject(def);
         // The new project's single home workspace goes at the global end, which
         // is exactly where Cinnamon appends — so a plain reconcile is correct.
         this._reconcileWorkspaceCount();
         log("addProjectLive: " + def.name + " (index " + idx + ")");
         return idx;
-    },
+    }
 
     // Remove a project from the live deck (destructive). Requests a graceful
     // close of every window in the project's partition, waits, then:
@@ -419,7 +415,7 @@ Controller.prototype = {
     //     model, landing on the MRU-previous project if we removed the active one.
     // cb(err, info): err null on success; err "windows-open" with
     // info.openTitles when aborted.
-    removeProjectLive: function (projectIdx, cb) {
+    removeProjectLive(projectIdx, cb) {
         let p = this.state.getProject(projectIdx);
         if (!p) { cb && cb("invalid-project"); return; }
 
@@ -472,11 +468,11 @@ Controller.prototype = {
             cb && cb(null);
             return false;
         });
-    },
+    }
 
     // ---- Introspection for logging / future UI -----------------------------
 
-    describe: function () {
+    describe() {
         let loc = this.currentLocation();
         let p = this.state.activeProject();
         let where = loc
@@ -487,10 +483,10 @@ Controller.prototype = {
             + " | flat=" + this.wm.getActiveIndex() + "/" + this.wm.getWorkspaceCount()
             + " | counts=[" + this.state.counts().join(",") + "]"
             + " | mru=[" + this.state.mruOrder().join(",") + "]";
-    },
+    }
 
-    destroy: function () {
+    destroy() {
         this.state = null;
         this.wm = null;
-    },
+    }
 };

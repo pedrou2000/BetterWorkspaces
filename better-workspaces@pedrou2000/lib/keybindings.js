@@ -44,11 +44,6 @@ function _parse(accel) {
     }
 }
 
-function KeyBinder() {
-    this._touched = {}; // "schema\0key" -> original [..] (saved once, for restore)
-    this._added = [];   // hotkey names we registered
-}
-
 function _open(schema) {
     try {
         let src = Gio.SettingsSchemaSource.get_default();
@@ -57,21 +52,26 @@ function _open(schema) {
     } catch (e) { return null; }
 }
 
-KeyBinder.prototype = {
+var KeyBinder = class KeyBinder {
+
+    constructor() {
+        this._touched = {}; // "schema\0key" -> original [..] (saved once, for restore)
+        this._added = [];   // hotkey names we registered
+    }
 
     // Save a gsettings key's current value ONCE, so teardown restores the true
     // original even if we both clear and reassign the same key.
-    _recordOriginal: function (schema, key, settings) {
+    _recordOriginal(schema, key, settings) {
         let id = schema + "\0" + key;
         if (this._touched[id] !== undefined) return;
         try { this._touched[id] = settings.get_strv(key); }
         catch (e) { this._touched[id] = []; }
-    },
+    }
 
     // Clear any Cinnamon binding that maps to `accel`, remembering the original.
     // `exceptId` ("schema\0key") is left untouched — used when assigning an
     // action to an accel so we don't clear the very key we're about to set.
-    _clearConflicts: function (accel, exceptId) {
+    _clearConflicts(accel, exceptId) {
         let want = _parse(accel);
         if (!want) { L.error("could not parse accel: " + accel); return; }
 
@@ -109,7 +109,7 @@ KeyBinder.prototype = {
         // keybindingManager.applet_bindings, invisible to gsettings) bound to
         // the same accel — general, not app-specific.
         this._clearXletConflicts(want);
-    },
+    }
 
     // Remove any hotkey registered via keybindingManager whose accelerator
     // matches `want` ([keyval,mods]) but that we didn't register ourselves.
@@ -118,7 +118,7 @@ KeyBinder.prototype = {
     // than gsettings — e.g. the notifications applet's <Super>n. We call the
     // public removeHotKey(name). Not restored on teardown (the owning applet
     // re-registers on its next load). Fully guarded.
-    _clearXletConflicts: function (want) {
+    _clearXletConflicts(want) {
         try {
             let km = Main.keybindingManager;
             if (!km || !km.bindings || !km.bindings.values) return;
@@ -145,10 +145,10 @@ KeyBinder.prototype = {
         } catch (e) {
             L.error("_clearXletConflicts: " + e.toString());
         }
-    },
+    }
 
     // Force-register a hotkey: clear conflicts, then add ours.
-    force: function (name, accel, handler) {
+    force(name, accel, handler) {
         this._clearConflicts(accel);
         try {
             Main.keybindingManager.addHotKey(name, accel, handler);
@@ -157,13 +157,13 @@ KeyBinder.prototype = {
         } catch (e) {
             L.error("addHotKey(" + name + "," + accel + "): " + e.toString());
         }
-    },
+    }
 
     // Assign a Cinnamon gsettings keybinding to specific accelerators (e.g. put
     // window tiling on Super+Shift+arrows). Clears any OTHER action holding the
     // same accel first (so ours wins — e.g. move-to-monitor-down also claiming
     // Super+Shift+Down), records originals for restore. Returns true on success.
-    assignGsettings: function (schema, key, accels) {
+    assignGsettings(schema, key, accels) {
         let settings = _open(schema);
         if (!settings) { L.error("assign: schema not found " + schema); return false; }
         try {
@@ -184,10 +184,10 @@ KeyBinder.prototype = {
             L.error("assign " + schema + " " + key + ": " + e.toString());
             return false;
         }
-    },
+    }
 
     // Remove our hotkeys and restore every touched gsettings key to its original.
-    teardown: function () {
+    teardown() {
         for (let i = 0; i < this._added.length; i++) {
             try { Main.keybindingManager.removeHotKey(this._added[i]); } catch (e) {}
         }
@@ -206,7 +206,7 @@ KeyBinder.prototype = {
         }
         this._touched = {};
         try { Gio.Settings.sync(); } catch (e) {}
-    },
+    }
 };
 
 var KeyBindings = { KeyBinder: KeyBinder };

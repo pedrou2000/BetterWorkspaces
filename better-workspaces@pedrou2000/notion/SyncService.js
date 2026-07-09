@@ -15,52 +15,48 @@ const Mainloop = imports.mainloop;
 const AppletDir = imports.ui.appletManager.applets["better-workspaces@pedrou2000"];
 const L = AppletDir.lib.logger.Logger.makeLogger("sync");
 const Persistence = AppletDir.lib.persistence.Persistence;
-const NotionClientModule = AppletDir.notion.NotionClient.NotionClientModule;
+const NotionClient = AppletDir.notion.NotionClient.NotionClient;
 const ProjectMapper = AppletDir.notion.ProjectMapper.ProjectMapper;
 
 const DEFAULT_SYNC_INTERVAL_S = AppletDir.lib.constants.Constants.DEFAULT_SYNC_INTERVAL_S;
 
-const CACHE_FILE = "projects-cache.json";
+var CACHE_FILE = "projects-cache.json";
 
-function SyncService(token, databaseId, opts) {
-    this._init(token, databaseId, opts);
-}
+var SyncService = class SyncService {
 
-SyncService.prototype = {
-
-    _init: function (token, databaseId, opts) {
+    constructor(token, databaseId, opts) {
         opts = opts || {};
         this.databaseId = databaseId;
         this.intervalSec = opts.intervalSec || DEFAULT_SYNC_INTERVAL_S;
-        this.client = new NotionClientModule.NotionClient(token);
+        this.client = new NotionClient(token);
         this._timer = 0;
         this._onUpdate = null; // cb(projects[])
-    },
+    }
 
-    setToken: function (token) { this.client.setToken(token); },
-    setDatabaseId: function (id) { this.databaseId = id; },
-    onUpdate: function (cb) { this._onUpdate = cb; },
-    onStatus: function (cb) { this._onStatus = cb; },
+    setToken(token) { this.client.setToken(token); }
+    setDatabaseId(id) { this.databaseId = id; }
+    onUpdate(cb) { this._onUpdate = cb; }
+    onStatus(cb) { this._onStatus = cb; }
 
     // Notify the status callback (states: "unconfigured"|"loading"|"ok"|"error").
-    _setStatus: function (s) {
+    _setStatus(s) {
         this._status = s;
         if (this._onStatus) {
             try { this._onStatus(s); } catch (e) { L.error("onStatus cb: " + e.toString()); }
         }
-    },
+    }
 
     // Read whatever is currently cached on disk (instant, offline-safe).
     // Returns ALL non-archived projects; callers derive the deck by filtering
     // inWorkspace=true.
-    readCache: function () {
+    readCache() {
         let cached = Persistence.readJSON(CACHE_FILE, null);
         return (cached && cached.projects) ? cached.projects : [];
-    },
+    }
 
     // Write the Workspace checkbox for a project back to Notion, then update the
     // cached entry's inWorkspace flag on success. cb(err) — err null on success.
-    setWorkspaceFlag: function (pageId, value, cb) {
+    setWorkspaceFlag(pageId, value, cb) {
         if (!this.client.hasToken()) { cb && cb("no-token"); return; }
         this.client.updatePageCheckbox(pageId, "Workspace", value, (err) => {
             if (err) {
@@ -77,11 +73,11 @@ SyncService.prototype = {
             L.log("setWorkspaceFlag: " + pageId + " -> " + value);
             cb && cb(null);
         });
-    },
+    }
 
     // Write the Workspace Order number for a project back to Notion and update
     // the cached entry. cb(err) — err null on success.
-    setWorkspaceOrder: function (pageId, order, cb) {
+    setWorkspaceOrder(pageId, order, cb) {
         if (!this.client.hasToken()) { cb && cb("no-token"); return; }
         this.client.updatePageNumber(pageId, "Workspace Order", order, (err) => {
             if (err) {
@@ -96,17 +92,17 @@ SyncService.prototype = {
             this._writeCache(projects);
             cb && cb(null);
         });
-    },
+    }
 
     // Clear a project's Workspace Order (set to null in Notion + cache), so it
     // sorts last (nulls-last) once deactivated.
-    clearWorkspaceOrder: function (pageId, cb) {
+    clearWorkspaceOrder(pageId, cb) {
         this.setWorkspaceOrder(pageId, null, cb);
-    },
+    }
 
     // Highest Workspace Order currently in the cache (among any project), or -1
     // if none set. Used to place a newly-activated project at the bottom.
-    maxOrder: function () {
+    maxOrder() {
         let projects = this.readCache();
         let max = -1;
         for (let i = 0; i < projects.length; i++) {
@@ -114,12 +110,12 @@ SyncService.prototype = {
             if (typeof o === "number" && o > max) max = o;
         }
         return max;
-    },
+    }
 
     // Persist an ordered list of project ids as Workspace Order = 0,1,2,...
     // First update the local cache SYNCHRONOUSLY (so an immediate re-render sees
     // the new order), then fire the async Notion writes.
-    persistOrder: function (orderedIds) {
+    persistOrder(orderedIds) {
         // 1) Synchronous cache update.
         let projects = this.readCache();
         let orderById = {};
@@ -134,10 +130,10 @@ SyncService.prototype = {
             this.setWorkspaceOrder(orderedIds[i], i, null);
         }
         L.log("persistOrder: cache updated + writing order for " + orderedIds.length + " projects");
-    },
+    }
 
     // Trigger one sync now. Non-blocking; result flows via cache + onUpdate.
-    syncNow: function () {
+    syncNow() {
         if (!this.databaseId || !this.client.hasToken()) {
             L.log("syncNow: not configured, skipping");
             this._setStatus("unconfigured");
@@ -157,42 +153,37 @@ SyncService.prototype = {
             this._setStatus("ok");
             this._writeCache(projects);
             L.log("syncNow: cached " + projects.length + " projects: ["
-                + projects.map(function (p) { return p.name; }).join(", ") + "]");
+                + projects.map((p) => p.name).join(", ") + "]");
             if (this._onUpdate) {
                 try { this._onUpdate(projects); }
                 catch (e) { L.error("onUpdate cb: " + e.toString()); }
             }
         });
-    },
+    }
 
-    _writeCache: function (projects) {
-        Persistence.writeJSON(CACHE_FILE, {
-            // No Date.now() dependency here; timestamp added by callers if needed.
-            projects: projects,
-        });
-    },
+    _writeCache(projects) {
+        Persistence.writeJSON(CACHE_FILE, { projects: projects });
+    }
 
     // Start periodic background syncing (and do one immediately).
-    start: function () {
+    start() {
         this.stop();
         this.syncNow();
         this._timer = Mainloop.timeout_add_seconds(
             this.intervalSec, () => { this.syncNow(); return true; });
         L.log("started: interval " + this.intervalSec + "s");
-    },
+    }
 
-    stop: function () {
+    stop() {
         if (this._timer) {
             Mainloop.source_remove(this._timer);
             this._timer = 0;
         }
-    },
+    }
 
-    destroy: function () {
+    destroy() {
         this.stop();
         this._onUpdate = null;
         this.client = null;
-    },
+    }
 };
-
-var SyncServiceModule = { SyncService: SyncService, CACHE_FILE: CACHE_FILE };

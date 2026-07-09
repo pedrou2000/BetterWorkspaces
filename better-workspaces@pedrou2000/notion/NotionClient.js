@@ -18,49 +18,46 @@ const L = AppletDir.lib.logger.Logger.makeLogger("notion-http");
 const NOTION_BASE = "https://api.notion.com/v1";
 const NOTION_VERSION = "2022-06-28"; // Notion API version header
 
-// Detect libsoup major version once (3.x exposes Soup.MAJOR_VERSION).
-const SOUP3 = (typeof Soup.MAJOR_VERSION !== "undefined" && Soup.MAJOR_VERSION >= 3);
+// Detect libsoup major version once (3.x exposes Soup.MAJOR_VERSION). Exported
+// so other modules (e.g. IconRenderer) can branch on it.
+var SOUP3 = (typeof Soup.MAJOR_VERSION !== "undefined" && Soup.MAJOR_VERSION >= 3);
 
-function NotionClient(token) {
-    this._init(token);
-}
+var NotionClient = class NotionClient {
 
-NotionClient.prototype = {
-
-    _init: function (token) {
+    constructor(token) {
         this.token = token || "";
         this.session = new Soup.Session();
         // A short timeout so we never hang the shell waiting on the network.
         try { this.session.timeout = 15; } catch (e) {}
-    },
+    }
 
-    setToken: function (token) {
+    setToken(token) {
         this.token = token || "";
-    },
+    }
 
-    hasToken: function () {
+    hasToken() {
         return this.token && this.token.length > 0;
-    },
+    }
 
-    _headers: function (msg) {
+    _headers(msg) {
         let h = SOUP3 ? msg.get_request_headers() : msg.request_headers;
         h.append("Authorization", "Bearer " + this.token);
         h.append("Notion-Version", NOTION_VERSION);
         h.append("Content-Type", "application/json");
-    },
+    }
 
     // POST JSON to `path`. Calls cb(err, parsedObjOrNull).
-    _post: function (path, bodyObj, cb) {
+    _post(path, bodyObj, cb) {
         this._request("POST", path, bodyObj, cb);
-    },
+    }
 
     // PATCH JSON to `path`. Calls cb(err, parsedObjOrNull).
-    _patch: function (path, bodyObj, cb) {
+    _patch(path, bodyObj, cb) {
         this._request("PATCH", path, bodyObj, cb);
-    },
+    }
 
     // Send a JSON request with the given HTTP method. cb(err, parsedObjOrNull).
-    _request: function (method, path, bodyObj, cb) {
+    _request(method, path, bodyObj, cb) {
         if (!this.hasToken()) {
             cb("no-token", null);
             return;
@@ -91,13 +88,11 @@ NotionClient.prototype = {
                     });
             } else {
                 // Soup 2.4
-                msg.set_request(
-                    "application/json", Soup.MemoryUse.COPY, bodyText);
+                msg.set_request("application/json", Soup.MemoryUse.COPY, bodyText);
                 this.session.queue_message(msg, (session, message) => {
                     try {
                         let status = message.status_code;
-                        let data = message.response_body
-                            ? message.response_body.data : "";
+                        let data = message.response_body ? message.response_body.data : "";
                         this._handleResponse(status, data, cb);
                     } catch (e) {
                         L.error("queue_message cb: " + e.toString());
@@ -106,47 +101,44 @@ NotionClient.prototype = {
                 });
             }
         } catch (e) {
-            L.error("_post(" + path + "): " + e.toString());
+            L.error("_request(" + path + "): " + e.toString());
             cb(e.toString(), null);
         }
-    },
+    }
 
-    _handleResponse: function (status, data, cb) {
+    _handleResponse(status, data, cb) {
         if (status < 200 || status >= 300) {
             L.error("HTTP " + status + " — " + (data || "").slice(0, 300));
             cb("http-" + status, null);
             return;
         }
         try {
-            let parsed = JSON.parse(data);
-            cb(null, parsed);
+            cb(null, JSON.parse(data));
         } catch (e) {
             L.error("JSON parse: " + e.toString());
             cb("bad-json", null);
         }
-    },
+    }
 
     // Query a database. `body` is the Notion query payload (filter/sorts).
     // Handles a single page of results (up to 100); pagination can be added
     // later if the project list ever exceeds that.
-    queryDatabase: function (dbId, body, cb) {
+    queryDatabase(dbId, body, cb) {
         this._post("/databases/" + dbId + "/query", body, cb);
-    },
+    }
 
     // Set a checkbox property on a page. cb(err, parsedObjOrNull).
     // Requires the integration to have update-content capability.
-    updatePageCheckbox: function (pageId, propName, value, cb) {
+    updatePageCheckbox(pageId, propName, value, cb) {
         let props = {};
         props[propName] = { checkbox: !!value };
         this._patch("/pages/" + pageId, { properties: props }, cb);
-    },
+    }
 
     // Set a number property on a page. cb(err, parsedObjOrNull).
-    updatePageNumber: function (pageId, propName, value, cb) {
+    updatePageNumber(pageId, propName, value, cb) {
         let props = {};
         props[propName] = { number: value };
         this._patch("/pages/" + pageId, { properties: props }, cb);
-    },
+    }
 };
-
-var NotionClientModule = { NotionClient: NotionClient, SOUP3: SOUP3 };

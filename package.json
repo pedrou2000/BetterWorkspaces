@@ -1,0 +1,8 @@
+{
+  "name": "better-workspaces-dev",
+  "private": true,
+  "description": "Dev harness for BetterWorkspaces (tests only — the applet itself runs under GJS/Cinnamon)",
+  "scripts": {
+    "test": "node --test tests/*.test.js"
+  }
+}

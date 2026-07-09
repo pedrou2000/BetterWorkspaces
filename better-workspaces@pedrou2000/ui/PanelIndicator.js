@@ -10,7 +10,6 @@
  * Released under the GNU General Public License v2 (see LICENSE).
  */
 const St = imports.gi.St;
-const Lang = imports.lang;
 const Tooltips = imports.ui.tooltips;
 const DND = imports.ui.dnd;
 
@@ -21,13 +20,9 @@ function log(msg) { _L.log(msg); }
 
 const ICON_SIZE = AppletDir.lib.constants.Constants.PANEL_ICON_SIZE;
 
-function PanelIndicator(appletActor, controller, orientation, opts) {
-    this._init(appletActor, controller, orientation, opts);
-}
+var PanelIndicator = class PanelIndicator {
 
-PanelIndicator.prototype = {
-
-    _init: function (appletActor, controller, orientation, opts) {
+    constructor(appletActor, controller, orientation, opts) {
         this.actor = appletActor;
         this.controller = controller;
         this.orientation = orientation;
@@ -37,37 +32,36 @@ PanelIndicator.prototype = {
         this._status = "ok";
         this._installDropTarget();
         this.rebuild();
-    },
+    }
 
     // Make the applet's button row a DnD drop target so dragged project icons
     // can be reordered horizontally (Cinnamon protocol; the panel isn't modal,
     // so DnD works here). acceptDrop computes the target slot from pointer x.
-    _installDropTarget: function () {
-        let self = this;
+    _installDropTarget() {
         this.actor._delegate = {
-            handleDragOver: function (source, actor, x, y, time) {
-                self._showDropHint(self._dropSlotForX(x));
+            handleDragOver: (source, actor, x, y, time) => {
+                this._showDropHint(this._dropSlotForX(x));
                 return DND.DragMotionResult.MOVE_DROP;
             },
-            handleDragOut: function () { self._clearDropHint(); },
-            acceptDrop: function (source, actor, x, y, time) {
+            handleDragOut: () => { this._clearDropHint(); },
+            acceptDrop: (source, actor, x, y, time) => {
                 let from = (source && source._bwIdx !== undefined) ? source._bwIdx : -1;
-                let slot = self._dropSlotForX(x);
-                self._clearDropHint();
+                let slot = this._dropSlotForX(x);
+                this._clearDropHint();
                 if (from < 0) return false;
                 let target = slot;
                 if (target > from) target -= 1;
                 if (target !== from && target >= 0) {
-                    self.controller.reorderProject(from, target);
+                    this.controller.reorderProject(from, target);
                     // onOrderChanged (applet) rebuilds panel + persists order.
                 }
                 return true;
             },
         };
-    },
+    }
 
     // Insertion slot 0..count from pointer x, vs project button horizontal centers.
-    _dropSlotForX: function (x) {
+    _dropSlotForX(x) {
         let n = this._buttons.length;
         for (let i = 0; i < n; i++) {
             let box = this._buttons[i].get_allocation_box();
@@ -75,28 +69,27 @@ PanelIndicator.prototype = {
             if (x < center) return i;
         }
         return n;
-    },
+    }
 
-    _showDropHint: function (slot) {
+    _showDropHint(slot) {
         this._clearDropHint();
         let idx = Math.min(slot, this._buttons.length - 1);
         if (idx >= 0 && this._buttons[idx]) {
             this._buttons[idx].add_style_pseudo_class('drop-target');
             this._hintedBtn = this._buttons[idx];
         }
-    },
+    }
 
-    _clearDropHint: function () {
+    _clearDropHint() {
         if (this._hintedBtn) {
             try { this._hintedBtn.remove_style_pseudo_class('drop-target'); } catch (e) {}
             this._hintedBtn = null;
         }
-    },
+    }
 
     // Reflect Notion connection state: "unconfigured" | "loading" | "ok" |
-    // "error". Shown as a small leading status dot with a tooltip; when not OK
-    // the icons are also dimmed via a style class on the container.
-    setStatus: function (status) {
+    // "error". Shown as a small leading status dot with a tooltip.
+    setStatus(status) {
         this._status = status;
         if (!this._statusDot) return;
         let map = {
@@ -109,10 +102,10 @@ PanelIndicator.prototype = {
         this._statusDot.set_text(s.text);
         this._statusDot.visible = (s.text.length > 0);
         if (this._statusTip) this._statusTip.set_text(s.tip);
-    },
+    }
 
     // Full rebuild: one icon button per project + a trailing position label.
-    rebuild: function () {
+    rebuild() {
         for (let i = 0; i < this._buttons.length; i++) {
             let t = this._buttons[i]._bwTooltip;
             if (t && t.destroy) { try { t.destroy(); } catch (e) {} }
@@ -147,10 +140,10 @@ PanelIndicator.prototype = {
             // downloading, swap it in when the download completes.
             btn.set_child(this._makeIcon(p, i));
 
-            btn.connect('clicked', Lang.bind(this, function (b) {
+            btn.connect('clicked', (b) => {
                 this.controller.goToProject(b._projectIdx);
                 this.update();
-            }));
+            });
             // Hover tooltip with the project name. PanelItemTooltip is panel-
             // aware, so it positions relative to the panel (above, when the
             // panel is at the bottom) instead of always dropping downward.
@@ -181,9 +174,9 @@ PanelIndicator.prototype = {
                 style_class: 'better-workspaces-manage-glyph',
                 text: "⋯",
             }));
-            manage.connect('clicked', Lang.bind(this, function () {
+            manage.connect('clicked', () => {
                 try { this._opts.onManage(); } catch (e) { log("onManage: " + e.toString()); }
-            }));
+            });
             manage._bwManageTip = new Tooltips.PanelItemTooltip(
                 { actor: manage }, "Manage workspace projects", this.orientation);
             this.actor.add(manage, { y_align: St.Align.MIDDLE, y_fill: false });
@@ -191,43 +184,40 @@ PanelIndicator.prototype = {
 
         this.update();
         this.setStatus(this._status); // re-apply after rebuild recreates the dot
-    },
+    }
 
-    _makeIcon: function (project, idx) {
+    _makeIcon(project, idx) {
         return IconRenderer.makeActor(
             project.icon, project.name, ICON_SIZE,
-            Lang.bind(this, function () {
+            () => {
                 // Download finished: rebuild just this button's child.
                 let btn = this._buttons[idx];
                 if (btn) {
                     try { btn.set_child(this._makeIcon(project, idx)); }
                     catch (e) { log("icon swap failed: " + e.toString()); }
                 }
-            }));
-    },
+            });
+    }
 
     // Make a panel project button draggable for reorder. It's its own DnD
     // delegate: getDragActor provides a floating icon clone. The actual reorder
     // happens in the row's acceptDrop (_installDropTarget).
-    _makeButtonDraggable: function (btn, project, idx) {
-        let self = this;
+    _makeButtonDraggable(btn, project, idx) {
         btn._bwIdx = idx;
         btn._delegate = btn;
-        btn.getDragActor = function () {
-            return IconRenderer.makeActor(project.icon, project.name, ICON_SIZE);
-        };
-        btn.getDragActorSource = function () { return btn; };
+        btn.getDragActor = () => IconRenderer.makeActor(project.icon, project.name, ICON_SIZE);
+        btn.getDragActorSource = () => btn;
         try {
             let draggable = DND.makeDraggable(btn);
-            draggable.connect('drag-end', function () { self._clearDropHint(); });
-            draggable.connect('drag-cancelled', function () { self._clearDropHint(); });
+            draggable.connect('drag-end', () => this._clearDropHint());
+            draggable.connect('drag-cancelled', () => this._clearDropHint());
         } catch (e) {
             log("makeButtonDraggable: " + e.toString());
         }
-    },
+    }
 
     // Lightweight refresh: highlight active project, update position label.
-    update: function () {
+    update() {
         let loc = this.controller.currentLocation();
         let activeProjectIdx = loc ? loc.projectIdx : this.controller.state.activeProjectIdx;
 
@@ -241,13 +231,13 @@ PanelIndicator.prototype = {
         if (this._posLabel) {
             this._posLabel.set_text(loc ? this._dotsFor(loc) : "");
         }
-    },
+    }
 
     // Carousel dots for the current project's strip: the active workspace is a
     // large filled dot, the others small dots — e.g. "· ● ·". Hidden entirely
     // when the project has only one workspace (a bare "1/1" carries no info).
     // Falls back to compact text if the strip is very long.
-    _dotsFor: function (loc) {
+    _dotsFor(loc) {
         let p = this.controller.state.getProject(loc.projectIdx);
         if (!p || p.wsCount <= 1) return "";           // single workspace -> nothing
         if (p.wsCount > 12) {                          // too many for dots
@@ -258,9 +248,9 @@ PanelIndicator.prototype = {
             parts.push(i === loc.localIdx ? "●" : "·");
         }
         return "  " + parts.join(" ");
-    },
+    }
 
-    destroy: function () {
+    destroy() {
         for (let i = 0; i < this._buttons.length; i++) {
             let t = this._buttons[i]._bwTooltip;
             if (t && t.destroy) { try { t.destroy(); } catch (e) {} }
@@ -268,5 +258,5 @@ PanelIndicator.prototype = {
         if (this.actor) this.actor.destroy_all_children();
         this._buttons = [];
         this._posLabel = null;
-    },
+    }
 };

@@ -24,8 +24,8 @@ const WorkspaceManager = AppletDir.wm.WorkspaceManager;
 const ControllerModule = AppletDir.core.Controller;
 const PanelIndicatorModule = AppletDir.ui.PanelIndicator;
 const ProjectSwitcherModule = AppletDir.ui.ProjectSwitcher;
-const ProjectTogglePanelModule = AppletDir.ui.ProjectTogglePanel.ProjectTogglePanelModule;
-const SyncServiceModule = AppletDir.notion.SyncService.SyncServiceModule;
+const ProjectTogglePanel = AppletDir.ui.ProjectTogglePanel.ProjectTogglePanel;
+const SyncService = AppletDir.notion.SyncService.SyncService;
 const ProjectMapper = AppletDir.notion.ProjectMapper.ProjectMapper;
 const KeyBindings = AppletDir.lib.keybindings.KeyBindings;
 const Constants = AppletDir.lib.constants.Constants;
@@ -266,7 +266,7 @@ MyApplet.prototype = {
         let dbId = this.settings.getValue("notionDatabaseId") || "";
         let interval = this.settings.getValue("syncIntervalSec") || Constants.DEFAULT_SYNC_INTERVAL_S;
 
-        this.sync = new SyncServiceModule.SyncService(token, dbId, { intervalSec: interval });
+        this.sync = new SyncService(token, dbId, { intervalSec: interval });
 
         // A completed sync refreshes the on-disk cache (for the NEXT launch) and
         // logs the result. We deliberately do NOT reshape the live deck mid-
@@ -318,7 +318,7 @@ MyApplet.prototype = {
     // _handleToggle, reorders through reorderProject.
     openTogglePanel: function () {
         try {
-            let panel = new ProjectTogglePanelModule.ProjectTogglePanel(
+            let panel = new ProjectTogglePanel(
                 Lang.bind(this, function () {
                     let cache = this.sync ? this.sync.readCache() : [];
                     return ProjectMapper.sortByOrder(cache);

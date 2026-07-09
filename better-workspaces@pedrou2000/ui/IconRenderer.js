@@ -24,7 +24,7 @@ const ByteArray = imports.byteArray;
 const AppletDir = imports.ui.appletManager.applets["better-workspaces@pedrou2000"];
 const L = AppletDir.lib.logger.Logger.makeLogger("icons");
 const Persistence = AppletDir.lib.persistence.Persistence;
-const SOUP3 = AppletDir.notion.NotionClient.NotionClientModule.SOUP3;
+const SOUP3 = AppletDir.notion.NotionClient.SOUP3;
 
 // One shared session for icon downloads.
 let _session = null;

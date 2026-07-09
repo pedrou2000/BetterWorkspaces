@@ -34,47 +34,43 @@ function realWindows(ws) {
     return out;
 }
 
-function WorkspaceManager() {
-    this._init();
-}
+var WorkspaceManager = class WorkspaceManager {
 
-WorkspaceManager.prototype = {
-
-    _init: function () {
+    constructor() {
         // Nothing to hold yet; global.workspace_manager is always live.
-    },
+    }
 
     // Convenience accessor so the rest of the method bodies stay short.
-    _wm: function () {
+    _wm() {
         return global.workspace_manager;
-    },
+    }
 
-    _now: function () {
+    _now() {
         return global.get_current_time();
-    },
+    }
 
     // ---- Reads -------------------------------------------------------------
 
-    getWorkspaceCount: function () {
+    getWorkspaceCount() {
         return this._wm().n_workspaces;
-    },
+    }
 
-    getActiveIndex: function () {
+    getActiveIndex() {
         return this._wm().get_active_workspace_index();
-    },
+    }
 
     // Number of "real" windows on a workspace, EXCLUDING windows pinned to all
     // workspaces (sticky windows appear in every workspace's list and would
     // otherwise make every workspace look non-empty).
-    countWindows: function (index) {
+    countWindows(index) {
         return realWindows(this._wm().get_workspace_by_index(index)).length;
-    },
+    }
 
     // ---- Switching ---------------------------------------------------------
 
     // Activate the workspace at `index`. Returns true on success, false if the
     // index is out of range (no-op, logged) — never throws.
-    goToWorkspace: function (index) {
+    goToWorkspace(index) {
         try {
             let ws = this._wm().get_workspace_by_index(index);
             if (ws === null) {
@@ -88,12 +84,12 @@ WorkspaceManager.prototype = {
             logError("goToWorkspace(" + index + "): " + e.toString());
             return false;
         }
-    },
+    }
 
     // ---- Creating / removing ----------------------------------------------
 
     // Append a new workspace at the end. Returns its index, or -1 on failure.
-    createWorkspace: function () {
+    createWorkspace() {
         try {
             let before = this.getWorkspaceCount();
             this._wm().append_new_workspace(false, this._now());
@@ -110,17 +106,17 @@ WorkspaceManager.prototype = {
             logError("createWorkspace: " + e.toString());
             return -1;
         }
-    },
+    }
 
     // The MetaWorkspace object at `index` (or null). Hold onto the OBJECT when
     // doing several reorders in a row, since indices shift after each move.
-    getWorkspace: function (index) {
+    getWorkspace(index) {
         return this._wm().get_workspace_by_index(index);
-    },
+    }
 
     // Move a specific workspace OBJECT to `toIndex`, carrying its windows, via
     // Muffin's native reorder_workspace (no per-window shuffling).
-    reorderWorkspaceObject: function (ws, toIndex) {
+    reorderWorkspaceObject(ws, toIndex) {
         try {
             if (!ws) return false;
             this._wm().reorder_workspace(ws, toIndex);
@@ -129,11 +125,11 @@ WorkspaceManager.prototype = {
             logError("reorderWorkspaceObject(-> " + toIndex + "): " + e.toString());
             return false;
         }
-    },
+    }
 
     // Move the workspace at `fromIndex` to `toIndex` (single move). No-op if
     // equal/out of range.
-    reorderWorkspace: function (fromIndex, toIndex) {
+    reorderWorkspace(fromIndex, toIndex) {
         let count = this.getWorkspaceCount();
         if (fromIndex === toIndex) return true;
         if (fromIndex < 0 || fromIndex >= count || toIndex < 0 || toIndex >= count) {
@@ -143,13 +139,13 @@ WorkspaceManager.prototype = {
         let ok = this.reorderWorkspaceObject(this.getWorkspace(fromIndex), toIndex);
         if (ok) log("reorderWorkspace: " + fromIndex + " -> " + toIndex);
         return ok;
-    },
+    }
 
     // Remove the workspace at `index`. Guards:
     //   - refuses to remove the last remaining workspace (Cinnamon needs >= 1)
     //   - out-of-range index is a logged no-op
     // Returns true on success.
-    removeWorkspace: function (index) {
+    removeWorkspace(index) {
         try {
             let count = this.getWorkspaceCount();
             if (count <= 1) {
@@ -170,19 +166,19 @@ WorkspaceManager.prototype = {
             logError("removeWorkspace(" + index + "): " + e.toString());
             return false;
         }
-    },
+    }
 
     // Remove the last workspace (convenient inverse of createWorkspace).
-    removeLastWorkspace: function () {
+    removeLastWorkspace() {
         return this.removeWorkspace(this.getWorkspaceCount() - 1);
-    },
+    }
 
     // ---- Moving windows ----------------------------------------------------
 
     // Move the currently focused window to workspace `index`.
     // Returns true if a window was moved, false if there was no focused window
     // or the index was invalid.
-    moveFocusedWindowTo: function (index) {
+    moveFocusedWindowTo(index) {
         try {
             let count = this.getWorkspaceCount();
             if (index < 0 || index > count - 1) {
@@ -203,18 +199,18 @@ WorkspaceManager.prototype = {
             logError("moveFocusedWindowTo(" + index + "): " + e.toString());
             return false;
         }
-    },
+    }
 
     // List non-pinned windows on a single workspace index.
-    listWindowsOnWorkspace: function (index) {
+    listWindowsOnWorkspace(index) {
         return realWindows(this._wm().get_workspace_by_index(index));
-    },
+    }
 
     // Move EVERY window on workspace `from` to workspace `to`. Used when
     // inserting/removing a workspace in the middle of the flat list so a
     // project's partition can grow/shrink without scattering later projects.
     // Skips windows pinned to all workspaces (is_on_all_workspaces()).
-    moveAllWindows: function (from, to) {
+    moveAllWindows(from, to) {
         try {
             let windows = realWindows(this._wm().get_workspace_by_index(from));
             for (let i = 0; i < windows.length; i++) {
@@ -225,12 +221,12 @@ WorkspaceManager.prototype = {
             logError("moveAllWindows(" + from + "->" + to + "): " + e.toString());
             return false;
         }
-    },
+    }
 
     // ---- Closing windows (graceful) ----------------------------------------
 
     // List non-pinned windows across a set of workspace indices.
-    listWindowsOnWorkspaces: function (indices) {
+    listWindowsOnWorkspaces(indices) {
         let out = [];
         try {
             for (let k = 0; k < indices.length; k++) {
@@ -241,11 +237,11 @@ WorkspaceManager.prototype = {
             logError("listWindowsOnWorkspaces: " + e.toString());
         }
         return out;
-    },
+    }
 
     // Request a graceful close of a window (behaves like clicking the X; the
     // app may prompt to save). Does NOT force-kill.
-    requestCloseWindow: function (win) {
+    requestCloseWindow(win) {
         try {
             win.delete(this._now());
             return true;
@@ -253,11 +249,11 @@ WorkspaceManager.prototype = {
             logError("requestCloseWindow: " + e.toString());
             return false;
         }
-    },
+    }
 
     // ---- Lifecycle ---------------------------------------------------------
 
-    destroy: function () {
+    destroy() {
         // No persistent signals held in M1; present for interface symmetry.
-    },
+    }
 };
