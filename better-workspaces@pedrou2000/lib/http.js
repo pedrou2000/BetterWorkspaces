@@ -64,11 +64,7 @@ function request(method, url, opts) {
                     msg.set_request(contentType, Soup.MemoryUse.COPY, opts.body);
                 }
                 session.queue_message(msg, (s, message) => {
-                    const data =
-                        message.response_body && message.response_body.data !== null
-                            ? message.response_body.data
-                            : new Uint8Array(0);
-                    resolve(_result(message.status_code, data));
+                    resolve(_result(message.status_code, _soup2Body(message)));
                 });
             }
         } catch (e) {
@@ -76,6 +72,19 @@ function request(method, url, opts) {
             reject(e);
         }
     });
+}
+
+// Soup 2.4 response body as raw bytes. response_body.data is a *decoded string*
+// that mangles binary (icons); flatten().get_data() gives the real bytes. Guarded
+// + string fallback in case an old libsoup lacks flatten.
+function _soup2Body(message) {
+    const body = message.response_body;
+    if (!body) return new Uint8Array(0);
+    try {
+        const buf = body.flatten();
+        if (buf && buf.get_data) return buf.get_data();
+    } catch (e) {}
+    return body.data !== null && body.data !== undefined ? body.data : new Uint8Array(0);
 }
 
 // Soup3 hands back a Uint8Array, Soup2 a string; expose both shapes.
