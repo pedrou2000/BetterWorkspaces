@@ -35,6 +35,8 @@ var ProjectSwitcher = class ProjectSwitcher {
         this._selection = 0; // index into _order
         this._modMask = 0; // launching modifier bit; commit when it releases
         this._grabbed = false;
+        this._keyPressId = 0;
+        this._keyReleaseId = 0;
         this._onCommit = null; // optional callback() after committing
     }
 
@@ -42,7 +44,7 @@ var ProjectSwitcher = class ProjectSwitcher {
         this._onCommit = cb;
     }
 
-    // First Super+Tab opens + grabs; later presses arrive via _keyPressEvent.
+    // First Super+Tab opens + grabs; later presses arrive via _onKeyPress.
     cycle() {
         if (this._overlay) return;
         this._order = this.controller.state.mruOrder();
@@ -53,21 +55,14 @@ var ProjectSwitcher = class ProjectSwitcher {
         const [, , mods] = global.get_pointer();
         this._modMask = _primaryModifier(mods & Clutter.ModifierType.MODIFIER_MASK);
 
-        // No modifier held (e.g. rebound to a modifier-less key): there's nothing
-        // to release, so just switch to the selection without an overlay.
+        // No modifier to release (modifier-less rebind), or the grab is
+        // unavailable (another modal up): just switch, no hold-to-cycle overlay.
         if (this._modMask === 0) {
-            this.controller.goToProject(this._order[this._selection]);
-            this._fireCommit();
+            this._switchNow();
             return;
         }
-
         this._buildOverlay();
-        if (!this._grab()) {
-            // Grab unavailable (another modal up): commit immediately, no overlay.
-            this._close();
-            this.controller.goToProject(this._order[this._selection]);
-            this._fireCommit();
-        }
+        if (!this._grab()) this._switchNow();
     }
 
     _grab() {
@@ -103,7 +98,7 @@ var ProjectSwitcher = class ProjectSwitcher {
     // as held); commit once the launching modifier is up.
     _onKeyRelease() {
         const [, , mods] = global.get_pointer();
-        if ((mods & this._modMask) === 0) this._commit();
+        if ((mods & this._modMask) === 0) this._switchNow();
         return Clutter.EVENT_STOP;
     }
 
@@ -113,25 +108,21 @@ var ProjectSwitcher = class ProjectSwitcher {
         this._renderSelection();
     }
 
-    _commit() {
-        const projectIdx = this._order[this._selection];
+    // Switch to the highlighted project and notify. Tears down the overlay/grab
+    // first (if any) so navigation happens with input already released.
+    _switchNow() {
         this._close();
-        this.controller.goToProject(projectIdx);
-        L.log("committed to project " + projectIdx);
-        this._fireCommit();
-    }
-
-    _cancel() {
-        this._close();
-        L.log("cancelled");
-    }
-
-    _fireCommit() {
+        this.controller.goToProject(this._order[this._selection]);
         if (this._onCommit) {
             try {
                 this._onCommit();
             } catch (e) {}
         }
+    }
+
+    _cancel() {
+        this._close();
+        L.log("cancelled");
     }
 
     _buildOverlay() {
