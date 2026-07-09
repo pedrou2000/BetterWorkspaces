@@ -59,7 +59,6 @@ var NotionClient = class NotionClient {
         return this._request("PATCH", "/pages/" + pageId, { properties: props });
     }
 
-    // Set a number property on a page.
     updatePageNumber(pageId, propName, value) {
         let props = {};
         props[propName] = { number: value };

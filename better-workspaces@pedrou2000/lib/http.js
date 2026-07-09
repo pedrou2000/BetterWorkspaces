@@ -11,7 +11,7 @@ const ByteArray = imports.byteArray;
 const AppletDir = imports.ui.appletManager.applets["better-workspaces@pedrou2000"];
 const L = AppletDir.lib.logger.Logger.makeLogger("http");
 
-// Detect the libsoup major version once (3.x exposes Soup.MAJOR_VERSION).
+// 3.x exposes Soup.MAJOR_VERSION; 2.4 doesn't.
 var SOUP3 = (typeof Soup.MAJOR_VERSION !== "undefined" && Soup.MAJOR_VERSION >= 3);
 
 // One shared session; a short timeout so we never hang the shell on network.
