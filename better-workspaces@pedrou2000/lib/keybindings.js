@@ -126,7 +126,11 @@ KeyBinder.prototype = {
             while (!k.done) {
                 let key = String(k.value);
                 let binding = key.substring(key.lastIndexOf("::") + 2);
-                if (_parse(binding) === want) toRemove.push(key);
+                let parsed = _parse(binding);
+                // DEBUG: log every xlet binding and how it parses vs. the target.
+                L.log("xlet scan: key='" + key + "' binding='" + binding
+                    + "' parsed=" + parsed + " want=" + want);
+                if (parsed === want) toRemove.push(key);
                 k = iter.next();
             }
             for (let i = 0; i < toRemove.length; i++) {
