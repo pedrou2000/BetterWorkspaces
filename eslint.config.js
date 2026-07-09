@@ -19,6 +19,23 @@ const gjsGlobals = {
     ...globals.es2022,
 };
 
+// Rules shared by applet + test code. Prettier runs as a lint rule so `lint`
+// also catches format drift.
+const sharedRules = {
+    ...js.configs.recommended.rules,
+    ...prettierConfig.rules,
+    "prettier/prettier": "error",
+    eqeqeq: ["error", "smart"],
+    "prefer-const": "error",
+    "no-throw-literal": "error",
+    "no-empty": ["error", { allowEmptyCatch: true }],
+    // Comment hygiene (the only comment checks a linter can do — prose quality
+    // stays a human call): require a space after the slashes, and surface
+    // unfinished-work markers as warnings.
+    "spaced-comment": ["error", "always", { block: { balanced: true } }],
+    "no-warning-comments": ["warn", { terms: ["xxx", "hack"], location: "anywhere" }],
+};
+
 module.exports = [
     { ignores: ["node_modules/**", "_spices/**"] },
 
@@ -34,10 +51,7 @@ module.exports = [
         },
         plugins: { prettier },
         rules: {
-            ...js.configs.recommended.rules,
-            ...prettierConfig.rules,
-            "prettier/prettier": "error",
-
+            ...sharedRules,
             "no-unused-vars": [
                 "error",
                 {
@@ -47,10 +61,6 @@ module.exports = [
                     varsIgnorePattern: "^([A-Z]|SOUP3|main$)",
                 },
             ],
-            eqeqeq: ["error", "smart"],
-            "prefer-const": "error",
-            "no-throw-literal": "error",
-            "no-empty": ["error", { allowEmptyCatch: true }],
             "no-var": "off", // GJS exports MUST be top-level `var`
             curly: ["error", "multi-line"],
             "no-shadow": "error",
@@ -68,12 +78,8 @@ module.exports = [
         },
         plugins: { prettier },
         rules: {
-            ...js.configs.recommended.rules,
-            ...prettierConfig.rules,
-            "prettier/prettier": "error",
+            ...sharedRules,
             "no-unused-vars": ["error", { argsIgnorePattern: "^_", caughtErrors: "none" }],
-            eqeqeq: ["error", "smart"],
-            "prefer-const": "error",
         },
     },
 ];

@@ -36,3 +36,6 @@ Minimal, why-only: one-line file headers, no milestone/Design-Doc refs, no
 per-file license (top-level LICENSE covers GPLv2), no section-divider banners.
 Delete comments that restate code; keep only non-obvious rationale, invariants,
 and external-API (Soup/Muffin/Notion/GTK) gotchas.
+
+The linter enforces only the mechanical part (`spaced-comment`; `xxx`/`hack`
+markers warn) — prose quality is a human judgment, not a lint rule.
