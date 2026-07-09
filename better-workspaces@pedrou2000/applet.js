@@ -10,11 +10,8 @@
  * Released under the GNU General Public License v2 (see LICENSE).
  */
 const Applet = imports.ui.applet;
-const Main = imports.ui.main;
 const Settings = imports.ui.settings;
 const PopupMenu = imports.ui.popupMenu;
-const ModalDialog = imports.ui.modalDialog;
-const Clutter = imports.gi.Clutter;
 
 const UUID = "better-workspaces@pedrou2000";
 
@@ -24,6 +21,8 @@ const Controller = AppletDir.core.Controller.Controller;
 const PanelIndicator = AppletDir.ui.PanelIndicator.PanelIndicator;
 const ProjectSwitcher = AppletDir.ui.ProjectSwitcher.ProjectSwitcher;
 const ProjectTogglePanel = AppletDir.ui.ProjectTogglePanel.ProjectTogglePanel;
+const OSD = AppletDir.ui.OSD.OSD;
+const Dialogs = AppletDir.ui.Dialogs.Dialogs;
 const SyncService = AppletDir.notion.SyncService.SyncService;
 const ProjectMapper = AppletDir.notion.ProjectMapper.ProjectMapper;
 const KeyBinder = AppletDir.lib.keybindings.KeyBinder;
@@ -94,6 +93,7 @@ var MyApplet = class MyApplet extends Applet.Applet {
 
             this.wm = new WorkspaceManager();
             this.controller = new Controller(this.wm);
+            this.osd = new OSD();
 
             // Settings first: we need the token before we decide the deck.
             // This also creates this.sync.
@@ -126,7 +126,7 @@ var MyApplet = class MyApplet extends Applet.Applet {
 
             this._registerKeybindings();
             this._buildContextMenu();
-            this._suppressBuiltinOSD();
+            this.osd.suppressBuiltin();
             this._refresh();
 
             // Kick off a background sync to refresh the cache for NEXT launch.
@@ -181,74 +181,7 @@ var MyApplet = class MyApplet extends Applet.Applet {
     // (project · workspace), instead of Cinnamon's flat "Workspace N" OSD.
     _afterNav() {
         this._refresh();
-        this._showOSD();
-    }
-
-    // Show a transient project-aware OSD reflecting the deck model, e.g.
-    // "Job 2026 · 2/3". Replaces the built-in linear workspace OSD.
-    _showOSD() {
-        try {
-            let loc = this.controller.currentLocation();
-            if (!loc) return;
-            let p = this.controller.state.getProject(loc.projectIdx);
-            if (!p) return;
-            let text = p.name + "  ·  " + (loc.localIdx + 1) + "/" + p.wsCount;
-
-            if (!this._osdLabel) {
-                this._osdLabel = new imports.gi.St.Label({ style_class: 'better-workspaces-osd' });
-                this._osdLabel.hide();
-                Main.uiGroup.add_actor(this._osdLabel);
-            }
-            this._osdLabel.set_text(text);
-
-            // Center on the primary monitor.
-            let mon = Main.layoutManager.primaryMonitor;
-            this._osdLabel.show();
-            let w = this._osdLabel.get_width();
-            this._osdLabel.set_position(
-                mon.x + Math.floor((mon.width - w) / 2),
-                mon.y + Math.floor(mon.height * 0.78));
-
-            // Auto-hide after a short delay (reset the timer on each nav).
-            if (this._osdTimer) imports.mainloop.source_remove(this._osdTimer);
-            this._osdTimer = imports.mainloop.timeout_add(Constants.OSD_HIDE_MS, () => {
-                this._osdTimer = 0;
-                if (this._osdLabel) this._osdLabel.hide();
-                return false;
-            });
-        } catch (e) {
-            logError("_showOSD: " + e.toString());
-        }
-    }
-
-    // Hide Cinnamon's built-in flat "Workspace N" OSD so only our project-aware
-    // OSD shows. org.cinnamon has a boolean 'workspace-osd-visible'. Saved and
-    // restored on unload.
-    _suppressBuiltinOSD() {
-        try {
-            let Gio = imports.gi.Gio;
-            let src = Gio.SettingsSchemaSource.get_default();
-            if (!src || !src.lookup("org.cinnamon", true)) return;
-            this._cinSettings = new Gio.Settings({ schema_id: "org.cinnamon" });
-            if (this._cinSettings.list_keys().indexOf("workspace-osd-visible") === -1) {
-                this._cinSettings = null;
-                return;
-            }
-            this._osdWasVisible = this._cinSettings.get_boolean("workspace-osd-visible");
-            this._cinSettings.set_boolean("workspace-osd-visible", false);
-            log("built-in workspace OSD suppressed (was " + this._osdWasVisible + ")");
-        } catch (e) {
-            logError("_suppressBuiltinOSD: " + e.toString());
-        }
-    }
-
-    _restoreBuiltinOSD() {
-        try {
-            if (this._cinSettings && this._osdWasVisible !== undefined) {
-                this._cinSettings.set_boolean("workspace-osd-visible", this._osdWasVisible);
-            }
-        } catch (e) {}
-        this._cinSettings = null;
+        this.osd.show(this.controller);
     }
 
     // Bind settings and create the SyncService (does not start it — the caller
@@ -395,39 +328,17 @@ var MyApplet = class MyApplet extends Applet.Applet {
         let deckIdx = this._deckIndexOf(project.id);
         let p = this.controller.state.getProject(deckIdx);
         let wsCount = p ? p.wsCount : 1;
-        let dialog = new ModalDialog.ModalDialog();
-        let box = new (imports.gi.St.BoxLayout)({ vertical: true, style_class: 'better-workspaces-toggle-panel' });
-        box.add(new (imports.gi.St.Label)({
-            style_class: 'better-workspaces-toggle-title',
-            text: "Remove “" + project.name + "” from workspaces?",
-        }));
-        box.add(new (imports.gi.St.Label)({
-            text: "This will close its windows and remove its " + wsCount + " workspace(s).",
-        }));
-        dialog.contentLayout.add(box);
-        return new Promise((resolve) => {
-            dialog.setButtons([
-                { label: "Cancel", action: () => { dialog.close(); resolve(false); }, key: Clutter.KEY_Escape },
-                { label: "Remove", action: () => { dialog.close(); resolve(true); } },
-            ]);
-            dialog.open();
-        });
+        return Dialogs.confirm(
+            "Remove “" + project.name + "” from workspaces?",
+            "This will close its windows and remove its " + wsCount + " workspace(s).",
+            "Remove");
     }
 
     _notifyWindowsOpen(project, info) {
         let titles = (info && info.openTitles) ? info.openTitles.join(", ") : "";
-        let dialog = new ModalDialog.ModalDialog();
-        let box = new (imports.gi.St.BoxLayout)({ vertical: true, style_class: 'better-workspaces-toggle-panel' });
-        box.add(new (imports.gi.St.Label)({
-            style_class: 'better-workspaces-toggle-title',
-            text: "Couldn’t remove “" + project.name + "”",
-        }));
-        box.add(new (imports.gi.St.Label)({
-            text: "Please close these window(s) first, then try again:\n" + titles,
-        }));
-        dialog.contentLayout.add(box);
-        dialog.setButtons([{ label: "OK", action: () => dialog.close(), key: Clutter.KEY_Escape }]);
-        dialog.open();
+        Dialogs.notify(
+            "Couldn’t remove “" + project.name + "”",
+            "Please close these window(s) first, then try again:\n" + titles);
     }
 
     // The full binding table: settings key -> hotkey name + handler. All
@@ -593,9 +504,7 @@ var MyApplet = class MyApplet extends Applet.Applet {
     on_applet_removed_from_panel() {
         try {
             this._unregisterKeybindings();
-            this._restoreBuiltinOSD();
-            if (this._osdTimer) { imports.mainloop.source_remove(this._osdTimer); this._osdTimer = 0; }
-            if (this._osdLabel) { this._osdLabel.destroy(); this._osdLabel = null; }
+            if (this.osd) { this.osd.destroy(); this.osd = null; }
             if (this._switchId) {
                 global.window_manager.disconnect(this._switchId);
                 this._switchId = 0;
