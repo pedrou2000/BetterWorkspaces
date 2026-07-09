@@ -48,8 +48,8 @@ var PanelIndicator = class PanelIndicator {
         this._status = status;
         if (!this._statusDot) return;
         let map = {
-            unconfigured: { text: "⚫", tip: "Notion not connected — open settings to add your token" },
-            loading:      { text: "◌", tip: "Syncing with Notion…" },
+            unconfigured: { text: "⛓", tip: "Notion not connected — open settings to add your token" },
+            loading:      { text: "⟳", tip: "Syncing with Notion…" },
             ok:           { text: "",       tip: "" },
             error:        { text: "⚠", tip: "Notion sync failed — showing cached projects" },
         };
