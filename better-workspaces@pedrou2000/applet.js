@@ -31,14 +31,11 @@ const Constants = AppletDir.lib.constants.Constants;
 const L = AppletDir.lib.logger.Logger.makeLogger("applet");
 
 // Keeps the applet non-empty on first run/unconfigured; replaced by the real deck.
-const PLACEHOLDER_PROJECTS = [
-    { id: "placeholder", name: "Connect Notion", wsCount: 1 },
-];
+const PLACEHOLDER_PROJECTS = [{ id: "placeholder", name: "Connect Notion", wsCount: 1 }];
 
 const DEFAULT_WS_PER_PROJECT = Constants.DEFAULT_WS_PER_PROJECT;
 
 var MyApplet = class MyApplet extends Applet.Applet {
-
     constructor(metadata, orientation, panel_height, instanceId) {
         super(orientation, panel_height, instanceId);
 
@@ -60,9 +57,13 @@ var MyApplet = class MyApplet extends Applet.Applet {
                 defaultWsPerProject: DEFAULT_WS_PER_PROJECT,
                 placeholderProjects: PLACEHOLDER_PROJECTS,
                 hooks: {
-                    rebuildPanel: () => { if (this.panelUI) this.panelUI.rebuild(); },
+                    rebuildPanel: () => {
+                        if (this.panelUI) this.panelUI.rebuild();
+                    },
                     refresh: () => this._refresh(),
-                    refreshTogglePanel: () => { if (this._togglePanel) this._togglePanel.refresh(); },
+                    refreshTogglePanel: () => {
+                        if (this._togglePanel) this._togglePanel.refresh();
+                    },
                 },
             });
 
@@ -71,9 +72,9 @@ var MyApplet = class MyApplet extends Applet.Applet {
             this._initSettingsAndSync(instanceId);
             this.deckCoord.loadDeckFromStore();
 
-            this.panelUI = new PanelIndicator(
-                this.actor, this.controller, orientation,
-                { onManage: () => this.openTogglePanel() });
+            this.panelUI = new PanelIndicator(this.actor, this.controller, orientation, {
+                onManage: () => this.openTogglePanel(),
+            });
             this.switcher = new ProjectSwitcher(this.controller);
             this.switcher.onCommit(() => this._afterNav());
 
@@ -85,10 +86,12 @@ var MyApplet = class MyApplet extends Applet.Applet {
             // Initial status: unconfigured if no token, else neutral until sync.
             this.panelUI.setStatus(this._notionConfigured() ? "ok" : "unconfigured");
 
-            this._switchId = global.window_manager.connect(
-                'switch-workspace', () => this._refresh());
-            this._nWorkspacesId = global.workspace_manager.connect(
-                'notify::n-workspaces', () => this._refresh());
+            this._switchId = global.window_manager.connect("switch-workspace", () =>
+                this._refresh(),
+            );
+            this._nWorkspacesId = global.workspace_manager.connect("notify::n-workspaces", () =>
+                this._refresh(),
+            );
 
             this.keybindings = new KeybindingCoordinator({
                 settings: this.settings,
@@ -109,9 +112,11 @@ var MyApplet = class MyApplet extends Applet.Applet {
     }
 
     _notionConfigured() {
-        return this.settings
-            && this.settings.getValue("notionToken")
-            && this.settings.getValue("notionDatabaseId");
+        return (
+            this.settings &&
+            this.settings.getValue("notionToken") &&
+            this.settings.getValue("notionDatabaseId")
+        );
     }
 
     _refresh() {
@@ -131,9 +136,10 @@ var MyApplet = class MyApplet extends Applet.Applet {
     _initSettingsAndSync(instanceId) {
         this.settings = new Settings.AppletSettings(this, UUID, instanceId);
 
-        let token = this.settings.getValue("notionToken") || "";
-        let dbId = this.settings.getValue("notionDatabaseId") || "";
-        let interval = this.settings.getValue("syncIntervalSec") || Constants.DEFAULT_SYNC_INTERVAL_S;
+        const token = this.settings.getValue("notionToken") || "";
+        const dbId = this.settings.getValue("notionDatabaseId") || "";
+        const interval =
+            this.settings.getValue("syncIntervalSec") || Constants.DEFAULT_SYNC_INTERVAL_S;
 
         this.sync = new SyncService(token, dbId, { intervalSec: interval });
 
@@ -161,18 +167,28 @@ var MyApplet = class MyApplet extends Applet.Applet {
             if (status === "ok" && this.store) this.store.retryPending();
         });
 
-        this.settings.bindProperty(Settings.BindingDirection.IN, "notionToken",
-            "notionToken", () => {
+        this.settings.bindProperty(
+            Settings.BindingDirection.IN,
+            "notionToken",
+            "notionToken",
+            () => {
                 this.sync.setToken(this.settings.getValue("notionToken"));
-            });
-        this.settings.bindProperty(Settings.BindingDirection.IN, "notionDatabaseId",
-            "notionDatabaseId", () => {
+            },
+        );
+        this.settings.bindProperty(
+            Settings.BindingDirection.IN,
+            "notionDatabaseId",
+            "notionDatabaseId",
+            () => {
                 this.sync.setDatabaseId(this.settings.getValue("notionDatabaseId"));
-            });
+            },
+        );
 
         if (!token || !dbId) {
-            L.log("Notion not configured — open settings, add your token, click "
-                + "'Sync now', then reload Cinnamon (Alt+F2, r) to load the deck.");
+            L.log(
+                "Notion not configured — open settings, add your token, click " +
+                    "'Sync now', then reload Cinnamon (Alt+F2, r) to load the deck.",
+            );
         }
     }
 
@@ -191,10 +207,11 @@ var MyApplet = class MyApplet extends Applet.Applet {
 
     openTogglePanel() {
         try {
-            let panel = new ProjectTogglePanel(
+            const panel = new ProjectTogglePanel(
                 () => this.store.all(),
                 (project, newValue) => this.deckCoord.handleToggle(project, newValue),
-                (movedId, toOnPos) => this.deckCoord.reorderFromPanel(movedId, toOnPos));
+                (movedId, toOnPos) => this.deckCoord.reorderFromPanel(movedId, toOnPos),
+            );
             this._togglePanel = panel;
             panel.open();
         } catch (e) {
@@ -205,26 +222,94 @@ var MyApplet = class MyApplet extends Applet.Applet {
     // settings key -> hotkey name + handler; the KeybindingCoordinator grabs these.
     _bindingSpecs() {
         return [
-            { setting: "kbWorkspacePrev", name: "bw-ws-prev",    run: () => { this.controller.prevLocalWorkspace(); this._afterNav(); } },
-            { setting: "kbWorkspaceNext", name: "bw-ws-next",    run: () => { this.controller.nextLocalWorkspace(); this._afterNav(); } },
-            { setting: "kbProjectPrev",   name: "bw-proj-prev",  run: () => { this.controller.goToPrevProjectInOrder(); this._afterNav(); } },
-            { setting: "kbProjectNext",   name: "bw-proj-next",  run: () => { this.controller.goToNextProjectInOrder(); this._afterNav(); } },
-            { setting: "kbMoveWindowPrev",name: "bw-move-prev",  run: () => { this.controller.moveWindowToPrevLocal(); this._afterNav(); } },
-            { setting: "kbMoveWindowNext",name: "bw-move-next",  run: () => { this.controller.moveWindowToNextLocal(); this._afterNav(); } },
-            { setting: "kbMoveWindowProjectPrev", name: "bw-move-proj-prev", run: () => { this.controller.moveWindowToPrevProjectInOrder(); this._afterNav(); } },
-            { setting: "kbMoveWindowProjectNext", name: "bw-move-proj-next", run: () => { this.controller.moveWindowToNextProjectInOrder(); this._afterNav(); } },
-            { setting: "kbSwitcher",      name: "bw-switcher",   run: () => this.switcher.cycle() },
-            { setting: "kbOpenNotion",    name: "bw-open-home",  run: () => this.controller.openActiveProjectHome() },
-            { setting: "kbTogglePanel",   name: "bw-toggle-panel", run: () => this.openTogglePanel() },
+            {
+                setting: "kbWorkspacePrev",
+                name: "bw-ws-prev",
+                run: () => {
+                    this.controller.prevLocalWorkspace();
+                    this._afterNav();
+                },
+            },
+            {
+                setting: "kbWorkspaceNext",
+                name: "bw-ws-next",
+                run: () => {
+                    this.controller.nextLocalWorkspace();
+                    this._afterNav();
+                },
+            },
+            {
+                setting: "kbProjectPrev",
+                name: "bw-proj-prev",
+                run: () => {
+                    this.controller.goToPrevProjectInOrder();
+                    this._afterNav();
+                },
+            },
+            {
+                setting: "kbProjectNext",
+                name: "bw-proj-next",
+                run: () => {
+                    this.controller.goToNextProjectInOrder();
+                    this._afterNav();
+                },
+            },
+            {
+                setting: "kbMoveWindowPrev",
+                name: "bw-move-prev",
+                run: () => {
+                    this.controller.moveWindowToPrevLocal();
+                    this._afterNav();
+                },
+            },
+            {
+                setting: "kbMoveWindowNext",
+                name: "bw-move-next",
+                run: () => {
+                    this.controller.moveWindowToNextLocal();
+                    this._afterNav();
+                },
+            },
+            {
+                setting: "kbMoveWindowProjectPrev",
+                name: "bw-move-proj-prev",
+                run: () => {
+                    this.controller.moveWindowToPrevProjectInOrder();
+                    this._afterNav();
+                },
+            },
+            {
+                setting: "kbMoveWindowProjectNext",
+                name: "bw-move-proj-next",
+                run: () => {
+                    this.controller.moveWindowToNextProjectInOrder();
+                    this._afterNav();
+                },
+            },
+            { setting: "kbSwitcher", name: "bw-switcher", run: () => this.switcher.cycle() },
+            {
+                setting: "kbOpenNotion",
+                name: "bw-open-home",
+                run: () => this.controller.openActiveProjectHome(),
+            },
+            {
+                setting: "kbTogglePanel",
+                name: "bw-toggle-panel",
+                run: () => this.openTogglePanel(),
+            },
         ];
     }
 
     _buildContextMenu() {
-        let menu = this._applet_context_menu;
-        let addAction = (label, fn) => {
-            let item = new PopupMenu.PopupMenuItem(label);
-            item.connect('activate', () => {
-                try { fn(); } catch (e) { L.error("menu: " + e.toString()); }
+        const menu = this._applet_context_menu;
+        const addAction = (label, fn) => {
+            const item = new PopupMenu.PopupMenuItem(label);
+            item.connect("activate", () => {
+                try {
+                    fn();
+                } catch (e) {
+                    L.error("menu: " + e.toString());
+                }
                 this._refresh();
             });
             menu.addMenuItem(item);
@@ -246,15 +331,18 @@ var MyApplet = class MyApplet extends Applet.Applet {
             this.panelUI.update();
         });
 
-        let moveMenu = new PopupMenu.PopupSubMenuMenuItem("Move focused window to project");
-        let nProjects = this.controller.state.projectCount();
+        const moveMenu = new PopupMenu.PopupSubMenuMenuItem("Move focused window to project");
+        const nProjects = this.controller.state.projectCount();
         for (let i = 0; i < nProjects; i++) {
-            let p = this.controller.state.getProject(i);
-            let idx = i;
-            let sub = new PopupMenu.PopupMenuItem(p.name);
-            sub.connect('activate', () => {
-                try { this.controller.moveWindowToProject(idx); }
-                catch (e) { L.error("move-to-project menu: " + e.toString()); }
+            const p = this.controller.state.getProject(i);
+            const idx = i;
+            const sub = new PopupMenu.PopupMenuItem(p.name);
+            sub.connect("activate", () => {
+                try {
+                    this.controller.moveWindowToProject(idx);
+                } catch (e) {
+                    L.error("move-to-project menu: " + e.toString());
+                }
                 this._refresh();
             });
             moveMenu.menu.addMenuItem(sub);
@@ -286,8 +374,14 @@ var MyApplet = class MyApplet extends Applet.Applet {
 
     on_applet_removed_from_panel() {
         try {
-            if (this.keybindings) { this.keybindings.teardown(); this.keybindings = null; }
-            if (this.osd) { this.osd.destroy(); this.osd = null; }
+            if (this.keybindings) {
+                this.keybindings.teardown();
+                this.keybindings = null;
+            }
+            if (this.osd) {
+                this.osd.destroy();
+                this.osd = null;
+            }
             if (this._switchId) {
                 global.window_manager.disconnect(this._switchId);
                 this._switchId = 0;
@@ -296,14 +390,38 @@ var MyApplet = class MyApplet extends Applet.Applet {
                 global.workspace_manager.disconnect(this._nWorkspacesId);
                 this._nWorkspacesId = 0;
             }
-            if (this._togglePanel) { this._togglePanel.destroy(); this._togglePanel = null; }
-            if (this.sync) { this.sync.destroy(); this.sync = null; }
-            if (this.store) { this.store.destroy(); this.store = null; }
-            if (this.settings) { this.settings.finalize(); this.settings = null; }
-            if (this.switcher) { this.switcher.destroy(); this.switcher = null; }
-            if (this.panelUI) { this.panelUI.destroy(); this.panelUI = null; }
-            if (this.controller) { this.controller.destroy(); this.controller = null; }
-            if (this.wm) { this.wm.destroy(); this.wm = null; }
+            if (this._togglePanel) {
+                this._togglePanel.destroy();
+                this._togglePanel = null;
+            }
+            if (this.sync) {
+                this.sync.destroy();
+                this.sync = null;
+            }
+            if (this.store) {
+                this.store.destroy();
+                this.store = null;
+            }
+            if (this.settings) {
+                this.settings.finalize();
+                this.settings = null;
+            }
+            if (this.switcher) {
+                this.switcher.destroy();
+                this.switcher = null;
+            }
+            if (this.panelUI) {
+                this.panelUI.destroy();
+                this.panelUI = null;
+            }
+            if (this.controller) {
+                this.controller.destroy();
+                this.controller = null;
+            }
+            if (this.wm) {
+                this.wm.destroy();
+                this.wm = null;
+            }
             this.deckCoord = null;
             L.log("removed, cleaned up");
         } catch (e) {

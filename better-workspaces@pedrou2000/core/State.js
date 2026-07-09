@@ -17,7 +17,6 @@ function makeProject(def) {
 }
 
 var State = class State {
-
     constructor() {
         this.projects = [];
         this.activeProjectIdx = 0;
@@ -28,8 +27,13 @@ var State = class State {
         this.projects = defs.map(makeProject);
         this.activeProjectIdx = 0;
         this._mru = this.projects.map((_, i) => i);
-        L.log("setProjects: " + this.projects.length + " projects, counts=["
-            + this.counts().join(",") + "]");
+        L.log(
+            "setProjects: " +
+                this.projects.length +
+                " projects, counts=[" +
+                this.counts().join(",") +
+                "]",
+        );
     }
 
     // Per-project workspace counts in project order — the array mapping.js takes.
@@ -64,12 +68,12 @@ var State = class State {
     }
 
     setLastLocal(projectIdx, localIdx) {
-        let p = this.getProject(projectIdx);
+        const p = this.getProject(projectIdx);
         if (p) p.lastLocal = localIdx;
     }
 
     getLastLocal(projectIdx) {
-        let p = this.getProject(projectIdx);
+        const p = this.getProject(projectIdx);
         return p ? p.lastLocal : 0;
     }
 
@@ -89,7 +93,7 @@ var State = class State {
 
     appendProject(def) {
         this.projects.push(makeProject(def));
-        let idx = this.projects.length - 1;
+        const idx = this.projects.length - 1;
         this._mru.push(idx); // least-recent until visited
         L.log("appendProject: " + def.name + " at index " + idx);
         return idx;
@@ -101,12 +105,13 @@ var State = class State {
         if (idx < 0 || idx >= this.projects.length) return false;
         this.projects.splice(idx, 1);
 
-        this._mru = this._mru
-            .filter((i) => i !== idx)
-            .map((i) => (i > idx ? i - 1 : i));
+        this._mru = this._mru.filter((i) => i !== idx).map((i) => (i > idx ? i - 1 : i));
 
         if (this.activeProjectIdx === idx) {
-            this.activeProjectIdx = Math.max(0, Math.min(this.activeProjectIdx, this.projects.length - 1));
+            this.activeProjectIdx = Math.max(
+                0,
+                Math.min(this.activeProjectIdx, this.projects.length - 1),
+            );
         } else if (this.activeProjectIdx > idx) {
             this.activeProjectIdx -= 1;
         }
@@ -117,13 +122,13 @@ var State = class State {
     // Move `from` to `to`. Returns order[newPos] = oldIndex — the caller reuses
     // it to relocate the matching workspace blocks — or null on invalid indices.
     moveProject(from, to) {
-        let n = this.projects.length;
+        const n = this.projects.length;
         if (from < 0 || from >= n || to < 0 || to >= n || from === to) return null;
 
-        let order = [];
+        const order = [];
         for (let i = 0; i < n; i++) order.push(i);
         order.splice(to, 0, order.splice(from, 1)[0]);
-        let newOf = {};
+        const newOf = {};
         for (let newPos = 0; newPos < n; newPos++) newOf[order[newPos]] = newPos;
 
         this.projects.splice(to, 0, this.projects.splice(from, 1)[0]);
@@ -136,15 +141,21 @@ var State = class State {
     }
 
     incWorkspaceCount(projectIdx) {
-        let p = this.getProject(projectIdx);
-        if (p) { p.wsCount += 1; return true; }
+        const p = this.getProject(projectIdx);
+        if (p) {
+            p.wsCount += 1;
+            return true;
+        }
         return false;
     }
 
     // Refuse to drop below 1 (a project always keeps its home workspace).
     decWorkspaceCount(projectIdx) {
-        let p = this.getProject(projectIdx);
-        if (p && p.wsCount > 1) { p.wsCount -= 1; return true; }
+        const p = this.getProject(projectIdx);
+        if (p && p.wsCount > 1) {
+            p.wsCount -= 1;
+            return true;
+        }
         return false;
     }
 };

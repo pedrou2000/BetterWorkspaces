@@ -12,10 +12,10 @@ const L = AppletDir.lib.logger.Logger.makeLogger("wm");
 // look non-empty; exclude them everywhere "real" occupancy matters.
 function realWindows(ws) {
     if (!ws) return [];
-    let out = [];
-    let windows = ws.list_windows();
+    const out = [];
+    const windows = ws.list_windows();
     for (let i = 0; i < windows.length; i++) {
-        let w = windows[i];
+        const w = windows[i];
         if (w.is_on_all_workspaces && w.is_on_all_workspaces()) continue;
         out.push(w);
     }
@@ -23,7 +23,6 @@ function realWindows(ws) {
 }
 
 var WorkspaceManager = class WorkspaceManager {
-
     constructor() {}
 
     _wm() {
@@ -48,10 +47,15 @@ var WorkspaceManager = class WorkspaceManager {
 
     goToWorkspace(index) {
         try {
-            let ws = this._wm().get_workspace_by_index(index);
+            const ws = this._wm().get_workspace_by_index(index);
             if (ws === null) {
-                L.log("goToWorkspace: index " + index + " out of range (count="
-                    + this.getWorkspaceCount() + "), ignoring");
+                L.log(
+                    "goToWorkspace: index " +
+                        index +
+                        " out of range (count=" +
+                        this.getWorkspaceCount() +
+                        "), ignoring",
+                );
                 return false;
             }
             ws.activate(this._now());
@@ -65,13 +69,20 @@ var WorkspaceManager = class WorkspaceManager {
     // Appends at the end. Returns the new index, or -1 on failure.
     createWorkspace() {
         try {
-            let before = this.getWorkspaceCount();
+            const before = this.getWorkspaceCount();
             this._wm().append_new_workspace(false, this._now());
-            let after = this.getWorkspaceCount();
+            const after = this.getWorkspaceCount();
             if (after > before) {
-                let newIndex = after - 1;
-                L.log("createWorkspace: added workspace at index " + newIndex
-                    + " (count " + before + " -> " + after + ")");
+                const newIndex = after - 1;
+                L.log(
+                    "createWorkspace: added workspace at index " +
+                        newIndex +
+                        " (count " +
+                        before +
+                        " -> " +
+                        after +
+                        ")",
+                );
                 return newIndex;
             }
             L.log("createWorkspace: count did not increase (still " + after + ")");
@@ -100,13 +111,13 @@ var WorkspaceManager = class WorkspaceManager {
     }
 
     reorderWorkspace(fromIndex, toIndex) {
-        let count = this.getWorkspaceCount();
+        const count = this.getWorkspaceCount();
         if (fromIndex === toIndex) return true;
         if (fromIndex < 0 || fromIndex >= count || toIndex < 0 || toIndex >= count) {
             L.log("reorderWorkspace: index out of range " + fromIndex + "->" + toIndex);
             return false;
         }
-        let ok = this.reorderWorkspaceObject(this.getWorkspace(fromIndex), toIndex);
+        const ok = this.reorderWorkspaceObject(this.getWorkspace(fromIndex), toIndex);
         if (ok) L.log("reorderWorkspace: " + fromIndex + " -> " + toIndex);
         return ok;
     }
@@ -114,20 +125,32 @@ var WorkspaceManager = class WorkspaceManager {
     // Refuses to remove the last workspace (Cinnamon needs >=1); out-of-range no-ops.
     removeWorkspace(index) {
         try {
-            let count = this.getWorkspaceCount();
+            const count = this.getWorkspaceCount();
             if (count <= 1) {
                 L.log("removeWorkspace: refusing to remove the last workspace");
                 return false;
             }
-            let ws = this._wm().get_workspace_by_index(index);
+            const ws = this._wm().get_workspace_by_index(index);
             if (ws === null) {
-                L.log("removeWorkspace: index " + index + " out of range (count="
-                    + count + "), ignoring");
+                L.log(
+                    "removeWorkspace: index " +
+                        index +
+                        " out of range (count=" +
+                        count +
+                        "), ignoring",
+                );
                 return false;
             }
             this._wm().remove_workspace(ws, this._now());
-            L.log("removeWorkspace: removed index " + index
-                + " (count " + count + " -> " + this.getWorkspaceCount() + ")");
+            L.log(
+                "removeWorkspace: removed index " +
+                    index +
+                    " (count " +
+                    count +
+                    " -> " +
+                    this.getWorkspaceCount() +
+                    ")",
+            );
             return true;
         } catch (e) {
             L.error("removeWorkspace(" + index + "): " + e.toString());
@@ -141,19 +164,18 @@ var WorkspaceManager = class WorkspaceManager {
 
     moveFocusedWindowTo(index) {
         try {
-            let count = this.getWorkspaceCount();
+            const count = this.getWorkspaceCount();
             if (index < 0 || index > count - 1) {
                 L.log("moveFocusedWindowTo: index " + index + " out of range");
                 return false;
             }
-            let win = global.display.get_focus_window();
+            const win = global.display.get_focus_window();
             if (!win) {
                 L.log("moveFocusedWindowTo: no focused window");
                 return false;
             }
             win.change_workspace_by_index(index, false);
-            L.log("moveFocusedWindowTo: moved '" + win.get_title()
-                + "' to workspace " + index);
+            L.log("moveFocusedWindowTo: moved '" + win.get_title() + "' to workspace " + index);
             return true;
         } catch (e) {
             L.error("moveFocusedWindowTo(" + index + "): " + e.toString());
@@ -169,7 +191,7 @@ var WorkspaceManager = class WorkspaceManager {
     // without scattering later projects. Skips all-workspace-pinned windows.
     moveAllWindows(from, to) {
         try {
-            let windows = realWindows(this._wm().get_workspace_by_index(from));
+            const windows = realWindows(this._wm().get_workspace_by_index(from));
             for (let i = 0; i < windows.length; i++) {
                 windows[i].change_workspace_by_index(to, false);
             }
@@ -181,10 +203,10 @@ var WorkspaceManager = class WorkspaceManager {
     }
 
     listWindowsOnWorkspaces(indices) {
-        let out = [];
+        const out = [];
         try {
             for (let k = 0; k < indices.length; k++) {
-                let wins = realWindows(this._wm().get_workspace_by_index(indices[k]));
+                const wins = realWindows(this._wm().get_workspace_by_index(indices[k]));
                 for (let i = 0; i < wins.length; i++) out.push(wins[i]);
             }
         } catch (e) {

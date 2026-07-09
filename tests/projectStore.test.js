@@ -42,7 +42,8 @@ function makeManualWriter() {
         // Pass e.g. new Error("http-500") to exercise the transient/hold path.
         async settle(ok, err) {
             const p = pending.shift();
-            if (ok) p.resolve(); else p.reject(err || new Error("http-400"));
+            if (ok) p.resolve();
+            else p.reject(err || new Error("http-400"));
             await new Promise((r) => setImmediate(r));
             return p;
         },
@@ -54,14 +55,24 @@ function makeAutoWriter() {
     const calls = [];
     return {
         calls,
-        async setWorkspaceFlag(id, value) { calls.push({ kind: "flag", id, value }); },
-        async setWorkspaceOrder(id, order) { calls.push({ kind: "order", id, value: order }); },
+        async setWorkspaceFlag(id, value) {
+            calls.push({ kind: "flag", id, value });
+        },
+        async setWorkspaceOrder(id, order) {
+            calls.push({ kind: "order", id, value: order });
+        },
     };
 }
 
 function proj(id, order, inWorkspace) {
-    return { id, name: id.toUpperCase(), icon: null, notionUrl: null,
-             inWorkspace: !!inWorkspace, order: order === undefined ? null : order };
+    return {
+        id,
+        name: id.toUpperCase(),
+        icon: null,
+        notionUrl: null,
+        inWorkspace: !!inWorkspace,
+        order: order === undefined ? null : order,
+    };
 }
 
 function makeStore(cachedProjects, writer) {
@@ -86,7 +97,10 @@ const drain = () => new Promise((r) => setImmediate(r));
 
 test("loads the catalog from the cache once; all() is sorted by order", () => {
     const { store } = makeStore([proj("b", 1, true), proj("a", 0, true), proj("c", null)]);
-    assert.deepEqual(store.all().map(p => p.id), ["a", "b", "c"]);
+    assert.deepEqual(
+        store.all().map((p) => p.id),
+        ["a", "b", "c"],
+    );
     assert.equal(store.get("b").name, "B");
     assert.equal(store.get("nope"), null);
 });
@@ -108,21 +122,23 @@ test("setInWorkspace applies to store + cache immediately, before the push lands
     const writer = makeManualWriter();
     const { store, persistence } = makeStore([proj("a", 0, false)], writer);
     store.setInWorkspace("a", true);
-    assert.equal(store.get("a").inWorkspace, true);                       // store: now
-    assert.equal(cacheOf(persistence)[0].inWorkspace, true);              // cache: now
-    assert.equal(writer.pending.length, 1);                               // push: queued
+    assert.equal(store.get("a").inWorkspace, true); // store: now
+    assert.equal(cacheOf(persistence)[0].inWorkspace, true); // cache: now
+    assert.equal(writer.pending.length, 1); // push: queued
 });
 
 test("failed push reverts the field, persists the revert, and fires onWriteError", async () => {
     const writer = makeManualWriter();
     const { store, persistence } = makeStore([proj("a", 0, false)], writer);
     let errCb = null;
-    store.onWriteError((id, field, e) => { errCb = { id, field }; });
+    store.onWriteError((id, field) => {
+        errCb = { id, field };
+    });
 
     store.setInWorkspace("a", true);
     await writer.settle(false);
 
-    assert.equal(store.get("a").inWorkspace, false);                      // reverted
+    assert.equal(store.get("a").inWorkspace, false); // reverted
     assert.equal(cacheOf(persistence)[0].inWorkspace, false);
     assert.deepEqual(errCb, { id: "a", field: "inWorkspace" });
 });
@@ -131,10 +147,10 @@ test("successful push acknowledges: a later failure reverts to the ACKED value",
     const writer = makeManualWriter();
     const { store } = makeStore([proj("a", 0, false)], writer);
     store.setInWorkspace("a", true);
-    await writer.settle(true);            // true is now acknowledged
+    await writer.settle(true); // true is now acknowledged
     store.setInWorkspace("a", false);
-    await writer.settle(false);           // this push fails
-    assert.equal(store.get("a").inWorkspace, true);  // reverts to acked true, not original false
+    await writer.settle(false); // this push fails
+    assert.equal(store.get("a").inWorkspace, true); // reverts to acked true, not original false
 });
 
 test("pushes are serialized FIFO, one in flight", async () => {
@@ -142,9 +158,9 @@ test("pushes are serialized FIFO, one in flight", async () => {
     const { store } = makeStore([proj("a", 0), proj("b", 1)], writer);
     store.setOrder("a", 5);
     store.setOrder("b", 6);
-    assert.equal(writer.pending.length, 1);           // only the first is in flight
+    assert.equal(writer.pending.length, 1); // only the first is in flight
     await writer.settle(true);
-    assert.equal(writer.pending.length, 1);           // now the second
+    assert.equal(writer.pending.length, 1); // now the second
     const second = await writer.settle(true);
     assert.deepEqual([second.id, second.value], ["b", 6]);
 });
@@ -152,13 +168,13 @@ test("pushes are serialized FIFO, one in flight", async () => {
 test("queued (not in-flight) pushes for the same field coalesce to the newest value", async () => {
     const writer = makeManualWriter();
     const { store } = makeStore([proj("a", 0), proj("b", 1)], writer);
-    store.setOrder("a", 5);              // in flight
-    store.setOrder("b", 6);              // queued
-    store.setOrder("b", 7);              // supersedes the queued 6
-    await writer.settle(true);           // a:5 lands
+    store.setOrder("a", 5); // in flight
+    store.setOrder("b", 6); // queued
+    store.setOrder("b", 7); // supersedes the queued 6
+    await writer.settle(true); // a:5 lands
     const bPush = await writer.settle(true);
     assert.deepEqual([bPush.id, bPush.value], ["b", 7]);
-    assert.equal(writer.pending.length, 0);           // no third push for b
+    assert.equal(writer.pending.length, 0); // no third push for b
 });
 
 test("setOrders assigns 0..n-1 following the id list", async () => {
@@ -167,14 +183,21 @@ test("setOrders assigns 0..n-1 following the id list", async () => {
     store.setOrders(["b", "a"]);
     assert.equal(store.get("b").order, 0);
     assert.equal(store.get("a").order, 1);
-    await drain(); await drain();
-    assert.deepEqual(writer.calls.map(c => [c.id, c.value]), [["b", 0], ["a", 1]]);
+    await drain();
+    await drain();
+    assert.deepEqual(
+        writer.calls.map((c) => [c.id, c.value]),
+        [
+            ["b", 0],
+            ["a", 1],
+        ],
+    );
 });
 
 test("redundant set (same value, nothing pending) does not queue a push", () => {
     const writer = makeManualWriter();
     const { store } = makeStore([proj("a", 0, true)], writer);
-    store.setInWorkspace("a", true);     // already true
+    store.setInWorkspace("a", true); // already true
     assert.equal(writer.pending.length, 0);
 });
 
@@ -202,16 +225,25 @@ test("failed push notifies onChange with revert:<field>", async () => {
 
 test("merge adds new ids and reports newly-inWorkspace ones", () => {
     const { store } = makeStore([proj("a", 0, true)]);
-    const result = store.merge([proj("a", 0, true), proj("b", 1, true), proj("c", null, false)], ["a"]);
+    const result = store.merge(
+        [proj("a", 0, true), proj("b", 1, true), proj("c", null, false)],
+        ["a"],
+    );
     assert.deepEqual(result.added.sort(), ["b", "c"]);
-    assert.deepEqual(result.newlyInWorkspace.map(p => p.id), ["b"]);
+    assert.deepEqual(
+        result.newlyInWorkspace.map((p) => p.id),
+        ["b"],
+    );
     assert.equal(store.all().length, 3);
 });
 
 test("merge: catalog fields always take the remote value", () => {
     const { store } = makeStore([proj("a", 0, true)]);
     const remote = Object.assign(proj("a", 0, true), {
-        name: "Renamed", icon: { type: "emoji", value: "🚀" }, notionUrl: "https://x" });
+        name: "Renamed",
+        icon: { type: "emoji", value: "🚀" },
+        notionUrl: "https://x",
+    });
     store.merge([remote], []);
     assert.equal(store.get("a").name, "Renamed");
     assert.deepEqual(store.get("a").icon, { type: "emoji", value: "🚀" });
@@ -220,19 +252,22 @@ test("merge: catalog fields always take the remote value", () => {
 test("merge: deck fields take remote when clean, keep local when a write is pending", async () => {
     const writer = makeManualWriter();
     const { store } = makeStore([proj("a", 0, false), proj("b", 1, false)], writer);
-    store.setInWorkspace("a", true);      // pending (push not settled)
+    store.setInWorkspace("a", true); // pending (push not settled)
 
     store.merge([proj("a", 0, false), proj("b", 1, true)], []);
 
-    assert.equal(store.get("a").inWorkspace, true);   // local pending wins
-    assert.equal(store.get("b").inWorkspace, true);   // clean field: remote wins
+    assert.equal(store.get("a").inWorkspace, true); // local pending wins
+    assert.equal(store.get("b").inWorkspace, true); // clean field: remote wins
     // b went false -> true via merge, so it must be reported as newly-on.
 });
 
 test("merge reports a clean project flipped on remotely as newlyInWorkspace", () => {
     const { store } = makeStore([proj("a", 0, false)]);
     const result = store.merge([proj("a", 0, true)], []);
-    assert.deepEqual(result.newlyInWorkspace.map(p => p.id), ["a"]);
+    assert.deepEqual(
+        result.newlyInWorkspace.map((p) => p.id),
+        ["a"],
+    );
     // And NOT one that was already on.
     const again = store.merge([proj("a", 0, true)], []);
     assert.deepEqual(again.newlyInWorkspace, []);
@@ -240,9 +275,9 @@ test("merge reports a clean project flipped on remotely as newlyInWorkspace", ()
 
 test("merge drops ids missing from remote unless protected", () => {
     const { store } = makeStore([proj("a", 0, true), proj("b", 1, true), proj("c", 2, false)]);
-    const result = store.merge([proj("a", 0, true)], ["b"]);   // b is in the live deck
+    const result = store.merge([proj("a", 0, true)], ["b"]); // b is in the live deck
     assert.deepEqual(result.removed, ["c"]);
-    assert.ok(store.get("b"));                                  // protected survives
+    assert.ok(store.get("b")); // protected survives
     assert.equal(store.get("c"), null);
 });
 
@@ -255,10 +290,10 @@ test("merge persists the merged catalog to the cache", () => {
 test("merge acks the remote value: post-merge failure reverts to the merged value", async () => {
     const writer = makeManualWriter();
     const { store } = makeStore([proj("a", 3, true)], writer);
-    store.merge([proj("a", 9, true)], []);            // remote order 9 acked
+    store.merge([proj("a", 9, true)], []); // remote order 9 acked
     store.setOrder("a", 4);
     await writer.settle(false);
-    assert.equal(store.get("a").order, 9);            // reverts to merged 9, not stale 3
+    assert.equal(store.get("a").order, 9); // reverts to merged 9, not stale 3
 });
 
 test("merge never downgrades a protected (in-deck) id to inWorkspace=false", () => {
@@ -280,36 +315,38 @@ test("transient failure HOLDS the write: no revert, field stays dirty", async ()
     const writer = makeManualWriter();
     const { store, persistence } = makeStore([proj("a", 0, false)], writer);
     let errCb = null;
-    store.onWriteError((id, field) => { errCb = { id, field }; });
+    store.onWriteError((id, field) => {
+        errCb = { id, field };
+    });
 
     store.setInWorkspace("a", true);
-    await writer.settle(false, new Error("http-503"));   // network-shaped failure
+    await writer.settle(false, new Error("http-503")); // network-shaped failure
 
-    assert.equal(store.get("a").inWorkspace, true);      // NOT reverted
+    assert.equal(store.get("a").inWorkspace, true); // NOT reverted
     assert.equal(cacheOf(persistence)[0].inWorkspace, true);
     assert.deepEqual(errCb, { id: "a", field: "inWorkspace" }); // error dot still shows
-    assert.equal(store.hasPendingWrites(), true);        // write held, not dropped
-    assert.equal(writer.pending.length, 0);              // and queue is paused
+    assert.equal(store.hasPendingWrites(), true); // write held, not dropped
+    assert.equal(writer.pending.length, 0); // and queue is paused
 });
 
 test("held write survives a merge (dirty field protects the local value)", async () => {
     const writer = makeManualWriter();
     const { store } = makeStore([proj("a", 0, false)], writer);
     store.setInWorkspace("a", true);
-    await writer.settle(false, new Error("http-503"));   // held
+    await writer.settle(false, new Error("http-503")); // held
 
-    store.merge([proj("a", 0, false)], []);              // remote still says OFF
-    assert.equal(store.get("a").inWorkspace, true);      // local held write wins
+    store.merge([proj("a", 0, false)], []); // remote still says OFF
+    assert.equal(store.get("a").inWorkspace, true); // local held write wins
 });
 
 test("retryPending resumes the held queue and the write lands", async () => {
     const writer = makeManualWriter();
     const { store } = makeStore([proj("a", 0, false)], writer);
     store.setInWorkspace("a", true);
-    await writer.settle(false, new Error("http-503"));   // held + paused
+    await writer.settle(false, new Error("http-503")); // held + paused
 
-    store.retryPending();                                 // connectivity back
-    assert.equal(writer.pending.length, 1);               // push re-sent
+    store.retryPending(); // connectivity back
+    assert.equal(writer.pending.length, 1); // push re-sent
     const p = await writer.settle(true);
     assert.deepEqual([p.id, p.value], ["a", true]);
     assert.equal(store.hasPendingWrites(), false);
@@ -320,8 +357,8 @@ test("mutations made while paused queue up and drain in order on retry", async (
     const writer = makeManualWriter();
     const { store } = makeStore([proj("a", 0, false), proj("b", 1, false)], writer);
     store.setInWorkspace("a", true);
-    await writer.settle(false, new Error("http-503"));   // a held, queue paused
-    store.setInWorkspace("b", true);                     // offline mutation: queued, no push
+    await writer.settle(false, new Error("http-503")); // a held, queue paused
+    store.setInWorkspace("b", true); // offline mutation: queued, no push
     assert.equal(writer.pending.length, 0);
 
     store.retryPending();
@@ -340,17 +377,25 @@ test("retryPending is a safe no-op when nothing is held", () => {
 test("transient vs permanent classification", async () => {
     // 5xx, 429, sub-100 pseudo-codes, and non-http messages hold; 4xx reverts.
     for (const [errMsg, shouldHold] of [
-        ["http-500", true], ["http-503", true], ["http-429", true],
-        ["http-2", true], ["Could not connect: Network is unreachable", true],
-        ["http-400", false], ["http-403", false], ["http-404", false],
+        ["http-500", true],
+        ["http-503", true],
+        ["http-429", true],
+        ["http-2", true],
+        ["Could not connect: Network is unreachable", true],
+        ["http-400", false],
+        ["http-403", false],
+        ["http-404", false],
         ["no-token", false],
     ]) {
         const writer = makeManualWriter();
         const { store } = makeStore([proj("x", 0, false)], writer);
         store.setInWorkspace("x", true);
         await writer.settle(false, new Error(errMsg));
-        assert.equal(store.get("x").inWorkspace, shouldHold,
-            errMsg + " should " + (shouldHold ? "hold" : "revert"));
+        assert.equal(
+            store.get("x").inWorkspace,
+            shouldHold,
+            errMsg + " should " + (shouldHold ? "hold" : "revert"),
+        );
     }
 });
 
@@ -359,9 +404,9 @@ test("transient vs permanent classification", async () => {
 test("destroy drops queued pushes (by design)", async () => {
     const writer = makeManualWriter();
     const { store } = makeStore([proj("a", 0), proj("b", 1)], writer);
-    store.setOrder("a", 5);              // in flight
-    store.setOrder("b", 6);              // queued
+    store.setOrder("a", 5); // in flight
+    store.setOrder("b", 6); // queued
     store.destroy();
-    await writer.settle(true);           // in-flight one settles harmlessly
-    assert.equal(writer.pending.length, 0);  // queued push never sent
+    await writer.settle(true); // in-flight one settles harmlessly
+    assert.equal(writer.pending.length, 0); // queued push never sent
 });

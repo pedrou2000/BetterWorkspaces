@@ -13,11 +13,13 @@ const Persistence = AppletDir.lib.persistence.Persistence;
 const Http = AppletDir.lib.http.Http;
 
 function _iconsDir() {
-    let dir = GLib.build_filenamev([Persistence.configDir(), "icons"]);
+    const dir = GLib.build_filenamev([Persistence.configDir(), "icons"]);
     try {
-        let f = Gio.File.new_for_path(dir);
+        const f = Gio.File.new_for_path(dir);
         if (!f.query_exists(null)) f.make_directory_with_parents(null);
-    } catch (e) { L.error("_iconsDir: " + e.toString()); }
+    } catch (e) {
+        L.error("_iconsDir: " + e.toString());
+    }
     return dir;
 }
 
@@ -29,7 +31,7 @@ function _hashString(s) {
 }
 
 function _extFor(url) {
-    let m = url.split("?")[0].match(/\.(png|jpg|jpeg|svg|gif|webp)$/i);
+    const m = url.split("?")[0].match(/\.(png|jpg|jpeg|svg|gif|webp)$/i);
     return m ? m[0].toLowerCase() : ".png";
 }
 
@@ -39,38 +41,40 @@ function _cachePathFor(url) {
 
 // Fallback glyph: the project name's first character, uppercased.
 function _fallbackLabel(name) {
-    let ch = (name && name.length) ? name.trim().charAt(0).toUpperCase() : "?";
-    return new St.Label({ style_class: 'better-workspaces-icon-fallback', text: ch });
+    const ch = name && name.length ? name.trim().charAt(0).toUpperCase() : "?";
+    return new St.Label({ style_class: "better-workspaces-icon-fallback", text: ch });
 }
 
 function _iconFromFile(path, size) {
-    let gicon = new Gio.FileIcon({ file: Gio.File.new_for_path(path) });
+    const gicon = new Gio.FileIcon({ file: Gio.File.new_for_path(path) });
     return new St.Icon({
         gicon: gicon,
         icon_size: size,
-        style_class: 'better-workspaces-icon-img',
+        style_class: "better-workspaces-icon-img",
     });
 }
 
 // cb(true) on success.
 function _download(url, dest, cb) {
-    Http.request("GET", url).then((res) => {
-        try {
-            if (res.status >= 200 && res.status < 300 && res.bytes.length > 0) {
-                GLib.file_set_contents(dest, res.bytes);
-                cb(true);
-            } else {
-                L.error("icon GET http " + res.status);
+    Http.request("GET", url)
+        .then((res) => {
+            try {
+                if (res.status >= 200 && res.status < 300 && res.bytes.length > 0) {
+                    GLib.file_set_contents(dest, res.bytes);
+                    cb(true);
+                } else {
+                    L.error("icon GET http " + res.status);
+                    cb(false);
+                }
+            } catch (e) {
+                L.error("icon write: " + e.toString());
                 cb(false);
             }
-        } catch (e) {
-            L.error("icon write: " + e.toString());
+        })
+        .catch((e) => {
+            L.error("_download: " + e.toString());
             cb(false);
-        }
-    }).catch((e) => {
-        L.error("_download: " + e.toString());
-        cb(false);
-    });
+        });
 }
 
 // icon: {type,value}|null. onReady() fires after a successful async download so
@@ -78,20 +82,27 @@ function _download(url, dest, cb) {
 function makeActor(icon, name, size, onReady) {
     if (icon && icon.type === "emoji" && icon.value) {
         return new St.Label({
-            style_class: 'better-workspaces-icon-emoji',
+            style_class: "better-workspaces-icon-emoji",
             text: icon.value,
         });
     }
 
     if (icon && icon.type === "url" && icon.value) {
-        let path = _cachePathFor(icon.value);
+        const path = _cachePathFor(icon.value);
         if (Gio.File.new_for_path(path).query_exists(null)) {
-            try { return _iconFromFile(path, size || 22); }
-            catch (e) { L.error("iconFromFile: " + e.toString()); }
+            try {
+                return _iconFromFile(path, size || 22);
+            } catch (e) {
+                L.error("iconFromFile: " + e.toString());
+            }
         }
         _download(icon.value, path, function (ok) {
             if (ok && onReady) {
-                try { onReady(); } catch (e) { L.error("onReady: " + e.toString()); }
+                try {
+                    onReady();
+                } catch (e) {
+                    L.error("onReady: " + e.toString());
+                }
             }
         });
         return _fallbackLabel(name);

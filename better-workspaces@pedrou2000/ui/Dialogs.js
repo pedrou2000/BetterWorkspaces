@@ -6,22 +6,29 @@ const ModalDialog = imports.ui.modalDialog;
 
 // buttons: [{label, action?, key?}]; each button's action also closes.
 function _open(title, message, buttons) {
-    let dialog = new ModalDialog.ModalDialog();
-    let box = new St.BoxLayout({
+    const dialog = new ModalDialog.ModalDialog();
+    const box = new St.BoxLayout({
         vertical: true,
-        style_class: 'better-workspaces-toggle-panel',
+        style_class: "better-workspaces-toggle-panel",
     });
-    box.add(new St.Label({
-        style_class: 'better-workspaces-toggle-title',
-        text: title,
-    }));
+    box.add(
+        new St.Label({
+            style_class: "better-workspaces-toggle-title",
+            text: title,
+        }),
+    );
     box.add(new St.Label({ text: message }));
     dialog.contentLayout.add(box);
-    dialog.setButtons(buttons.map((b) => ({
-        label: b.label,
-        key: b.key,
-        action: () => { dialog.close(); if (b.action) b.action(); },
-    })));
+    dialog.setButtons(
+        buttons.map((b) => ({
+            label: b.label,
+            key: b.key,
+            action: () => {
+                dialog.close();
+                if (b.action) b.action();
+            },
+        })),
+    );
     dialog.open();
     return dialog;
 }

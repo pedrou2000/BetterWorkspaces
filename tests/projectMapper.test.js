@@ -12,9 +12,12 @@ function page(id, opts) {
     opts = opts || {};
     const properties = {
         [ProjectMapper.TITLE_PROP]: {
-            title: opts.name === undefined
-                ? [{ plain_text: id }]
-                : (opts.name === null ? [] : [{ plain_text: opts.name }]),
+            title:
+                opts.name === undefined
+                    ? [{ plain_text: id }]
+                    : opts.name === null
+                      ? []
+                      : [{ plain_text: opts.name }],
         },
         [ProjectMapper.WORKSPACE_PROP]: { checkbox: !!opts.workspace },
         [ProjectMapper.ARCHIVE_PROP]: { checkbox: !!opts.archive },
@@ -66,7 +69,8 @@ test("mapPage title fallbacks", () => {
 test("mapPage multi-segment titles are joined", () => {
     const pg = page("p1", {});
     pg.properties[ProjectMapper.TITLE_PROP].title = [
-        { plain_text: "Job " }, { plain_text: "2026" },
+        { plain_text: "Job " },
+        { plain_text: "2026" },
     ];
     assert.equal(ProjectMapper.mapPage(pg).name, "Job 2026");
 });
@@ -94,27 +98,41 @@ test("mapPage emoji icon", () => {
 });
 
 test("mapPage external / file / custom_emoji icons normalize to url", () => {
-    const ext = ProjectMapper.mapPage(page("p1", {
-        icon: { type: "external", external: { url: "https://x/e.png" } } }));
+    const ext = ProjectMapper.mapPage(
+        page("p1", {
+            icon: { type: "external", external: { url: "https://x/e.png" } },
+        }),
+    );
     assert.deepEqual(ext.icon, { type: "url", value: "https://x/e.png" });
 
-    const file = ProjectMapper.mapPage(page("p2", {
-        icon: { type: "file", file: { url: "https://x/f.png" } } }));
+    const file = ProjectMapper.mapPage(
+        page("p2", {
+            icon: { type: "file", file: { url: "https://x/f.png" } },
+        }),
+    );
     assert.deepEqual(file.icon, { type: "url", value: "https://x/f.png" });
 
-    const custom = ProjectMapper.mapPage(page("p3", {
-        icon: { type: "custom_emoji", custom_emoji: { url: "https://x/c.png" } } }));
+    const custom = ProjectMapper.mapPage(
+        page("p3", {
+            icon: { type: "custom_emoji", custom_emoji: { url: "https://x/c.png" } },
+        }),
+    );
     assert.deepEqual(custom.icon, { type: "url", value: "https://x/c.png" });
 });
 
 test("mapPage built-in gallery icon becomes the predictable SVG url", () => {
-    const p = ProjectMapper.mapPage(page("p1", {
-        icon: { type: "icon", icon: { name: "brain", color: "blue" } } }));
-    assert.deepEqual(p.icon,
-        { type: "url", value: "https://www.notion.so/icons/brain_blue.svg" });
+    const p = ProjectMapper.mapPage(
+        page("p1", {
+            icon: { type: "icon", icon: { name: "brain", color: "blue" } },
+        }),
+    );
+    assert.deepEqual(p.icon, { type: "url", value: "https://www.notion.so/icons/brain_blue.svg" });
     // Color defaults to gray.
-    const noColor = ProjectMapper.mapPage(page("p2", {
-        icon: { type: "icon", icon: { name: "brain" } } }));
+    const noColor = ProjectMapper.mapPage(
+        page("p2", {
+            icon: { type: "icon", icon: { name: "brain" } },
+        }),
+    );
     assert.equal(noColor.icon.value, "https://www.notion.so/icons/brain_gray.svg");
 });
 
@@ -132,10 +150,16 @@ test("sortByOrder: ascending order, nulls last, title tie-break; input untouched
         { id: "a", name: "Alpha", order: null },
         { id: "c", name: "Charlie", order: 0 },
     ];
-    const snapshot = input.map(p => p.id);
+    const snapshot = input.map((p) => p.id);
     const sorted = ProjectMapper.sortByOrder(input);
-    assert.deepEqual(sorted.map(p => p.id), ["c", "b", "a", "d"]);
-    assert.deepEqual(input.map(p => p.id), snapshot); // non-mutating
+    assert.deepEqual(
+        sorted.map((p) => p.id),
+        ["c", "b", "a", "d"],
+    );
+    assert.deepEqual(
+        input.map((p) => p.id),
+        snapshot,
+    ); // non-mutating
 });
 
 test("sortByOrder ties on the same order break by title", () => {
@@ -143,7 +167,10 @@ test("sortByOrder ties on the same order break by title", () => {
         { id: "b", name: "Bravo", order: 1 },
         { id: "a", name: "Alpha", order: 1 },
     ]);
-    assert.deepEqual(sorted.map(p => p.id), ["a", "b"]);
+    assert.deepEqual(
+        sorted.map((p) => p.id),
+        ["a", "b"],
+    );
 });
 
 // mapResults
@@ -153,12 +180,15 @@ test("mapResults filters archived and sorts by order", () => {
         results: [
             page("p1", { name: "Zulu", order: 1 }),
             page("p2", { name: "Kilo", archive: true }),
-            page("p3", { name: "Alpha" }),          // no order -> last
+            page("p3", { name: "Alpha" }), // no order -> last
             page("p4", { name: "Mike", order: 0 }),
         ],
     };
     const projects = ProjectMapper.mapResults(result);
-    assert.deepEqual(projects.map(p => p.name), ["Mike", "Zulu", "Alpha"]);
+    assert.deepEqual(
+        projects.map((p) => p.name),
+        ["Mike", "Zulu", "Alpha"],
+    );
 });
 
 test("mapResults tolerates empty or malformed results", () => {

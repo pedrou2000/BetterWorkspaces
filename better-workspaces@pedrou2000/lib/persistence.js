@@ -14,9 +14,9 @@ function configDir() {
 }
 
 function _ensureDir() {
-    let dir = configDir();
+    const dir = configDir();
     try {
-        let f = Gio.File.new_for_path(dir);
+        const f = Gio.File.new_for_path(dir);
         if (!f.query_exists(null)) f.make_directory_with_parents(null);
         return dir;
     } catch (e) {
@@ -32,9 +32,9 @@ function pathFor(filename) {
 function writeJSON(filename, obj) {
     try {
         _ensureDir();
-        let path = pathFor(filename);
-        let text = JSON.stringify(obj, null, 2);
-        let ok = GLib.file_set_contents(path, text);
+        const path = pathFor(filename);
+        const text = JSON.stringify(obj, null, 2);
+        const ok = GLib.file_set_contents(path, text);
         if (!ok) L.error("writeJSON: file_set_contents returned false for " + path);
         return ok;
     } catch (e) {
@@ -47,14 +47,15 @@ function writeJSON(filename, obj) {
 function readJSON(filename, fallback) {
     if (fallback === undefined) fallback = null;
     try {
-        let path = pathFor(filename);
-        let f = Gio.File.new_for_path(path);
+        const path = pathFor(filename);
+        const f = Gio.File.new_for_path(path);
         if (!f.query_exists(null)) return fallback;
-        let [ok, contents] = GLib.file_get_contents(path);
+        const [ok, contents] = GLib.file_get_contents(path);
         if (!ok) return fallback;
-        let text = contents instanceof Uint8Array
-            ? imports.byteArray.toString(contents)
-            : contents.toString();
+        const text =
+            contents instanceof Uint8Array
+                ? imports.byteArray.toString(contents)
+                : contents.toString();
         return JSON.parse(text);
     } catch (e) {
         L.error("readJSON(" + filename + "): " + e.toString());

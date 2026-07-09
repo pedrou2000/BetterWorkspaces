@@ -10,7 +10,6 @@ const AppletDir = imports.ui.appletManager.applets["better-workspaces@pedrou2000
 const L = AppletDir.lib.logger.Logger.makeLogger("deck-coord");
 
 var DeckCoordinator = class DeckCoordinator {
-
     // deps: {
     //   store, controller,
     //   dialogs: {confirm(title,msg,label)->Promise<bool>, notify(title,msg)},
@@ -27,9 +26,15 @@ var DeckCoordinator = class DeckCoordinator {
         this._hooks = deps.hooks || {};
     }
 
-    _rebuildPanel() { if (this._hooks.rebuildPanel) this._hooks.rebuildPanel(); }
-    _refresh() { if (this._hooks.refresh) this._hooks.refresh(); }
-    _refreshTogglePanel() { if (this._hooks.refreshTogglePanel) this._hooks.refreshTogglePanel(); }
+    _rebuildPanel() {
+        if (this._hooks.rebuildPanel) this._hooks.rebuildPanel();
+    }
+    _refresh() {
+        if (this._hooks.refresh) this._hooks.refresh();
+    }
+    _refreshTogglePanel() {
+        if (this._hooks.refreshTogglePanel) this._hooks.refreshTogglePanel();
+    }
 
     toDef(p) {
         return {
@@ -43,7 +48,7 @@ var DeckCoordinator = class DeckCoordinator {
 
     // The deck is the inWorkspace subset of the catalog, in Workspace Order.
     loadDeckFromStore() {
-        let inDeck = this._store.all().filter((p) => p.inWorkspace);
+        const inDeck = this._store.all().filter((p) => p.inWorkspace);
         if (inDeck.length === 0) {
             L.log("loadDeckFromStore: no in-workspace projects -> placeholder deck");
             this._controller.loadProjects(this._placeholder);
@@ -58,14 +63,14 @@ var DeckCoordinator = class DeckCoordinator {
     // APPENDS to the deck end (append never moves existing workspaces). Unchecking
     // in Notion never auto-removes; that stays behind the explicit toggle-off flow.
     onPull(projects) {
-        let deckIds = [];
-        let n = this._controller.state.projectCount();
+        const deckIds = [];
+        const n = this._controller.state.projectCount();
         for (let i = 0; i < n; i++) deckIds.push(this._controller.state.getProject(i).id);
 
-        let result = this._store.merge(projects, deckIds);
+        const result = this._store.merge(projects, deckIds);
 
         for (let i = 0; i < result.newlyInWorkspace.length; i++) {
-            let p = result.newlyInWorkspace[i];
+            const p = result.newlyInWorkspace[i];
             if (this._controller.state.indexOfProjectId(p.id) >= 0) continue;
             this._controller.addProjectLive(this.toDef(p));
             L.log("onPull: auto-appended newly-on project " + p.name);
@@ -79,7 +84,7 @@ var DeckCoordinator = class DeckCoordinator {
     // Resolve the deck index of the ON project `movedId` and reorder it — the
     // toggle panel reports ids (never positions, which can drift), resolved here.
     reorderFromPanel(movedId, toOnPos) {
-        let from = this._controller.state.indexOfProjectId(movedId);
+        const from = this._controller.state.indexOfProjectId(movedId);
         if (from >= 0) this._controller.reorderProject(from, toOnPos);
     }
 
@@ -100,12 +105,12 @@ var DeckCoordinator = class DeckCoordinator {
 
         // Destructive: confirm, remove from the deck (closes windows), then flip
         // the store flag only once the removal actually succeeds.
-        let deckIdx = this._controller.state.indexOfProjectId(project.id);
+        const deckIdx = this._controller.state.indexOfProjectId(project.id);
         if (deckIdx < 0) {
             this._store.setInWorkspace(project.id, false); // not in deck (shouldn't happen)
             return;
         }
-        let confirmed = await this._confirmRemoval(project);
+        const confirmed = await this._confirmRemoval(project);
         if (!confirmed) throw new Error("cancelled");
         try {
             await this._controller.removeProjectLive(deckIdx);
@@ -122,19 +127,21 @@ var DeckCoordinator = class DeckCoordinator {
     }
 
     _confirmRemoval(project) {
-        let deckIdx = this._controller.state.indexOfProjectId(project.id);
-        let p = this._controller.state.getProject(deckIdx);
-        let wsCount = p ? p.wsCount : 1;
+        const deckIdx = this._controller.state.indexOfProjectId(project.id);
+        const p = this._controller.state.getProject(deckIdx);
+        const wsCount = p ? p.wsCount : 1;
         return this._dialogs.confirm(
             "Remove “" + project.name + "” from workspaces?",
             "This will close its windows and remove its " + wsCount + " workspace(s).",
-            "Remove");
+            "Remove",
+        );
     }
 
     _notifyWindowsOpen(project, info) {
-        let titles = (info && info.openTitles) ? info.openTitles.join(", ") : "";
+        const titles = info && info.openTitles ? info.openTitles.join(", ") : "";
         this._dialogs.notify(
             "Couldn’t remove “" + project.name + "”",
-            "Please close these window(s) first, then try again:\n" + titles);
+            "Please close these window(s) first, then try again:\n" + titles,
+        );
     }
 };

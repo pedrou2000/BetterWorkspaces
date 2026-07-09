@@ -14,21 +14,23 @@ function buildQueryBody() {
     return {
         page_size: 100,
         filter: {
-            and: [
-                { property: ARCHIVE_PROP, checkbox: { equals: false } },
-            ],
+            and: [{ property: ARCHIVE_PROP, checkbox: { equals: false } }],
         },
-        sorts: [
-            { property: TITLE_PROP, direction: "ascending" },
-        ],
+        sorts: [{ property: TITLE_PROP, direction: "ascending" }],
     };
 }
 
 function _plainTitle(page) {
     try {
-        let prop = page.properties[TITLE_PROP];
+        const prop = page.properties[TITLE_PROP];
         if (!prop || !prop.title) return "(untitled)";
-        return prop.title.map(function (t) { return t.plain_text; }).join("") || "(untitled)";
+        return (
+            prop.title
+                .map(function (t) {
+                    return t.plain_text;
+                })
+                .join("") || "(untitled)"
+        );
     } catch (e) {
         return "(untitled)";
     }
@@ -36,16 +38,19 @@ function _plainTitle(page) {
 
 function _checkbox(page, propName) {
     try {
-        let prop = page.properties[propName];
+        const prop = page.properties[propName];
         return !!(prop && prop.checkbox === true);
-    } catch (e) { return false; }
+    } catch (e) {
+        return false;
+    }
 }
 
 function _number(page, propName) {
     try {
-        let prop = page.properties[propName];
-        if (prop && prop.type === "number" && prop.number !== null && prop.number !== undefined)
+        const prop = page.properties[propName];
+        if (prop && prop.type === "number" && prop.number !== null && prop.number !== undefined) {
             return prop.number;
+        }
     } catch (e) {}
     return null;
 }
@@ -63,23 +68,26 @@ function _wantsWorkspace(page) {
 // Normalize to {type:"emoji"|"url", value} | null.
 function _icon(page) {
     try {
-        let ic = page.icon;
+        const ic = page.icon;
         if (!ic) return null;
         if (ic.type === "emoji" && ic.emoji) return { type: "emoji", value: ic.emoji };
         if (ic.type === "external" && ic.external) return { type: "url", value: ic.external.url };
         if (ic.type === "file" && ic.file) return { type: "url", value: ic.file.url };
-        if (ic.type === "custom_emoji" && ic.custom_emoji)
+        if (ic.type === "custom_emoji" && ic.custom_emoji) {
             return { type: "url", value: ic.custom_emoji.url };
+        }
         // Built-in gallery icon {name,color} -> predictable SVG URL, e.g.
         // brain+blue -> /icons/brain_blue.svg.
         if (ic.type === "icon" && ic.icon && ic.icon.name) {
-            let color = ic.icon.color || "gray";
+            const color = ic.icon.color || "gray";
             return {
                 type: "url",
                 value: "https://www.notion.so/icons/" + ic.icon.name + "_" + color + ".svg",
             };
         }
-    } catch (e) { L.error("_icon: " + e.toString()); }
+    } catch (e) {
+        L.error("_icon: " + e.toString());
+    }
     return null;
 }
 
@@ -99,8 +107,8 @@ function mapPage(page) {
 // Ascending Workspace Order; unset orders sort last, tie-broken by title.
 function sortByOrder(projects) {
     return projects.slice().sort(function (a, b) {
-        let ao = (a.order === null || a.order === undefined) ? Infinity : a.order;
-        let bo = (b.order === null || b.order === undefined) ? Infinity : b.order;
+        const ao = a.order === null || a.order === undefined ? Infinity : a.order;
+        const bo = b.order === null || b.order === undefined ? Infinity : b.order;
         if (ao !== bo) return ao - bo;
         return (a.name || "").localeCompare(b.name || "");
     });
@@ -110,7 +118,7 @@ function mapResults(result) {
     if (!result || !result.results) return [];
     let out = [];
     for (let i = 0; i < result.results.length; i++) {
-        let p = mapPage(result.results[i]);
+        const p = mapPage(result.results[i]);
         if (p) out.push(p);
     }
     out = sortByOrder(out);

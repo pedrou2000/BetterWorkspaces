@@ -10,7 +10,6 @@ const NOTION_BASE = "https://api.notion.com/v1";
 const NOTION_VERSION = "2022-06-28"; // Notion API version header
 
 var NotionClient = class NotionClient {
-
     constructor(token) {
         this.token = token || "";
     }
@@ -27,9 +26,9 @@ var NotionClient = class NotionClient {
     async _request(method, path, bodyObj) {
         if (!this.hasToken()) throw new Error("no-token");
 
-        let res = await Http.request(method, NOTION_BASE + path, {
+        const res = await Http.request(method, NOTION_BASE + path, {
             headers: {
-                "Authorization": "Bearer " + this.token,
+                Authorization: "Bearer " + this.token,
                 "Notion-Version": NOTION_VERSION,
                 "Content-Type": "application/json",
             },
@@ -54,13 +53,13 @@ var NotionClient = class NotionClient {
     }
 
     updatePageCheckbox(pageId, propName, value) {
-        let props = {};
+        const props = {};
         props[propName] = { checkbox: !!value };
         return this._request("PATCH", "/pages/" + pageId, { properties: props });
     }
 
     updatePageNumber(pageId, propName, value) {
-        let props = {};
+        const props = {};
         props[propName] = { number: value };
         return this._request("PATCH", "/pages/" + pageId, { properties: props });
     }

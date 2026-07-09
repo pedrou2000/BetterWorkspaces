@@ -48,7 +48,8 @@ function loadGjsModule(relPath, exportName, opts) {
     const fn = vm.compileFunction(
         `${code}\n;return typeof ${exportName} === "undefined" ? undefined : ${exportName};`,
         ["imports", "global"],
-        { filename: file });
+        { filename: file },
+    );
     const shim = mergeShims(makeImportsShim(), opts.applet, opts.extraImports);
     const exported = fn(shim, { log() {}, logError() {} });
     if (exported === undefined) {

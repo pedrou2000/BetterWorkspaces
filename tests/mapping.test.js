@@ -35,9 +35,11 @@ test("locationOf is the exact inverse of globalIndex", () => {
     for (let p = 0; p < COUNTS.length; p++) {
         for (let l = 0; l < COUNTS[p]; l++) {
             const flat = Mapping.globalIndex(COUNTS, p, l);
-            assert.deepEqual(Mapping.locationOf(COUNTS, flat),
+            assert.deepEqual(
+                Mapping.locationOf(COUNTS, flat),
                 { projectIdx: p, localIdx: l },
-                `flat ${flat} should map back to (${p}, ${l})`);
+                `flat ${flat} should map back to (${p}, ${l})`,
+            );
         }
     }
 });

@@ -21,7 +21,10 @@ function makeFakePersistence() {
     const files = new Map();
     return {
         files,
-        writeJSON(filename, obj) { files.set(filename, JSON.parse(JSON.stringify(obj))); return true; },
+        writeJSON(filename, obj) {
+            files.set(filename, JSON.parse(JSON.stringify(obj)));
+            return true;
+        },
         readJSON(filename, fallback) {
             if (!files.has(filename)) return fallback === undefined ? null : fallback;
             return JSON.parse(JSON.stringify(files.get(filename)));
@@ -34,8 +37,12 @@ function makeAutoWriter() {
     const calls = [];
     return {
         calls,
-        async setWorkspaceFlag(id, value) { calls.push({ kind: "flag", id, value }); },
-        async setWorkspaceOrder(id, order) { calls.push({ kind: "order", id, value: order }); },
+        async setWorkspaceFlag(id, value) {
+            calls.push({ kind: "flag", id, value });
+        },
+        async setWorkspaceOrder(id, order) {
+            calls.push({ kind: "order", id, value: order });
+        },
     };
 }
 
@@ -49,7 +56,9 @@ function makeFakeDialogs(confirmAnswers) {
             calls.confirm.push({ title, msg, label });
             return Promise.resolve(answers.length ? answers.shift() : true);
         },
-        notify(title, msg) { calls.notify.push({ title, msg }); },
+        notify(title, msg) {
+            calls.notify.push({ title, msg });
+        },
     };
 }
 
@@ -62,8 +71,10 @@ function makeController() {
     const coreDeps = { core: { mapping: { Mapping: Mapping } }, lib: lib };
     const Navigation = loadGjsModule("core/Navigation.js", "Navigation", { applet: coreDeps });
     const DeckReorder = loadGjsModule("core/DeckReorder.js", "DeckReorder", { applet: coreDeps });
-    const ProjectLifecycle = loadGjsModule("core/ProjectLifecycle.js", "ProjectLifecycle",
-        { applet: coreDeps, extraImports: { mainloop: mainloop } });
+    const ProjectLifecycle = loadGjsModule("core/ProjectLifecycle.js", "ProjectLifecycle", {
+        applet: coreDeps,
+        extraImports: { mainloop: mainloop },
+    });
     const Controller = loadGjsModule("core/Controller.js", "Controller", {
         applet: {
             core: {
@@ -104,7 +115,9 @@ function makeStack(cached, confirmAnswers) {
 
     const DeckCoordinator = loadGjsModule("core/DeckCoordinator.js", "DeckCoordinator");
     const coord = new DeckCoordinator({
-        store, controller, dialogs,
+        store,
+        controller,
+        dialogs,
         defaultWsPerProject: DEFAULT_WS_PER_PROJECT,
         placeholderProjects: PLACEHOLDER,
         hooks: {
@@ -141,7 +154,9 @@ function deckIds(controller) {
 
 test("loadDeckFromStore loads the inWorkspace subset in order", () => {
     const { coord, controller, wm } = makeStack([
-        proj("a", true, 0), proj("b", false, null), proj("c", true, 1),
+        proj("a", true, 0),
+        proj("b", false, null),
+        proj("c", true, 1),
     ]);
     coord.loadDeckFromStore();
     assert.deepEqual(deckIds(controller), ["a", "c"]);
@@ -158,7 +173,8 @@ test("loadDeckFromStore falls back to the placeholder when nothing is on", () =>
 
 test("handleToggle ON appends to the deck, flips the flag, assigns max+1 order", async () => {
     const { coord, store, controller, writer, hookCalls } = makeStack([
-        proj("a", true, 0), proj("b", false, null),
+        proj("a", true, 0),
+        proj("b", false, null),
     ]);
     coord.loadDeckFromStore();
 
@@ -185,8 +201,10 @@ test("handleToggle ON is idempotent — re-toggling an already-deck project does
 // handleToggle OFF
 
 test("handleToggle OFF confirms, removes from the deck, clears flag + order", async () => {
-    const { coord, store, controller, wm, mainloop, dialogs } =
-        makeStack([proj("a", true, 0), proj("b", true, 1)], [true]);
+    const { coord, store, controller, wm, mainloop, dialogs } = makeStack(
+        [proj("a", true, 0), proj("b", true, 1)],
+        [true],
+    );
     coord.loadDeckFromStore();
     assert.equal(wm.getWorkspaceCount(), 2);
 
@@ -201,26 +219,35 @@ test("handleToggle OFF confirms, removes from the deck, clears flag + order", as
 });
 
 test("handleToggle OFF rejects with 'cancelled' and leaves the deck intact", async () => {
-    const { coord, store, controller } =
-        makeStack([proj("a", true, 0), proj("b", true, 1)], [false]);
+    const { coord, store, controller } = makeStack(
+        [proj("a", true, 0), proj("b", true, 1)],
+        [false],
+    );
     coord.loadDeckFromStore();
 
-    await assert.rejects(() => coord.handleToggle(store.get("b"), false),
-        (e) => e.message === "cancelled");
+    await assert.rejects(
+        () => coord.handleToggle(store.get("b"), false),
+        (e) => e.message === "cancelled",
+    );
     assert.deepEqual(deckIds(controller), ["a", "b"]);
     assert.equal(store.get("b").inWorkspace, true); // unchanged
 });
 
 test("handleToggle OFF surfaces windows-open: notifies, rejects, keeps the project", async () => {
-    const { coord, store, controller, wm, mainloop, dialogs } =
-        makeStack([proj("a", true, 0), proj("b", true, 1)], [true]);
+    const { coord, store, controller, wm, mainloop, dialogs } = makeStack(
+        [proj("a", true, 0), proj("b", true, 1)],
+        [true],
+    );
     coord.loadDeckFromStore();
     // b's home is flat index 1; a stubborn window that ignores the close request.
     wm.addWindow(1, "unsaved.txt");
 
     const p = coord.handleToggle(store.get("b"), false);
     await drainThenFlush(mainloop); // grace elapses; window still there (no honorCloseRequests)
-    await assert.rejects(() => p, (e) => e.message === "windows-open");
+    await assert.rejects(
+        () => p,
+        (e) => e.message === "windows-open",
+    );
 
     assert.equal(dialogs.calls.notify.length, 1);
     assert.deepEqual(deckIds(controller), ["a", "b"]); // still present
@@ -245,7 +272,7 @@ test("onPull merges catalog fields and auto-appends a newly-on project", () => {
 });
 
 test("onPull never auto-removes a project unchecked in Notion", () => {
-    const { coord, store, controller } = makeStack([proj("a", true, 0), proj("b", true, 1)]);
+    const { coord, controller } = makeStack([proj("a", true, 0), proj("b", true, 1)]);
     coord.loadDeckFromStore();
 
     // Remote now shows b as OFF; the deck must keep it (removal is explicit-only).
@@ -257,9 +284,11 @@ test("onPull never auto-removes a project unchecked in Notion", () => {
 });
 
 test("onPull doesn't double-append a project already in the deck", () => {
-    const { coord, store, controller } = makeStack([proj("a", true, 0)]);
+    const { coord, controller } = makeStack([proj("a", true, 0)]);
     coord.loadDeckFromStore();
-    coord.onPull([{ id: "a", name: "A", icon: null, notionUrl: null, inWorkspace: true, order: 0 }]);
+    coord.onPull([
+        { id: "a", name: "A", icon: null, notionUrl: null, inWorkspace: true, order: 0 },
+    ]);
     assert.deepEqual(deckIds(controller), ["a"]);
 });
 
@@ -267,7 +296,9 @@ test("onPull doesn't double-append a project already in the deck", () => {
 
 test("reorderFromPanel resolves the moved id to its deck index and reorders", () => {
     const { coord, controller } = makeStack([
-        proj("a", true, 0), proj("b", true, 1), proj("c", true, 2),
+        proj("a", true, 0),
+        proj("b", true, 1),
+        proj("c", true, 2),
     ]);
     coord.loadDeckFromStore();
     coord.reorderFromPanel("c", 0); // move c to the front

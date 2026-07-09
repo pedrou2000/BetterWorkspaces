@@ -22,8 +22,12 @@ class FakeNotionClient {
         this.queryResult = { results: [] };
         FakeNotionClient.last = this;
     }
-    setToken(token) { this.token = token || ""; }
-    hasToken() { return this.token.length > 0; }
+    setToken(token) {
+        this.token = token || "";
+    }
+    hasToken() {
+        return this.token.length > 0;
+    }
     _gate() {
         if (!this.hasToken()) throw new Error("no-token");
         if (this.failAll) throw this.failAll;
@@ -50,9 +54,16 @@ function makeFakeNetMonitor(initiallyOnline) {
     let seq = 0;
     return {
         get_network_available: () => online,
-        connect(signal, cb) { handlers.set(++seq, cb); return seq; },
-        disconnect(id) { handlers.delete(id); },
-        handlerCount() { return handlers.size; },
+        connect(signal, cb) {
+            handlers.set(++seq, cb);
+            return seq;
+        },
+        disconnect(id) {
+            handlers.delete(id);
+        },
+        handlerCount() {
+            return handlers.size;
+        },
         // Test helper: change availability and emit the signal.
         setOnline(value) {
             online = !!value;
@@ -80,7 +91,8 @@ function makeSync(opts) {
     });
     const sync = new SyncService(
         opts.token !== undefined ? opts.token : "tok",
-        opts.dbId !== undefined ? opts.dbId : "db1");
+        opts.dbId !== undefined ? opts.dbId : "db1",
+    );
     const client = FakeNotionClient.last;
     const statuses = [];
     sync.onStatus((s) => statuses.push(s));
@@ -90,11 +102,14 @@ function makeSync(opts) {
 // A minimal raw Notion page the real ProjectMapper can digest.
 function rawPage(id, name, inWorkspace, order) {
     return {
-        id, url: "https://notion.so/" + id, archived: false, icon: null,
+        id,
+        url: "https://notion.so/" + id,
+        archived: false,
+        icon: null,
         properties: {
-            "Project": { title: [{ plain_text: name }] },
-            "Workspace": { checkbox: !!inWorkspace },
-            "Archive": { checkbox: false },
+            Project: { title: [{ plain_text: name }] },
+            Workspace: { checkbox: !!inWorkspace },
+            Archive: { checkbox: false },
             "Workspace Order": { type: "number", number: order === undefined ? null : order },
         },
     };
@@ -106,7 +121,7 @@ test("setWorkspaceFlag/-Order are plain Notion writes with the right property na
     const { sync, client } = makeSync();
     await sync.setWorkspaceFlag("p1", true);
     await sync.setWorkspaceOrder("p1", 4);
-    await sync.setWorkspaceOrder("p1", null);   // clearing = writing null
+    await sync.setWorkspaceOrder("p1", null); // clearing = writing null
     assert.deepEqual(client.calls, [
         { method: "updatePageCheckbox", pageId: "p1", propName: "Workspace", value: true },
         { method: "updatePageNumber", pageId: "p1", propName: "Workspace Order", value: 4 },
@@ -130,14 +145,21 @@ test("pushes without a token reject with no-token", async () => {
 
 test("syncNow: loading -> ok, onPull gets the mapped+sorted projects", async () => {
     const { sync, client, statuses } = makeSync();
-    client.queryResult = { results: [rawPage("p1", "Zulu", true, 1), rawPage("p2", "Alpha", false, 0)] };
+    client.queryResult = {
+        results: [rawPage("p1", "Zulu", true, 1), rawPage("p2", "Alpha", false, 0)],
+    };
     let pulled = null;
-    sync.onPull((projects) => { pulled = projects; });
+    sync.onPull((projects) => {
+        pulled = projects;
+    });
 
     await sync.syncNow();
 
     assert.deepEqual(statuses, ["loading", "ok"]);
-    assert.deepEqual(pulled.map(p => p.id), ["p2", "p1"]);   // sorted by order
+    assert.deepEqual(
+        pulled.map((p) => p.id),
+        ["p2", "p1"],
+    ); // sorted by order
     assert.equal(pulled[0].name, "Alpha");
 });
 
@@ -145,7 +167,9 @@ test("syncNow failure: loading -> error, onPull not called", async () => {
     const { sync, client, statuses } = makeSync();
     client.failAll = new Error("http-500");
     let pulled = false;
-    sync.onPull(() => { pulled = true; });
+    sync.onPull(() => {
+        pulled = true;
+    });
     await sync.syncNow();
     assert.deepEqual(statuses, ["loading", "error"]);
     assert.equal(pulled, false);
@@ -179,12 +203,12 @@ test("start pulls immediately and arms the interval timer; stop disarms it", asy
     const { sync, client, mainloop } = makeSync();
     sync.start();
     await new Promise((r) => setImmediate(r));
-    assert.equal(client.calls.filter(c => c.method === "queryDatabase").length, 1);
+    assert.equal(client.calls.filter((c) => c.method === "queryDatabase").length, 1);
     assert.equal(mainloop.pendingCount(), 1);
 
     mainloop.flush();
     await new Promise((r) => setImmediate(r));
-    assert.equal(client.calls.filter(c => c.method === "queryDatabase").length, 2);
+    assert.equal(client.calls.filter((c) => c.method === "queryDatabase").length, 2);
 
     sync.stop();
     assert.equal(mainloop.pendingCount(), 0);
@@ -201,41 +225,41 @@ test("destroy stops the timer", () => {
 
 test("offline->online transition triggers an immediate pull", async () => {
     const { sync, client, netMonitor } = makeSync({ online: false });
-    sync.start();                                        // initial pull fires (and fails or not — irrelevant)
+    sync.start(); // initial pull fires (and fails or not — irrelevant)
     await new Promise((r) => setImmediate(r));
-    const before = client.calls.filter(c => c.method === "queryDatabase").length;
+    const before = client.calls.filter((c) => c.method === "queryDatabase").length;
 
-    netMonitor.setOnline(true);                          // reconnect
+    netMonitor.setOnline(true); // reconnect
     await new Promise((r) => setImmediate(r));
-    const after = client.calls.filter(c => c.method === "queryDatabase").length;
-    assert.equal(after, before + 1);                     // exactly one extra pull
+    const after = client.calls.filter((c) => c.method === "queryDatabase").length;
+    assert.equal(after, before + 1); // exactly one extra pull
 });
 
 test("reconnect pull recovers status from error to ok", async () => {
     const { sync, client, netMonitor, statuses } = makeSync({ online: true });
-    client.failAll = new Error("http-0");                // network down: pulls fail
+    client.failAll = new Error("http-0"); // network down: pulls fail
     sync.start();
     await new Promise((r) => setImmediate(r));
     assert.equal(statuses[statuses.length - 1], "error");
 
-    netMonitor.setOnline(false);                         // offline edge (no pull)
-    client.failAll = null;                               // network back
-    netMonitor.setOnline(true);                          // online edge -> pull
+    netMonitor.setOnline(false); // offline edge (no pull)
+    client.failAll = null; // network back
+    netMonitor.setOnline(true); // online edge -> pull
     await new Promise((r) => setImmediate(r));
-    assert.equal(statuses[statuses.length - 1], "ok");   // error dot clears
+    assert.equal(statuses[statuses.length - 1], "ok"); // error dot clears
 });
 
 test("online->online churn (routes/VPN) does not cause a pull storm", async () => {
     const { sync, client, netMonitor } = makeSync({ online: true });
     sync.start();
     await new Promise((r) => setImmediate(r));
-    const before = client.calls.filter(c => c.method === "queryDatabase").length;
+    const before = client.calls.filter((c) => c.method === "queryDatabase").length;
 
-    netMonitor.setOnline(true);                          // no edge: already online
+    netMonitor.setOnline(true); // no edge: already online
     netMonitor.setOnline(true);
     await new Promise((r) => setImmediate(r));
-    const after = client.calls.filter(c => c.method === "queryDatabase").length;
-    assert.equal(after, before);                         // no extra pulls
+    const after = client.calls.filter((c) => c.method === "queryDatabase").length;
+    assert.equal(after, before); // no extra pulls
 });
 
 test("stop/destroy disconnect the network watcher", () => {

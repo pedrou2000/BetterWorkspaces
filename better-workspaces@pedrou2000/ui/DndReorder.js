@@ -11,9 +11,8 @@ const AppletDir = imports.ui.appletManager.applets["better-workspaces@pedrou2000
 const L = AppletDir.lib.logger.Logger.makeLogger("dnd");
 
 var DndReorderHelper = class DndReorderHelper {
-
     constructor(opts) {
-        this._axis = opts.axis === 'y' ? 'y' : 'x';
+        this._axis = opts.axis === "y" ? "y" : "x";
         this._getItems = opts.getItems;
         this._onReorder = opts.onReorder;
         this._hinted = null;
@@ -21,14 +20,14 @@ var DndReorderHelper = class DndReorderHelper {
 
     attachTo(container) {
         container._delegate = {
-            handleDragOver: (source, actor, x, y, time) => {
+            handleDragOver: (source, actor, x, y, _time) => {
                 this._showHint(this._slotFor(x, y));
                 return DND.DragMotionResult.MOVE_DROP;
             },
             handleDragOut: () => this.clearHint(),
-            acceptDrop: (source, actor, x, y, time) => {
-                let from = (source && source._bwReorder === this) ? source._bwDragIdx : -1;
-                let slot = this._slotFor(x, y);
+            acceptDrop: (source, actor, x, y, _time) => {
+                const from = source && source._bwReorder === this ? source._bwDragIdx : -1;
+                const slot = this._slotFor(x, y);
                 this.clearHint();
                 if (from < 0) return false; // not our draggable
                 // slot is an insertion point 0..count; removing `from` shifts it
@@ -49,9 +48,9 @@ var DndReorderHelper = class DndReorderHelper {
         actor.getDragActor = getDragActor;
         actor.getDragActorSource = () => actor;
         try {
-            let draggable = DND.makeDraggable(actor);
-            draggable.connect('drag-end', () => this.clearHint());
-            draggable.connect('drag-cancelled', () => this.clearHint());
+            const draggable = DND.makeDraggable(actor);
+            draggable.connect("drag-end", () => this.clearHint());
+            draggable.connect("drag-cancelled", () => this.clearHint());
         } catch (e) {
             L.error("makeDraggable: " + e.toString());
         }
@@ -59,13 +58,11 @@ var DndReorderHelper = class DndReorderHelper {
 
     // Insertion slot 0..count from the pointer, vs item centers along the axis.
     _slotFor(x, y) {
-        let items = this._getItems() || [];
-        let pos = this._axis === 'y' ? y : x;
+        const items = this._getItems() || [];
+        const pos = this._axis === "y" ? y : x;
         for (let i = 0; i < items.length; i++) {
-            let box = items[i].get_allocation_box();
-            let center = this._axis === 'y'
-                ? (box.y1 + box.y2) / 2
-                : (box.x1 + box.x2) / 2;
+            const box = items[i].get_allocation_box();
+            const center = this._axis === "y" ? (box.y1 + box.y2) / 2 : (box.x1 + box.x2) / 2;
             if (pos < center) return i;
         }
         return items.length;
@@ -73,17 +70,19 @@ var DndReorderHelper = class DndReorderHelper {
 
     _showHint(slot) {
         this.clearHint();
-        let items = this._getItems() || [];
-        let idx = Math.min(slot, items.length - 1);
+        const items = this._getItems() || [];
+        const idx = Math.min(slot, items.length - 1);
         if (idx >= 0 && items[idx]) {
-            items[idx].add_style_pseudo_class('drop-target');
+            items[idx].add_style_pseudo_class("drop-target");
             this._hinted = items[idx];
         }
     }
 
     clearHint() {
         if (this._hinted) {
-            try { this._hinted.remove_style_pseudo_class('drop-target'); } catch (e) {}
+            try {
+                this._hinted.remove_style_pseudo_class("drop-target");
+            } catch (e) {}
             this._hinted = null;
         }
     }

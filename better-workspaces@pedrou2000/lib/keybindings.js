@@ -23,11 +23,16 @@ const KB_SCHEMAS = [
 // "<Super>o" -> normalized "keyval:mods" string, or null.
 function _parse(accel) {
     try {
-        let res = Gtk.accelerator_parse(accel);
+        const res = Gtk.accelerator_parse(accel);
         // GTK3 returns [keyval, mods]; GTK4 returns [ok, keyval, mods].
         let keyval, mods;
-        if (res.length === 3) { keyval = res[1]; mods = res[2]; }
-        else { keyval = res[0]; mods = res[1]; }
+        if (res.length === 3) {
+            keyval = res[1];
+            mods = res[2];
+        } else {
+            keyval = res[0];
+            mods = res[1];
+        }
         if (!keyval) return null;
         return keyval + ":" + mods;
     } catch (e) {
@@ -37,64 +42,91 @@ function _parse(accel) {
 
 function _open(schema) {
     try {
-        let src = Gio.SettingsSchemaSource.get_default();
+        const src = Gio.SettingsSchemaSource.get_default();
         if (!src || !src.lookup(schema, true)) return null;
         return new Gio.Settings({ schema_id: schema });
-    } catch (e) { return null; }
+    } catch (e) {
+        return null;
+    }
 }
 
 var KeyBinder = class KeyBinder {
-
     constructor() {
         this._touched = {}; // "schema\0key" -> original [..] (saved once, for restore)
-        this._added = [];   // hotkey names we registered
+        this._added = []; // hotkey names we registered
     }
 
     // Save ONCE so teardown restores the true original even if we clear AND
     // reassign the same key.
     _recordOriginal(schema, key, settings) {
-        let id = schema + "\0" + key;
+        const id = schema + "\0" + key;
         if (this._touched[id] !== undefined) return;
-        try { this._touched[id] = settings.get_strv(key); }
-        catch (e) { this._touched[id] = []; }
+        try {
+            this._touched[id] = settings.get_strv(key);
+        } catch (e) {
+            this._touched[id] = [];
+        }
     }
 
     // Clear any Cinnamon binding that maps to `accel`, remembering the original.
     // `exceptId` ("schema\0key") is left untouched — used when assigning an
     // action to an accel so we don't clear the very key we're about to set.
     _clearConflicts(accel, exceptId) {
-        let want = _parse(accel);
-        if (!want) { L.error("could not parse accel: " + accel); return; }
+        const want = _parse(accel);
+        if (!want) {
+            L.error("could not parse accel: " + accel);
+            return;
+        }
 
         for (let s = 0; s < KB_SCHEMAS.length; s++) {
-            let schema = KB_SCHEMAS[s];
-            let settings = _open(schema);
+            const schema = KB_SCHEMAS[s];
+            const settings = _open(schema);
             if (!settings) continue;
 
             let keys;
-            try { keys = settings.list_keys(); } catch (e) { continue; }
+            try {
+                keys = settings.list_keys();
+            } catch (e) {
+                continue;
+            }
 
             for (let k = 0; k < keys.length; k++) {
-                let key = keys[k];
-                if (exceptId && (schema + "\0" + key) === exceptId) continue;
+                const key = keys[k];
+                if (exceptId && schema + "\0" + key === exceptId) continue;
                 let value;
-                try { value = settings.get_value(key); } catch (e) { continue; }
+                try {
+                    value = settings.get_value(key);
+                } catch (e) {
+                    continue;
+                }
                 if (!value || value.get_type_string() !== "as") continue;
 
-                let accels = value.deep_unpack();
-                let hit = accels.some(function (a) { return a && _parse(a) === want; });
+                const accels = value.deep_unpack();
+                const hit = accels.some(function (a) {
+                    return a && _parse(a) === want;
+                });
                 if (!hit) continue;
 
                 this._recordOriginal(schema, key, settings);
                 try {
                     settings.set_strv(key, []);
-                    L.log("cleared conflict " + schema + " " + key + " (had " + accels.join(",") + ")");
+                    L.log(
+                        "cleared conflict " +
+                            schema +
+                            " " +
+                            key +
+                            " (had " +
+                            accels.join(",") +
+                            ")",
+                    );
                 } catch (e) {
                     L.error("failed clearing " + schema + " " + key + ": " + e.toString());
                 }
             }
         }
-        try { Gio.Settings.sync(); } catch (e) {}
+        try {
+            Gio.Settings.sync();
+        } catch (e) {}
 
         // Xlet hotkeys live in keybindingManager.bindings, invisible to gsettings.
         this._clearXletConflicts(want);
@@ -105,17 +137,18 @@ var KeyBinder = class KeyBinder {
     // Not restored on teardown; the owning applet re-registers on its next load.
     _clearXletConflicts(want) {
         try {
-            let km = Main.keybindingManager;
+            const km = Main.keybindingManager;
             if (!km || !km.bindings || !km.bindings.values) return;
-            let names = [];
-            let iter = km.bindings.values();
+            const names = [];
+            const iter = km.bindings.values();
             let e = iter.next();
             while (!e.done) {
-                let entry = e.value;
+                const entry = e.value;
                 if (entry && entry.name && Array.isArray(entry.bindings)) {
-                    if (entry.name.indexOf("bw-") !== 0) { // skip our own
+                    if (entry.name.indexOf("bw-") !== 0) {
+                        // skip our own
 
-                        let hit = entry.bindings.some(function (a) {
+                        const hit = entry.bindings.some(function (a) {
                             return a && _parse(a) === want;
                         });
                         if (hit) names.push(entry.name);
@@ -124,8 +157,12 @@ var KeyBinder = class KeyBinder {
                 e = iter.next();
             }
             for (let i = 0; i < names.length; i++) {
-                try { km.removeHotKey(names[i]); L.log("cleared hotkey conflict: " + names[i]); }
-                catch (err) { L.error("removeHotKey(" + names[i] + "): " + err.toString()); }
+                try {
+                    km.removeHotKey(names[i]);
+                    L.log("cleared hotkey conflict: " + names[i]);
+                } catch (err) {
+                    L.error("removeHotKey(" + names[i] + "): " + err.toString());
+                }
             }
         } catch (e) {
             L.error("_clearXletConflicts: " + e.toString());
@@ -146,14 +183,17 @@ var KeyBinder = class KeyBinder {
     // Point a Cinnamon gsettings action at `accels`, first freeing them from any
     // competing action so ours wins (e.g. tiling vs move-to-monitor on Super+Shift+Down).
     assignGsettings(schema, key, accels) {
-        let settings = _open(schema);
-        if (!settings) { L.error("assign: schema not found " + schema); return false; }
+        const settings = _open(schema);
+        if (!settings) {
+            L.error("assign: schema not found " + schema);
+            return false;
+        }
         try {
             if (settings.list_keys().indexOf(key) === -1) {
                 L.error("assign: key not found " + schema + " " + key);
                 return false;
             }
-            let selfId = schema + "\0" + key; // don't clear the key we're setting
+            const selfId = schema + "\0" + key; // don't clear the key we're setting
 
             for (let i = 0; i < accels.length; i++) this._clearConflicts(accels[i], selfId);
 
@@ -170,13 +210,15 @@ var KeyBinder = class KeyBinder {
 
     teardown() {
         for (let i = 0; i < this._added.length; i++) {
-            try { Main.keybindingManager.removeHotKey(this._added[i]); } catch (e) {}
+            try {
+                Main.keybindingManager.removeHotKey(this._added[i]);
+            } catch (e) {}
         }
         this._added = [];
 
-        for (let id in this._touched) {
-            let parts = id.split("\0");
-            let settings = _open(parts[0]);
+        for (const id in this._touched) {
+            const parts = id.split("\0");
+            const settings = _open(parts[0]);
             if (!settings) continue;
             try {
                 settings.set_strv(parts[1], this._touched[id]);
@@ -186,6 +228,8 @@ var KeyBinder = class KeyBinder {
             }
         }
         this._touched = {};
-        try { Gio.Settings.sync(); } catch (e) {}
+        try {
+            Gio.Settings.sync();
+        } catch (e) {}
     }
 };

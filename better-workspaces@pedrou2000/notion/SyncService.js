@@ -15,26 +15,37 @@ const ProjectMapper = AppletDir.notion.ProjectMapper.ProjectMapper;
 const DEFAULT_SYNC_INTERVAL_S = AppletDir.lib.constants.Constants.DEFAULT_SYNC_INTERVAL_S;
 
 var SyncService = class SyncService {
-
     constructor(token, databaseId, opts) {
         opts = opts || {};
         this.databaseId = databaseId;
         this.intervalSec = opts.intervalSec || DEFAULT_SYNC_INTERVAL_S;
         this.client = new NotionClient(token);
         this._timer = 0;
-        this._onPull = null;   // cb(projects[]) — a completed pull
+        this._onPull = null; // cb(projects[]) — a completed pull
         this._onStatus = null; // cb(status)
     }
 
-    setToken(token) { this.client.setToken(token); }
-    setDatabaseId(id) { this.databaseId = id; }
-    onPull(cb) { this._onPull = cb; }
-    onStatus(cb) { this._onStatus = cb; }
+    setToken(token) {
+        this.client.setToken(token);
+    }
+    setDatabaseId(id) {
+        this.databaseId = id;
+    }
+    onPull(cb) {
+        this._onPull = cb;
+    }
+    onStatus(cb) {
+        this._onStatus = cb;
+    }
 
     _setStatus(s) {
         this._status = s;
         if (this._onStatus) {
-            try { this._onStatus(s); } catch (e) { L.error("onStatus cb: " + e.toString()); }
+            try {
+                this._onStatus(s);
+            } catch (e) {
+                L.error("onStatus cb: " + e.toString());
+            }
         }
     }
 
@@ -59,26 +70,33 @@ var SyncService = class SyncService {
         let result;
         try {
             result = await this.client.queryDatabase(
-                this.databaseId, ProjectMapper.buildQueryBody());
+                this.databaseId,
+                ProjectMapper.buildQueryBody(),
+            );
         } catch (e) {
             L.error("syncNow failed: " + e.message + " (store keeps serving)");
             this._setStatus("error");
             return;
         }
-        let projects = ProjectMapper.mapResults(result);
+        const projects = ProjectMapper.mapResults(result);
         this._setStatus("ok");
         L.log("syncNow: pulled " + projects.length + " projects");
         if (this._onPull) {
-            try { this._onPull(projects); }
-            catch (e) { L.error("onPull cb: " + e.toString()); }
+            try {
+                this._onPull(projects);
+            } catch (e) {
+                L.error("onPull cb: " + e.toString());
+            }
         }
     }
 
     start() {
         this.stop();
         this.syncNow();
-        this._timer = Mainloop.timeout_add_seconds(
-            this.intervalSec, () => { this.syncNow(); return true; });
+        this._timer = Mainloop.timeout_add_seconds(this.intervalSec, () => {
+            this.syncNow();
+            return true;
+        });
         this._watchNetwork();
         L.log("started: interval " + this.intervalSec + "s");
     }
@@ -92,14 +110,16 @@ var SyncService = class SyncService {
             if (!this._netMonitor) return;
             this._wasOnline = this._netMonitor.get_network_available();
             this._netChangedId = this._netMonitor.connect(
-                'network-changed', (monitor, available) => {
-                    let online = !!available;
+                "network-changed",
+                (monitor, available) => {
+                    const online = !!available;
                     if (online && !this._wasOnline) {
                         L.log("network restored — pulling now");
                         this.syncNow();
                     }
                     this._wasOnline = online;
-                });
+                },
+            );
         } catch (e) {
             L.error("_watchNetwork: " + e.toString());
             this._netMonitor = null;
@@ -108,7 +128,9 @@ var SyncService = class SyncService {
 
     _unwatchNetwork() {
         if (this._netMonitor && this._netChangedId) {
-            try { this._netMonitor.disconnect(this._netChangedId); } catch (e) {}
+            try {
+                this._netMonitor.disconnect(this._netChangedId);
+            } catch (e) {}
         }
         this._netChangedId = 0;
         this._netMonitor = null;

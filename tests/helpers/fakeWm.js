@@ -9,8 +9,8 @@ let _wsSeq = 0;
 
 class FakeWorkspace {
     constructor() {
-        this._id = ++_wsSeq;   // stable identity for debugging
-        this.windows = [];      // [{title, sticky?}]
+        this._id = ++_wsSeq; // stable identity for debugging
+        this.windows = []; // [{title, sticky?}]
     }
 }
 
@@ -30,7 +30,9 @@ class FakeWm {
             title: title,
             sticky: !!sticky,
             closeRequested: false,
-            get_title() { return this.title; },
+            get_title() {
+                return this.title;
+            },
         };
         this.workspaces[index].windows.push(w);
         return w;
@@ -38,20 +40,26 @@ class FakeWm {
 
     // Per-workspace window titles, for whole-layout assertions.
     layout() {
-        return this.workspaces.map(ws => ws.windows.filter(w => !w.sticky).map(w => w.title));
+        return this.workspaces.map((ws) => ws.windows.filter((w) => !w.sticky).map((w) => w.title));
     }
 
     _real(ws) {
-        return ws ? ws.windows.filter(w => !w.sticky) : [];
+        return ws ? ws.windows.filter((w) => !w.sticky) : [];
     }
 
     _indexOfWindow(win) {
-        return this.workspaces.findIndex(ws => ws.windows.indexOf(win) !== -1);
+        return this.workspaces.findIndex((ws) => ws.windows.indexOf(win) !== -1);
     }
 
-    getWorkspaceCount() { return this.workspaces.length; }
-    getActiveIndex() { return this.activeIndex; }
-    countWindows(index) { return this._real(this.workspaces[index]).length; }
+    getWorkspaceCount() {
+        return this.workspaces.length;
+    }
+    getActiveIndex() {
+        return this.activeIndex;
+    }
+    countWindows(index) {
+        return this._real(this.workspaces[index]).length;
+    }
 
     goToWorkspace(index) {
         if (index < 0 || index >= this.workspaces.length) return false;
@@ -64,7 +72,9 @@ class FakeWm {
         return this.workspaces.length - 1;
     }
 
-    getWorkspace(index) { return this.workspaces[index] || null; }
+    getWorkspace(index) {
+        return this.workspaces[index] || null;
+    }
 
     reorderWorkspaceObject(ws, toIndex) {
         const from = this.workspaces.indexOf(ws);
@@ -77,8 +87,13 @@ class FakeWm {
 
     reorderWorkspace(fromIndex, toIndex) {
         if (fromIndex === toIndex) return true;
-        if (fromIndex < 0 || fromIndex >= this.workspaces.length
-            || toIndex < 0 || toIndex >= this.workspaces.length) return false;
+        if (
+            fromIndex < 0 ||
+            fromIndex >= this.workspaces.length ||
+            toIndex < 0 ||
+            toIndex >= this.workspaces.length
+        )
+            return false;
         return this.reorderWorkspaceObject(this.workspaces[fromIndex], toIndex);
     }
 
@@ -110,7 +125,9 @@ class FakeWm {
         return true;
     }
 
-    listWindowsOnWorkspace(index) { return this._real(this.workspaces[index]); }
+    listWindowsOnWorkspace(index) {
+        return this._real(this.workspaces[index]);
+    }
 
     listWindowsOnWorkspaces(indices) {
         const out = [];
@@ -121,10 +138,11 @@ class FakeWm {
     }
 
     moveAllWindows(from, to) {
-        const src = this.workspaces[from], dst = this.workspaces[to];
+        const src = this.workspaces[from],
+            dst = this.workspaces[to];
         if (!src || !dst) return false;
         const movable = this._real(src);
-        src.windows = src.windows.filter(w => w.sticky);
+        src.windows = src.windows.filter((w) => w.sticky);
         dst.windows.push(...movable);
         return true;
     }
@@ -138,7 +156,7 @@ class FakeWm {
     // Test helper: actually close every window marked closeRequested.
     honorCloseRequests() {
         for (const ws of this.workspaces) {
-            ws.windows = ws.windows.filter(w => !w.closeRequested);
+            ws.windows = ws.windows.filter((w) => !w.closeRequested);
         }
     }
 
@@ -150,16 +168,26 @@ function makeFakeMainloop() {
     let seq = 0;
     const pending = new Map(); // id -> fn
     return {
-        timeout_add(ms, fn) { pending.set(++seq, fn); return seq; },
-        timeout_add_seconds(s, fn) { pending.set(++seq, fn); return seq; },
-        source_remove(id) { pending.delete(id); },
+        timeout_add(ms, fn) {
+            pending.set(++seq, fn);
+            return seq;
+        },
+        timeout_add_seconds(s, fn) {
+            pending.set(++seq, fn);
+            return seq;
+        },
+        source_remove(id) {
+            pending.delete(id);
+        },
         // Run and clear all pending timers (repeating timers are not re-armed).
         flush() {
             const fns = [...pending.values()];
             pending.clear();
             for (const fn of fns) fn();
         },
-        pendingCount() { return pending.size; },
+        pendingCount() {
+            return pending.size;
+        },
     };
 }
 

@@ -11,7 +11,6 @@ const OSD_HIDE_MS = AppletDir.lib.constants.Constants.OSD_HIDE_MS;
 const L = AppletDir.lib.logger.Logger.makeLogger("osd");
 
 var OSD = class OSD {
-
     constructor() {
         this._label = null;
         this._timer = 0;
@@ -22,25 +21,26 @@ var OSD = class OSD {
     // Timer resets on each call, so rapid navigation keeps one OSD alive.
     show(controller) {
         try {
-            let loc = controller.currentLocation();
+            const loc = controller.currentLocation();
             if (!loc) return;
-            let p = controller.state.getProject(loc.projectIdx);
+            const p = controller.state.getProject(loc.projectIdx);
             if (!p) return;
-            let text = p.name + "  ·  " + (loc.localIdx + 1) + "/" + p.wsCount;
+            const text = p.name + "  ·  " + (loc.localIdx + 1) + "/" + p.wsCount;
 
             if (!this._label) {
-                this._label = new St.Label({ style_class: 'better-workspaces-osd' });
+                this._label = new St.Label({ style_class: "better-workspaces-osd" });
                 this._label.hide();
                 Main.uiGroup.add_actor(this._label);
             }
             this._label.set_text(text);
 
-            let mon = Main.layoutManager.primaryMonitor;
+            const mon = Main.layoutManager.primaryMonitor;
             this._label.show();
-            let w = this._label.get_width();
+            const w = this._label.get_width();
             this._label.set_position(
                 mon.x + Math.floor((mon.width - w) / 2),
-                mon.y + Math.floor(mon.height * 0.78));
+                mon.y + Math.floor(mon.height * 0.78),
+            );
 
             if (this._timer) Mainloop.source_remove(this._timer);
             this._timer = Mainloop.timeout_add(OSD_HIDE_MS, () => {
@@ -56,7 +56,7 @@ var OSD = class OSD {
     // Toggle org.cinnamon's workspace-osd-visible off; original saved for restore.
     suppressBuiltin() {
         try {
-            let src = Gio.SettingsSchemaSource.get_default();
+            const src = Gio.SettingsSchemaSource.get_default();
             if (!src || !src.lookup("org.cinnamon", true)) return;
             this._cinSettings = new Gio.Settings({ schema_id: "org.cinnamon" });
             if (this._cinSettings.list_keys().indexOf("workspace-osd-visible") === -1) {
@@ -82,7 +82,13 @@ var OSD = class OSD {
 
     destroy() {
         this.restoreBuiltin();
-        if (this._timer) { Mainloop.source_remove(this._timer); this._timer = 0; }
-        if (this._label) { this._label.destroy(); this._label = null; }
+        if (this._timer) {
+            Mainloop.source_remove(this._timer);
+            this._timer = 0;
+        }
+        if (this._label) {
+            this._label.destroy();
+            this._label = null;
+        }
     }
 };

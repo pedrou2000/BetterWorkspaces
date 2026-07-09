@@ -3,10 +3,14 @@
 const UUID = "better-workspaces@pedrou2000";
 
 function makeLogger(tag) {
-    let prefix = UUID + (tag ? " [" + tag + "]" : "") + ": ";
+    const prefix = UUID + (tag ? " [" + tag + "]" : "") + ": ";
     return {
-        log: function (msg) { global.log(prefix + msg); },
-        error: function (msg) { global.logError(prefix + msg); },
+        log: function (msg) {
+            global.log(prefix + msg);
+        },
+        error: function (msg) {
+            global.logError(prefix + msg);
+        },
     };
 }
 

@@ -5,3 +5,6 @@ _spices/
 *.swp
 *~
 .DS_Store
+
+# Dev tooling (lint/format/test harness — not part of the shipped applet)
+node_modules/

@@ -35,16 +35,15 @@ const KB_DEFAULTS = {
 // applied on load/change and restored on unload.
 const WM_SCHEMA = "org.cinnamon.desktop.keybindings.wm";
 const WM_ASSIGN = {
-    "push-tile-left":  "kbTileLeft",
+    "push-tile-left": "kbTileLeft",
     "push-tile-right": "kbTileRight",
-    "push-tile-up":    "kbTileUp",
-    "push-tile-down":  "kbTileDown",
-    "maximize":        "kbMaximize",
-    "minimize":        "kbMinimize",
+    "push-tile-up": "kbTileUp",
+    "push-tile-down": "kbTileDown",
+    maximize: "kbMaximize",
+    minimize: "kbMinimize",
 };
 
 var KeybindingCoordinator = class KeybindingCoordinator {
-
     // deps: {
     //   settings,                    // AppletSettings
     //   KeyBinder,                   // lib/keybindings KeyBinder class
@@ -64,20 +63,21 @@ var KeybindingCoordinator = class KeybindingCoordinator {
 
         // Bind a listener for EVERY spec, including empty ones, so filling in a
         // blank shortcut later takes effect immediately (not just on reload).
-        let specs = this._getSpecs();
+        const specs = this._getSpecs();
         specs.forEach((spec) => {
-            this._settings.bindProperty(this._IN, spec.setting,
-                spec.setting, () => this.rebind());
+            this._settings.bindProperty(this._IN, spec.setting, spec.setting, () => this.rebind());
         });
-        for (let action in WM_ASSIGN) {
-            let setting = WM_ASSIGN[action];
-            this._settings.bindProperty(this._IN, setting,
-                setting, () => this.rebind());
+        for (const action in WM_ASSIGN) {
+            const setting = WM_ASSIGN[action];
+            this._settings.bindProperty(this._IN, setting, setting, () => this.rebind());
         }
 
         this._forceBindAll();
-        L.log("registered " + (specs.length + Object.keys(WM_ASSIGN).length)
-            + " keybindings (settings-driven)");
+        L.log(
+            "registered " +
+                (specs.length + Object.keys(WM_ASSIGN).length) +
+                " keybindings (settings-driven)",
+        );
     }
 
     rebind() {
@@ -93,14 +93,15 @@ var KeybindingCoordinator = class KeybindingCoordinator {
     }
 
     _applyScheme() {
-        let stored = this._settings.getValue("kbSchemeVersion") || 0;
+        const stored = this._settings.getValue("kbSchemeVersion") || 0;
         if (stored >= KB_SCHEME_VERSION) return;
-        for (let key in KB_DEFAULTS) {
-            try { this._settings.setValue(key, KB_DEFAULTS[key]); } catch (e) {}
+        for (const key in KB_DEFAULTS) {
+            try {
+                this._settings.setValue(key, KB_DEFAULTS[key]);
+            } catch (e) {}
         }
         this._settings.setValue("kbSchemeVersion", KB_SCHEME_VERSION);
-        L.log("keybindings reset to scheme v" + KB_SCHEME_VERSION
-            + " (was v" + stored + ")");
+        L.log("keybindings reset to scheme v" + KB_SCHEME_VERSION + " (was v" + stored + ")");
     }
 
     // Fresh KeyBinder + grab every non-empty binding + reapply tiling. Shared by
@@ -109,19 +110,22 @@ var KeybindingCoordinator = class KeybindingCoordinator {
         if (this._keybinder) this._keybinder.teardown();
         this._keybinder = new this._KeyBinder();
         this._getSpecs().forEach((spec) => {
-            let accel = this._settings.getValue(spec.setting);
+            const accel = this._settings.getValue(spec.setting);
             if (!accel) return;
             this._keybinder.force(spec.name, accel, () => {
-                try { spec.run(); }
-                catch (e) { L.error("hotkey " + spec.name + ": " + e.toString()); }
+                try {
+                    spec.run();
+                } catch (e) {
+                    L.error("hotkey " + spec.name + ": " + e.toString());
+                }
             });
         });
         this._assignTiling();
     }
 
     _assignTiling() {
-        for (let action in WM_ASSIGN) {
-            let accel = this._settings.getValue(WM_ASSIGN[action]);
+        for (const action in WM_ASSIGN) {
+            const accel = this._settings.getValue(WM_ASSIGN[action]);
             if (!accel) continue;
             this._keybinder.assignGsettings(WM_SCHEMA, action, [accel]);
         }
