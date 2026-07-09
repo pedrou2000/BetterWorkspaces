@@ -95,11 +95,6 @@ Controller.prototype = {
         return this.wm.goToWorkspace(flat);
     },
 
-    // Alt-Tab-style flip to the most-recent other project.
-    goToPreviousProject: function () {
-        return this.goToProject(this.state.previousProjectIdx());
-    },
-
     // Reorder projects: move the project at `from` to index `to`, physically
     // relocating each project's window partition to match the new order, then
     // persisting the new order to Notion (Workspace Order = 0,1,2,...).
@@ -213,11 +208,6 @@ Controller.prototype = {
 
     // ---- Intents: navigating within the active project ---------------------
 
-    _syncLastLocalFromReality: function () {
-        let loc = this.currentLocation();
-        if (loc) this.state.setLastLocal(loc.projectIdx, loc.localIdx);
-    },
-
     goToLocalWorkspace: function (localIdx) {
         let pIdx = this.state.activeProjectIdx;
         let p = this.state.getProject(pIdx);
@@ -325,15 +315,12 @@ Controller.prototype = {
 
     // ---- Intents: adding/removing a workspace to the active project --------
 
-    // Add a workspace at the end of a project's strip. Projects are contiguous
-    // partitions, so the new workspace must land at flat index
-    // insertAt = offset(P) + count(P). Cinnamon only appends at the very end,
-    // so we append there and then rotate the empty slot down into position by
-    // shifting each later workspace's windows one index up. This keeps every
-    // OTHER project's partition intact (fixes the M2 last-project-only limit).
     // Grow the active project's strip by one workspace WITHOUT navigating.
-    // Returns the new last local index, or -1 on failure. Shared by the explicit
-    // add action and the auto-create-on-overflow navigation.
+    // Projects are contiguous partitions, so the new workspace must land at flat
+    // index offset(P)+count(P). Cinnamon only appends at the very end, so we
+    // append there and rotate the empty slot down into position by shifting each
+    // later workspace's windows one index up — keeping every other project's
+    // partition intact. Returns the new last local index, or -1 on failure.
     _growActiveProjectStrip: function () {
         let pIdx = this.state.activeProjectIdx;
         let counts = this.state.counts();

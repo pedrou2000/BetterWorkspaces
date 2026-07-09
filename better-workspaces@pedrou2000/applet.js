@@ -95,7 +95,7 @@ MyApplet.prototype = {
         Applet.Applet.prototype._init.call(this, orientation, panel_height, instanceId);
 
         try {
-            log("loaded (M11 v0.11.25 search-hint-1space)");
+            log("loaded (M12 v0.12.0 dead-code-cleanup)");
 
             this.wm = new WorkspaceManager.WorkspaceManager();
             this.controller = new ControllerModule.Controller(this.wm);

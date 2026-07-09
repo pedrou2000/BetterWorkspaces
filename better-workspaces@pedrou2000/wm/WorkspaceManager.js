@@ -83,18 +83,6 @@ WorkspaceManager.prototype = {
         }
     },
 
-    // Move by a signed delta, clamped to valid range (does not wrap).
-    goBy: function (delta) {
-        let target = this.getActiveIndex() + delta;
-        let count = this.getWorkspaceCount();
-        if (target < 0) target = 0;
-        if (target > count - 1) target = count - 1;
-        return this.goToWorkspace(target);
-    },
-
-    goToNext: function () { return this.goBy(1); },
-    goToPrevious: function () { return this.goBy(-1); },
-
     // ---- Creating / removing ----------------------------------------------
 
     // Append a new workspace at the end. Returns its index, or -1 on failure.
@@ -175,20 +163,6 @@ WorkspaceManager.prototype = {
             logError("moveFocusedWindowTo(" + index + "): " + e.toString());
             return false;
         }
-    },
-
-    // Move the focused window to the next workspace, following it there.
-    moveFocusedWindowToNext: function () {
-        let target = this.getActiveIndex() + 1;
-        if (target > this.getWorkspaceCount() - 1) {
-            log("moveFocusedWindowToNext: already on the last workspace");
-            return false;
-        }
-        if (this.moveFocusedWindowTo(target)) {
-            this.goToWorkspace(target);
-            return true;
-        }
-        return false;
     },
 
     // List non-pinned windows on a single workspace index.

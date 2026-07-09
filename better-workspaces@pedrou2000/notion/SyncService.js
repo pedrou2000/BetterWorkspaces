@@ -40,9 +40,7 @@ SyncService.prototype = {
     onUpdate: function (cb) { this._onUpdate = cb; },
     onStatus: function (cb) { this._onStatus = cb; },
 
-    // last status: "unconfigured" | "loading" | "ok" | "error"
-    status: function () { return this._status || "unconfigured"; },
-
+    // Notify the status callback (states: "unconfigured"|"loading"|"ok"|"error").
     _setStatus: function (s) {
         this._status = s;
         if (this._onStatus) {
