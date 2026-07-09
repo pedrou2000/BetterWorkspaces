@@ -263,6 +263,22 @@ test("addProjectLive appends a partition at the end", () => {
     assert.equal(wm.getActiveIndex(), 0);
 });
 
+// Regression (found in VM verify): offline toggle appends the project, the
+// failed Notion write reverts the store flag, and a later retry toggles ON
+// again — the second addProjectLive must NOT create a duplicate partition.
+test("addProjectLive is idempotent by project id", () => {
+    const { controller, wm } = makeController(DECK);
+    const first = controller.addProjectLive(def("d", 1));
+    const again = controller.addProjectLive(def("d", 1));
+    assert.equal(again, first);                          // same index back
+    assert.equal(controller.state.projectCount(), 4);    // no duplicate entry
+    assert.deepEqual(controller.state.counts(), [2, 3, 1, 1]);
+    assert.equal(wm.getWorkspaceCount(), 7);             // no duplicate workspace
+    // Also idempotent for projects loaded at startup, not just appended ones.
+    assert.equal(controller.addProjectLive(def("a", 2)), 0);
+    assert.equal(controller.state.projectCount(), 4);
+});
+
 // removeProjectLive is async (Stage B): the grace-period timer is registered
 // synchronously before its first await, so the pattern is: start the call,
 // let (or don't let) windows close, flush the fake mainloop, then await.

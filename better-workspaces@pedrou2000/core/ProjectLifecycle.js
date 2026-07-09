@@ -146,8 +146,20 @@ var ProjectLifecycle = class ProjectLifecycle {
     // Add a project to the live deck: append its partition at the end of the
     // flat list (safe — no window shifting), grow the model. Stays put; open the
     // project's Notion page manually with the keybinding when you want it.
+    //
+    // Idempotent by id: if the project is already in the deck, return its
+    // existing index instead of appending a duplicate. This matters when the
+    // deck and the store disagree — e.g. an offline toggle appended the project
+    // but the Notion write failed and reverted the store flag; a later retry
+    // must not create a second partition for the same project.
     addProjectLive(def) {
         let c = this._c;
+        let existing = c.state.indexOfProjectId(def.id);
+        if (existing >= 0) {
+            L.log("addProjectLive: " + def.name + " already in deck (index "
+                + existing + "), skipping append");
+            return existing;
+        }
         let idx = c.state.appendProject(def);
         // The new project's single home workspace goes at the global end, which
         // is exactly where Cinnamon appends — so a plain reconcile is correct.
