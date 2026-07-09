@@ -137,7 +137,7 @@ function deckIds(controller) {
     return ids;
 }
 
-// ---- loadDeckFromStore -----------------------------------------------------
+// loadDeckFromStore
 
 test("loadDeckFromStore loads the inWorkspace subset in order", () => {
     const { coord, controller, wm } = makeStack([
@@ -154,7 +154,7 @@ test("loadDeckFromStore falls back to the placeholder when nothing is on", () =>
     assert.deepEqual(deckIds(controller), ["placeholder"]);
 });
 
-// ---- handleToggle ON -------------------------------------------------------
+// handleToggle ON
 
 test("handleToggle ON appends to the deck, flips the flag, assigns max+1 order", async () => {
     const { coord, store, controller, writer, hookCalls } = makeStack([
@@ -182,7 +182,7 @@ test("handleToggle ON is idempotent — re-toggling an already-deck project does
     assert.equal(ids.length, 1);
 });
 
-// ---- handleToggle OFF ------------------------------------------------------
+// handleToggle OFF
 
 test("handleToggle OFF confirms, removes from the deck, clears flag + order", async () => {
     const { coord, store, controller, wm, mainloop, dialogs } =
@@ -227,7 +227,7 @@ test("handleToggle OFF surfaces windows-open: notifies, rejects, keeps the proje
     assert.equal(store.get("b").inWorkspace, true);
 });
 
-// ---- onPull ----------------------------------------------------------------
+// onPull
 
 test("onPull merges catalog fields and auto-appends a newly-on project", () => {
     const { coord, store, controller, hookCalls } = makeStack([proj("a", true, 0)]);
@@ -263,7 +263,7 @@ test("onPull doesn't double-append a project already in the deck", () => {
     assert.deepEqual(deckIds(controller), ["a"]);
 });
 
-// ---- reorderFromPanel ------------------------------------------------------
+// reorderFromPanel
 
 test("reorderFromPanel resolves the moved id to its deck index and reorders", () => {
     const { coord, controller } = makeStack([
