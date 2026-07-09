@@ -38,9 +38,11 @@ function makeManualWriter() {
             });
         },
         // Settle the oldest pending push and let the microtask queue drain.
+        // Default failure is http-400: a PERMANENT rejection (revert path).
+        // Pass e.g. new Error("http-500") to exercise the transient/hold path.
         async settle(ok, err) {
             const p = pending.shift();
-            if (ok) p.resolve(); else p.reject(err || new Error("http-500"));
+            if (ok) p.resolve(); else p.reject(err || new Error("http-400"));
             await new Promise((r) => setImmediate(r));
             return p;
         },
@@ -257,6 +259,86 @@ test("merge acks the remote value: post-merge failure reverts to the merged valu
     store.setOrder("a", 4);
     await writer.settle(false);
     assert.equal(store.get("a").order, 9);            // reverts to merged 9, not stale 3
+});
+
+// ---- transient failures: hold + retry (offline writes) -----------------------------
+
+test("transient failure HOLDS the write: no revert, field stays dirty", async () => {
+    const writer = makeManualWriter();
+    const { store, persistence } = makeStore([proj("a", 0, false)], writer);
+    let errCb = null;
+    store.onWriteError((id, field) => { errCb = { id, field }; });
+
+    store.setInWorkspace("a", true);
+    await writer.settle(false, new Error("http-503"));   // network-shaped failure
+
+    assert.equal(store.get("a").inWorkspace, true);      // NOT reverted
+    assert.equal(cacheOf(persistence)[0].inWorkspace, true);
+    assert.deepEqual(errCb, { id: "a", field: "inWorkspace" }); // error dot still shows
+    assert.equal(store.hasPendingWrites(), true);        // write held, not dropped
+    assert.equal(writer.pending.length, 0);              // and queue is paused
+});
+
+test("held write survives a merge (dirty field protects the local value)", async () => {
+    const writer = makeManualWriter();
+    const { store } = makeStore([proj("a", 0, false)], writer);
+    store.setInWorkspace("a", true);
+    await writer.settle(false, new Error("http-503"));   // held
+
+    store.merge([proj("a", 0, false)], []);              // remote still says OFF
+    assert.equal(store.get("a").inWorkspace, true);      // local held write wins
+});
+
+test("retryPending resumes the held queue and the write lands", async () => {
+    const writer = makeManualWriter();
+    const { store } = makeStore([proj("a", 0, false)], writer);
+    store.setInWorkspace("a", true);
+    await writer.settle(false, new Error("http-503"));   // held + paused
+
+    store.retryPending();                                 // connectivity back
+    assert.equal(writer.pending.length, 1);               // push re-sent
+    const p = await writer.settle(true);
+    assert.deepEqual([p.id, p.value], ["a", true]);
+    assert.equal(store.hasPendingWrites(), false);
+    // Now acked: a later PERMANENT failure reverts to true, the held value.
+});
+
+test("mutations made while paused queue up and drain in order on retry", async () => {
+    const writer = makeManualWriter();
+    const { store } = makeStore([proj("a", 0, false), proj("b", 1, false)], writer);
+    store.setInWorkspace("a", true);
+    await writer.settle(false, new Error("http-503"));   // a held, queue paused
+    store.setInWorkspace("b", true);                     // offline mutation: queued, no push
+    assert.equal(writer.pending.length, 0);
+
+    store.retryPending();
+    const first = await writer.settle(true);
+    const second = await writer.settle(true);
+    assert.deepEqual([first.id, second.id], ["a", "b"]); // FIFO preserved
+});
+
+test("retryPending is a safe no-op when nothing is held", () => {
+    const writer = makeManualWriter();
+    const { store } = makeStore([proj("a", 0)], writer);
+    store.retryPending();
+    assert.equal(writer.pending.length, 0);
+});
+
+test("transient vs permanent classification", async () => {
+    // 5xx, 429, sub-100 pseudo-codes, and non-http messages hold; 4xx reverts.
+    for (const [errMsg, shouldHold] of [
+        ["http-500", true], ["http-503", true], ["http-429", true],
+        ["http-2", true], ["Could not connect: Network is unreachable", true],
+        ["http-400", false], ["http-403", false], ["http-404", false],
+        ["no-token", false],
+    ]) {
+        const writer = makeManualWriter();
+        const { store } = makeStore([proj("x", 0, false)], writer);
+        store.setInWorkspace("x", true);
+        await writer.settle(false, new Error(errMsg));
+        assert.equal(store.get("x").inWorkspace, shouldHold,
+            errMsg + " should " + (shouldHold ? "hold" : "revert"));
+    }
 });
 
 // ---- destroy -------------------------------------------------------------------

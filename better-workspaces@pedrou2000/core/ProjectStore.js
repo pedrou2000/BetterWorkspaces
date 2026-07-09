@@ -9,8 +9,13 @@
  *   - disk cache: written ONLY here (single writer — no read-modify-write races)
  *   - Notion:     mutations are applied optimistically (store + cache update
  *                 immediately) and pushed through a writer via a serialized
- *                 FIFO queue; on push failure the field reverts to its last
- *                 acknowledged value and onWriteError fires
+ *                 FIFO queue. Push failures are CLASSIFIED: transient ones
+ *                 (network down, 5xx, 429) HOLD the write — the entry goes
+ *                 back to the queue, the queue pauses, and retryPending()
+ *                 (called when connectivity/sync recovers) resumes it, so
+ *                 offline mutations survive and land on reconnect. Permanent
+ *                 rejections (4xx, no-token) revert the field to its last
+ *                 acknowledged value and fire onWriteError.
  *   - sync pulls: merge(remote, protectedIds) folds a fresh pull into the
  *                 catalog — catalog fields (name/icon/url) always take the
  *                 remote value; deck-relevant fields (inWorkspace/order) take
@@ -47,6 +52,7 @@ var ProjectStore = class ProjectStore {
         this._acked = new Map();  // "id\0field" -> last remote-acknowledged value
         this._queue = [];         // [{id, field, value}] pending pushes, FIFO
         this._inFlight = false;
+        this._paused = false;     // held after a transient failure; retryPending() resumes
 
         let cached = persistence.readJSON(CACHE_FILE, null);
         let projects = (cached && cached.projects) ? cached.projects : [];
@@ -125,9 +131,10 @@ var ProjectStore = class ProjectStore {
         return null;
     }
 
-    // Push queue: strictly one write in flight; FIFO order.
+    // Push queue: strictly one write in flight; FIFO order. Pauses on a
+    // transient failure (retryPending() resumes); reverts on a permanent one.
     _pump() {
-        if (this._inFlight || this._queue.length === 0 || !this._writer) return;
+        if (this._inFlight || this._paused || this._queue.length === 0 || !this._writer) return;
         let entry = this._queue.shift();
         let key = entry.id + "\0" + entry.field;
         this._inFlight = true;
@@ -141,9 +148,21 @@ var ProjectStore = class ProjectStore {
             // Field is clean only if no newer push for it is still queued.
             if (!this._queuedFor(key)) this._dirty.delete(key);
         }).catch((e) => {
-            L.error("push failed (" + entry.field + " " + entry.id + "): "
-                + (e && e.message ? e.message : e));
-            this._revert(entry.id, entry.field, key);
+            if (this._isTransient(e)) {
+                // Network-shaped failure: HOLD the write. Put the entry back
+                // at the head (unless a newer value for the same field is
+                // already queued), pause the queue, keep the field dirty so
+                // merge() keeps protecting the local value. onWriteError still
+                // fires so the UI can show the error dot.
+                L.log("push held (transient " + (e && e.message ? e.message : e)
+                    + "): " + entry.field + " " + entry.id);
+                if (!this._queuedFor(key)) this._queue.unshift(entry);
+                this._paused = true;
+            } else {
+                L.error("push rejected (" + entry.field + " " + entry.id + "): "
+                    + (e && e.message ? e.message : e));
+                this._revert(entry.id, entry.field, key);
+            }
             if (this._onWriteError) {
                 try { this._onWriteError(entry.id, entry.field, e); } catch (err) {}
             }
@@ -151,6 +170,38 @@ var ProjectStore = class ProjectStore {
             this._inFlight = false;
             this._pump();
         });
+    }
+
+    // Transient = worth retrying later: transport-level errors (libsoup
+    // throws GLib errors whose messages aren't our "http-NNN"/"no-token"
+    // shapes), server errors (5xx), and rate limiting (429). Permanent =
+    // Notion actively rejected it (other 4xx) or we have no token.
+    _isTransient(e) {
+        let msg = (e && e.message) ? e.message : String(e);
+        if (msg === "no-token") return false;
+        let m = msg.match(/^http-(\d+)$/);
+        if (!m) return true;                    // transport/GLib error: retry
+        let status = parseInt(m[1], 10);
+        if (status < 100) return true;          // libsoup transport pseudo-codes
+                                                // (0 none, 2 can't-resolve, 4 can't-connect, ...)
+        if (status >= 500) return true;         // server hiccup: retry
+        if (status === 429) return true;        // rate limited: retry
+        return false;                            // real 4xx rejection: revert
+    }
+
+    // Resume a queue paused by a transient failure. The applet calls this when
+    // connectivity/sync recovers (e.g. sync status turns "ok"). Safe to call
+    // anytime — no-op when nothing is held.
+    retryPending() {
+        if (!this._paused) return;
+        this._paused = false;
+        L.log("retryPending: resuming " + this._queue.length + " held write(s)");
+        this._pump();
+    }
+
+    // True when writes are held waiting for connectivity.
+    hasPendingWrites() {
+        return this._queue.length > 0 || this._inFlight;
     }
 
     // Revert a field to its last acknowledged value after a failed push, and

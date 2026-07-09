@@ -253,9 +253,14 @@ var MyApplet = class MyApplet extends Applet.Applet {
             this._refresh();
         });
 
-        // Reflect sync status in the panel (degraded-state feedback).
+        // Reflect sync status in the panel (degraded-state feedback), and use
+        // recovery as the retry trigger: a successful pull proves Notion is
+        // reachable again, so any writes held by a transient failure (e.g.
+        // toggles made offline) are resumed. The reconnect watcher fires the
+        // pull; the pull's "ok" lands here; retryPending() drains the queue.
         this.sync.onStatus((status) => {
             if (this.panelUI) this.panelUI.setStatus(status);
+            if (status === "ok" && this.store) this.store.retryPending();
         });
 
         this.settings.bindProperty(Settings.BindingDirection.IN, "notionToken",
