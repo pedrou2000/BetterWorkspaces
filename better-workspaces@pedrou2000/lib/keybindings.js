@@ -111,36 +111,36 @@ KeyBinder.prototype = {
         this._clearXletConflicts(want);
     },
 
-    // Remove any applet (xlet) hotkey whose accelerator equals `want`
-    // ([keyval,mods]). Xlet keys are "uuid::name::<binding>"; we parse the part
-    // after the last "::" and compare. Removes the muffin binding + purges the
-    // entry so it isn't re-committed. Not restored on teardown (the owning
-    // applet re-registers on its next load). Best-effort; fully guarded.
+    // Remove any hotkey registered via keybindingManager whose accelerator
+    // matches `want` ([keyval,mods]) but that we didn't register ourselves.
+    // These include applet/media/custom hotkeys that live in the manager's
+    // `bindings` Map (entries: {name, bindings:[accel...], callback}) rather
+    // than gsettings — e.g. the notifications applet's <Super>n. We call the
+    // public removeHotKey(name). Not restored on teardown (the owning applet
+    // re-registers on its next load). Fully guarded.
     _clearXletConflicts: function (want) {
         try {
             let km = Main.keybindingManager;
-            let ab = km ? km.applet_bindings : null;
-            L.log("xlet clear: ab=" + (ab ? typeof ab : "null")
-                + " size=" + (ab && ab.size !== undefined ? ab.size : "?")
-                + " hasKeys=" + !!(ab && ab.keys));
-            if (!km || !ab || !ab.keys) return;
-            let toRemove = [];
-            let iter = ab.keys();
-            let k = iter.next();
-            while (!k.done) {
-                let key = String(k.value);
-                let binding = key.substring(key.lastIndexOf("::") + 2);
-                let parsed = _parse(binding);
-                // DEBUG: log every xlet binding and how it parses vs. the target.
-                L.log("xlet scan: key='" + key + "' binding='" + binding
-                    + "' parsed=" + parsed + " want=" + want);
-                if (parsed === want) toRemove.push(key);
-                k = iter.next();
+            if (!km || !km.bindings || !km.bindings.values) return;
+            let names = [];
+            let iter = km.bindings.values();
+            let e = iter.next();
+            while (!e.done) {
+                let entry = e.value;
+                if (entry && entry.name && Array.isArray(entry.bindings)) {
+                    // Skip our own hotkeys (names start with "bw-").
+                    if (entry.name.indexOf("bw-") !== 0) {
+                        let hit = entry.bindings.some(function (a) {
+                            return a && _parse(a) === want;
+                        });
+                        if (hit) names.push(entry.name);
+                    }
+                }
+                e = iter.next();
             }
-            for (let i = 0; i < toRemove.length; i++) {
-                try { km.removeHotKey(toRemove[i]); } catch (e) {}
-                try { km.applet_bindings.delete(toRemove[i]); } catch (e) {}
-                L.log("cleared xlet conflict: " + toRemove[i]);
+            for (let i = 0; i < names.length; i++) {
+                try { km.removeHotKey(names[i]); L.log("cleared hotkey conflict: " + names[i]); }
+                catch (err) { L.error("removeHotKey(" + names[i] + "): " + err.toString()); }
             }
         } catch (e) {
             L.error("_clearXletConflicts: " + e.toString());
