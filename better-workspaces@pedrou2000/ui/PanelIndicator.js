@@ -77,21 +77,13 @@ var PanelIndicator = class PanelIndicator {
         return tip;
     }
 
-    // Full rebuild: one icon button per project + a trailing position label.
+    // Full rebuild, in row order: project icons (stable click targets stay
+    // hard-left, unaffected by the transient status glyph), the position
+    // dots for the active project, then the meta zone — status glyph + ⋯.
     rebuild() {
         this._destroyTooltips();
         this.actor.destroy_all_children();
         this._buttons = [];
-
-        // Leading status dot (hidden when OK) for degraded-state feedback.
-        this._statusDot = new St.Label({
-            style_class: 'better-workspaces-status',
-            text: '',
-            reactive: true, // needed so hover tooltips fire (labels aren't reactive by default)
-        });
-        this._statusDot.visible = false;
-        this.actor.add(this._statusDot, { y_align: St.Align.MIDDLE, y_fill: false });
-        this._statusTip = this._addTooltip(this._statusDot, "");
 
         let nProjects = this.controller.state.projectCount();
         for (let i = 0; i < nProjects; i++) {
@@ -131,7 +123,18 @@ var PanelIndicator = class PanelIndicator {
         });
         this.actor.add(this._posLabel, { y_align: St.Align.MIDDLE, y_fill: false });
 
-        // Manage affordance (⋯) at the RIGHT end, after the position label.
+        // Status glyph (hidden when OK) in the meta zone, just before ⋯ —
+        // its appearing/disappearing must not shift the project icons.
+        this._statusDot = new St.Label({
+            style_class: 'better-workspaces-status',
+            text: '',
+            reactive: true, // needed so hover tooltips fire (labels aren't reactive by default)
+        });
+        this._statusDot.visible = false;
+        this.actor.add(this._statusDot, { y_align: St.Align.MIDDLE, y_fill: false });
+        this._statusTip = this._addTooltip(this._statusDot, "");
+
+        // Manage affordance (⋯) at the RIGHT end.
         if (this._opts.onManage) {
             let manage = new St.Button({
                 style_class: 'better-workspaces-manage',
