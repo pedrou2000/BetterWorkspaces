@@ -119,9 +119,13 @@ KeyBinder.prototype = {
     _clearXletConflicts: function (want) {
         try {
             let km = Main.keybindingManager;
-            if (!km || !km.applet_bindings || !km.applet_bindings.keys) return;
+            let ab = km ? km.applet_bindings : null;
+            L.log("xlet clear: ab=" + (ab ? typeof ab : "null")
+                + " size=" + (ab && ab.size !== undefined ? ab.size : "?")
+                + " hasKeys=" + !!(ab && ab.keys));
+            if (!km || !ab || !ab.keys) return;
             let toRemove = [];
-            let iter = km.applet_bindings.keys();
+            let iter = ab.keys();
             let k = iter.next();
             while (!k.done) {
                 let key = String(k.value);
