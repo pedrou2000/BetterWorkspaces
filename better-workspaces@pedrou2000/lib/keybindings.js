@@ -104,16 +104,19 @@ KeyBinder.prototype = {
             }
         }
         try { Gio.Settings.sync(); } catch (e) {}
+
+        // Also clear XLET hotkeys (applets register these via addXletHotKey in
+        // keybindingManager.applet_bindings, invisible to gsettings) bound to
+        // the same accel — general, not app-specific.
+        this._clearXletConflicts(want);
     },
 
-    // Force-remove any XLET hotkey whose registered key matches `substr`
-    // (e.g. "notification-open"). Cinnamon applets register hotkeys via
-    // addXletHotKey under keys like "uuid::name::<accel>" in
-    // keybindingManager.applet_bindings — invisible to gsettings, so a
-    // gsettings clear can't touch them. We remove the muffin binding and purge
-    // the entry so it isn't re-committed. Best-effort; guarded. Not restored on
-    // teardown (the applet re-registers it on its own next load).
-    removeXletHotKeyMatching: function (substr) {
+    // Remove any applet (xlet) hotkey whose accelerator equals `want`
+    // ([keyval,mods]). Xlet keys are "uuid::name::<binding>"; we parse the part
+    // after the last "::" and compare. Removes the muffin binding + purges the
+    // entry so it isn't re-committed. Not restored on teardown (the owning
+    // applet re-registers on its next load). Best-effort; fully guarded.
+    _clearXletConflicts: function (want) {
         try {
             let km = Main.keybindingManager;
             if (!km || !km.applet_bindings || !km.applet_bindings.keys) return;
@@ -121,16 +124,18 @@ KeyBinder.prototype = {
             let iter = km.applet_bindings.keys();
             let k = iter.next();
             while (!k.done) {
-                if (String(k.value).indexOf(substr) !== -1) toRemove.push(k.value);
+                let key = String(k.value);
+                let binding = key.substring(key.lastIndexOf("::") + 2);
+                if (_parse(binding) === want) toRemove.push(key);
                 k = iter.next();
             }
             for (let i = 0; i < toRemove.length; i++) {
                 try { km.removeHotKey(toRemove[i]); } catch (e) {}
                 try { km.applet_bindings.delete(toRemove[i]); } catch (e) {}
-                L.log("removed xlet hotkey: " + toRemove[i]);
+                L.log("cleared xlet conflict: " + toRemove[i]);
             }
         } catch (e) {
-            L.error("removeXletHotKeyMatching(" + substr + "): " + e.toString());
+            L.error("_clearXletConflicts: " + e.toString());
         }
     },
 

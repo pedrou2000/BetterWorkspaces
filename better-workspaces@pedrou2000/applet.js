@@ -95,7 +95,7 @@ MyApplet.prototype = {
         Applet.Applet.prototype._init.call(this, orientation, panel_height, instanceId);
 
         try {
-            log("loaded (M12 v0.12.1 force-remove-notif-hotkey)");
+            log("loaded (M12 v0.12.2 clear-xlet-conflicts-generic)");
 
             this.wm = new WorkspaceManager.WorkspaceManager();
             this.controller = new ControllerModule.Controller(this.wm);
@@ -469,9 +469,6 @@ MyApplet.prototype = {
     _registerKeybindings: function () {
         this._applyKeybindingScheme();
         this._keybinder = new KeyBindings.KeyBinder();
-        // The notifications applet grabs <Super>n as an xlet hotkey (not via
-        // gsettings), which shadowed our Super+N. Remove it so ours wins.
-        this._keybinder.removeXletHotKeyMatching("notification-open");
         let specs = this._bindingSpecs();
         specs.forEach(Lang.bind(this, function (spec) {
             let accel = this.settings.getValue(spec.setting);
