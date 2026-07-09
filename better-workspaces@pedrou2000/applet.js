@@ -215,6 +215,19 @@ var MyApplet = class MyApplet extends Applet.Applet {
             if (this.panelUI) this.panelUI.setStatus("error");
         });
 
+        // Make store REVERTS visible immediately: when a failed push rolls a
+        // field back, re-render the open toggle panel (the optimistic ON/OFF
+        // it showed is no longer true) and the panel indicator. Deliberately
+        // only revert:* — set:* changes come from UI actions whose handlers
+        // already re-render, and re-rendering mid-click would destroy the row
+        // actors the in-flight toggle callback still references.
+        this.store.onChange((reason) => {
+            if (reason.indexOf("revert:") !== 0) return;
+            if (this._togglePanel) this._togglePanel.refresh();
+            if (this.panelUI) this.panelUI.rebuild();
+            this._refresh();
+        });
+
         // A completed pull merges into the store: catalog fields (name/icon/
         // url) update live; deck-relevant fields keep local pending writes.
         // Deck projects are protected from removal. A project newly checked in

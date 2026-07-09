@@ -184,6 +184,18 @@ test("onChange fires on mutation with a reason", () => {
     assert.deepEqual(reasons, ["set:order"]);
 });
 
+// The applet listens for revert:* to refresh the open toggle panel — a revert
+// must notify with that reason (a silent revert leaves stale UI on screen).
+test("failed push notifies onChange with revert:<field>", async () => {
+    const writer = makeManualWriter();
+    const { store } = makeStore([proj("a", 0, false)], writer);
+    const reasons = [];
+    store.onChange((r) => reasons.push(r));
+    store.setInWorkspace("a", true);
+    await writer.settle(false);
+    assert.deepEqual(reasons, ["set:inWorkspace", "revert:inWorkspace"]);
+});
+
 // ---- merge ---------------------------------------------------------------------
 
 test("merge adds new ids and reports newly-inWorkspace ones", () => {
