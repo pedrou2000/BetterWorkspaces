@@ -142,7 +142,7 @@ var Controller = class Controller {
 
     // Register a callback(orderedIds[]) invoked after a reorder, so the applet
     // can persist the order to Notion.
-    onOrderChanged(cb) { this._onOrderChanged = cb; },
+    onOrderChanged(cb) { this._onOrderChanged = cb; }
 
     // Convenience: move a project one step left/right in the order.
     moveActiveProjectBy(delta) {
