@@ -20,7 +20,8 @@ const IconRenderer = AppletDir.ui.IconRenderer.IconRenderer;
 const _L = AppletDir.lib.logger.Logger.makeLogger("switcher");
 function log(msg) { _L.log(msg); }
 
-const COMMIT_DELAY_MS = 600; // after the last Tab, commit to the selection
+const COMMIT_DELAY_MS = AppletDir.lib.constants.Constants.COMMIT_DELAY_MS;
+
 
 function ProjectSwitcher(controller) {
     this._init(controller);

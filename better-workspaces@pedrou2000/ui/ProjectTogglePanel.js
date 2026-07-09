@@ -26,7 +26,7 @@ const AppletDir = imports.ui.appletManager.applets["better-workspaces@pedrou2000
 const IconRenderer = AppletDir.ui.IconRenderer.IconRenderer;
 const L = AppletDir.lib.logger.Logger.makeLogger("toggle-panel");
 
-const ROW_ICON_SIZE = 20;
+const ROW_ICON_SIZE = AppletDir.lib.constants.Constants.ROW_ICON_SIZE;
 
 function ProjectTogglePanel(getProjects, onToggle, onReorder) {
     this._init(getProjects, onToggle, onReorder);

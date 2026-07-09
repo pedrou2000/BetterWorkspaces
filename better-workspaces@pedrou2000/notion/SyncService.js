@@ -18,6 +18,8 @@ const Persistence = AppletDir.lib.persistence.Persistence;
 const NotionClientModule = AppletDir.notion.NotionClient.NotionClientModule;
 const ProjectMapper = AppletDir.notion.ProjectMapper.ProjectMapper;
 
+const DEFAULT_SYNC_INTERVAL_S = AppletDir.lib.constants.Constants.DEFAULT_SYNC_INTERVAL_S;
+
 const CACHE_FILE = "projects-cache.json";
 
 function SyncService(token, databaseId, opts) {
@@ -29,7 +31,7 @@ SyncService.prototype = {
     _init: function (token, databaseId, opts) {
         opts = opts || {};
         this.databaseId = databaseId;
-        this.intervalSec = opts.intervalSec || 300; // default 5 min
+        this.intervalSec = opts.intervalSec || DEFAULT_SYNC_INTERVAL_S;
         this.client = new NotionClientModule.NotionClient(token);
         this._timer = 0;
         this._onUpdate = null; // cb(projects[])

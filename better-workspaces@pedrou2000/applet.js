@@ -18,7 +18,6 @@ const ModalDialog = imports.ui.modalDialog;
 const Clutter = imports.gi.Clutter;
 
 const UUID = "better-workspaces@pedrou2000";
-const VERSION = "0.12.0";
 
 const AppletDir = imports.ui.appletManager.applets[UUID];
 const WorkspaceManager = AppletDir.wm.WorkspaceManager;
@@ -29,9 +28,11 @@ const ProjectTogglePanelModule = AppletDir.ui.ProjectTogglePanel.ProjectTogglePa
 const SyncServiceModule = AppletDir.notion.SyncService.SyncServiceModule;
 const ProjectMapper = AppletDir.notion.ProjectMapper.ProjectMapper;
 const KeyBindings = AppletDir.lib.keybindings.KeyBindings;
+const Constants = AppletDir.lib.constants.Constants;
 
-function log(msg) { global.log(UUID + ": " + msg); }
-function logError(msg) { global.logError(UUID + ": " + msg); }
+const _L = AppletDir.lib.logger.Logger.makeLogger("applet");
+function log(msg) { _L.log(msg); }
+function logError(msg) { _L.error(msg); }
 
 // Shown only when no Notion cache exists yet (first run / unconfigured), so the
 // applet is never empty. Replaced by the real deck as soon as a sync lands.
@@ -39,10 +40,9 @@ const PLACEHOLDER_PROJECTS = [
     { id: "placeholder", name: "Connect Notion", wsCount: 1 },
 ];
 
-// Each synced Notion project starts with just its home workspace; you grow a
-// project's strip with the add-workspace action. Keeps startup sane (N projects
-// -> N workspaces) rather than exploding the flat list.
-const DEFAULT_WS_PER_PROJECT = 1;
+// Each synced Notion project starts with just its home workspace; grow a
+// project's strip on demand. Keeps startup sane (N projects -> N workspaces).
+const DEFAULT_WS_PER_PROJECT = Constants.DEFAULT_WS_PER_PROJECT;
 
 // Default keybindings, and a scheme version. When we change these defaults we
 // bump KB_SCHEME_VERSION; on load, if the user's stored scheme is older, we
@@ -85,18 +85,18 @@ const WM_ASSIGN = {
     "minimize":        "kbMinimize",
 };
 
-function MyApplet(orientation, panel_height, instanceId) {
-    this._init(orientation, panel_height, instanceId);
+function MyApplet(metadata, orientation, panel_height, instanceId) {
+    this._init(metadata, orientation, panel_height, instanceId);
 }
 
 MyApplet.prototype = {
     __proto__: Applet.Applet.prototype,
 
-    _init: function (orientation, panel_height, instanceId) {
+    _init: function (metadata, orientation, panel_height, instanceId) {
         Applet.Applet.prototype._init.call(this, orientation, panel_height, instanceId);
 
         try {
-            log("loaded v" + VERSION);
+            log("loaded v" + (metadata && metadata.version ? metadata.version : "?"));
 
             this.wm = new WorkspaceManager.WorkspaceManager();
             this.controller = new ControllerModule.Controller(this.wm);
@@ -217,7 +217,7 @@ MyApplet.prototype = {
 
             // Auto-hide after a short delay (reset the timer on each nav).
             if (this._osdTimer) imports.mainloop.source_remove(this._osdTimer);
-            this._osdTimer = imports.mainloop.timeout_add(900, Lang.bind(this, function () {
+            this._osdTimer = imports.mainloop.timeout_add(Constants.OSD_HIDE_MS, Lang.bind(this, function () {
                 this._osdTimer = 0;
                 if (this._osdLabel) this._osdLabel.hide();
                 return false;
@@ -264,7 +264,7 @@ MyApplet.prototype = {
 
         let token = this.settings.getValue("notionToken") || "";
         let dbId = this.settings.getValue("notionDatabaseId") || "";
-        let interval = this.settings.getValue("syncIntervalSec") || 300;
+        let interval = this.settings.getValue("syncIntervalSec") || Constants.DEFAULT_SYNC_INTERVAL_S;
 
         this.sync = new SyncServiceModule.SyncService(token, dbId, { intervalSec: interval });
 
@@ -622,5 +622,5 @@ MyApplet.prototype = {
 };
 
 function main(metadata, orientation, panel_height, instanceId) {
-    return new MyApplet(orientation, panel_height, instanceId);
+    return new MyApplet(metadata, orientation, panel_height, instanceId);
 }

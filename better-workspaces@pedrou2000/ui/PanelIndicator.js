@@ -19,7 +19,7 @@ const IconRenderer = AppletDir.ui.IconRenderer.IconRenderer;
 const _L = AppletDir.lib.logger.Logger.makeLogger("panel");
 function log(msg) { _L.log(msg); }
 
-const ICON_SIZE = 22;
+const ICON_SIZE = AppletDir.lib.constants.Constants.PANEL_ICON_SIZE;
 
 function PanelIndicator(appletActor, controller, orientation, opts) {
     this._init(appletActor, controller, orientation, opts);

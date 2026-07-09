@@ -18,9 +18,7 @@ const Mapping = AppletDir.core.mapping.Mapping;
 const StateModule = AppletDir.core.State;
 const Browser = AppletDir.lib.browser.Browser;
 const Mainloop = imports.mainloop;
-
-// How long to wait after requesting window closes before rechecking (ms).
-const CLOSE_GRACE_MS = 700;
+const CLOSE_GRACE_MS = AppletDir.lib.constants.Constants.CLOSE_GRACE_MS;
 
 const _L = AppletDir.lib.logger.Logger.makeLogger("ctrl");
 function log(msg) { _L.log(msg); }
