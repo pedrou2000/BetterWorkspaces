@@ -74,9 +74,7 @@ function request(method, url, opts) {
     });
 }
 
-// Soup 2.4 response body as raw bytes. response_body.data is a *decoded string*
-// that mangles binary (icons); flatten().get_data() gives the real bytes. Guarded
-// + string fallback in case an old libsoup lacks flatten.
+// response_body.data is a decoded string that mangles binary; flatten() gives raw bytes.
 function _soup2Body(message) {
     const body = message.response_body;
     if (!body) return new Uint8Array(0);
