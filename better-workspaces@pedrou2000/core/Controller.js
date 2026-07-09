@@ -108,18 +108,15 @@ Controller.prototype = {
             blocks.push(objs);
         }
 
-        // Apply the model reorder (remaps active/MRU by identity).
-        if (!this.state.moveProject(from, to)) return false;
-
-        // old->new project position map (matches State.moveProject).
-        let idxArr = [];
-        for (let i = 0; i < n; i++) idxArr.push(i);
-        idxArr.splice(to, 0, idxArr.splice(from, 1)[0]); // idxArr[newPos]=oldProjIdx
+        // Apply the model reorder; it returns order[newPos] = oldProjIdx, which
+        // we reuse to place the workspace blocks (no recomputation here).
+        let order = this.state.moveProject(from, to);
+        if (!order) return false;
 
         // Desired flat sequence of workspace objects.
         let desired = [];
         for (let newPos = 0; newPos < n; newPos++) {
-            let objs = blocks[idxArr[newPos]];
+            let objs = blocks[order[newPos]];
             for (let l = 0; l < objs.length; l++) desired.push(objs[l]);
         }
 
@@ -131,7 +128,7 @@ Controller.prototype = {
 
         // Return to the same (project, local), now at its new flat position.
         if (curLoc) {
-            let newActivePos = idxArr.indexOf(curLoc.projectIdx);
+            let newActivePos = order.indexOf(curLoc.projectIdx);
             let flat = Mapping.globalIndex(this.state.counts(), newActivePos, curLoc.localIdx);
             this.wm.goToWorkspace(flat);
         }

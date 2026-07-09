@@ -141,31 +141,29 @@ State.prototype = {
 
     // Move the project at `from` to index `to`, reindexing the projects array
     // and remapping MRU + active pointer by tracking positions across the move.
-    // Returns false on invalid indices.
+    // Returns the position map `order` where order[newPos] = oldIndex (the
+    // caller needs it to relocate workspaces), or null on invalid indices.
     moveProject: function (from, to) {
         let n = this.projects.length;
-        if (from < 0 || from >= n || to < 0 || to >= n || from === to) return false;
+        if (from < 0 || from >= n || to < 0 || to >= n || from === to) return null;
 
-        // Build an old-index -> new-index map by simulating the array splice.
-        let indices = [];
-        for (let i = 0; i < n; i++) indices.push(i);
-        let moved = indices.splice(from, 1)[0];
-        indices.splice(to, 0, moved);
-        // indices[newPos] = oldIndex; invert to oldIndex -> newPos.
+        // order[newPos] = oldIndex, by simulating the array splice.
+        let order = [];
+        for (let i = 0; i < n; i++) order.push(i);
+        order.splice(to, 0, order.splice(from, 1)[0]);
+        // Invert to oldIndex -> newPos.
         let newOf = {};
-        for (let newPos = 0; newPos < n; newPos++) newOf[indices[newPos]] = newPos;
+        for (let newPos = 0; newPos < n; newPos++) newOf[order[newPos]] = newPos;
 
         // Apply the same reorder to the projects array.
-        let arr = this.projects;
-        let item = arr.splice(from, 1)[0];
-        arr.splice(to, 0, item);
+        this.projects.splice(to, 0, this.projects.splice(from, 1)[0]);
 
         // Remap MRU indices and the active pointer through newOf.
         this._mru = this._mru.map(function (i) { return newOf[i]; });
         this.activeProjectIdx = newOf[this.activeProjectIdx];
 
         log("moveProject: " + from + " -> " + to);
-        return true;
+        return order;
     },
 
     // ---- Mutating a project's workspace count ------------------------------
