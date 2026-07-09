@@ -18,23 +18,11 @@
 const St = imports.gi.St;
 const Gio = imports.gi.Gio;
 const GLib = imports.gi.GLib;
-const Soup = imports.gi.Soup;
-const ByteArray = imports.byteArray;
 
 const AppletDir = imports.ui.appletManager.applets["better-workspaces@pedrou2000"];
 const L = AppletDir.lib.logger.Logger.makeLogger("icons");
 const Persistence = AppletDir.lib.persistence.Persistence;
-const SOUP3 = AppletDir.notion.NotionClient.SOUP3;
-
-// One shared session for icon downloads.
-let _session = null;
-function _getSession() {
-    if (!_session) {
-        _session = new Soup.Session();
-        try { _session.timeout = 15; } catch (e) {}
-    }
-    return _session;
-}
+const Http = AppletDir.lib.http.Http;
 
 function _iconsDir() {
     let dir = GLib.build_filenamev([Persistence.configDir(), "icons"]);
@@ -80,36 +68,23 @@ function _iconFromFile(path, size) {
 
 // Download `url` to `dest` asynchronously; call cb(true) on success.
 function _download(url, dest, cb) {
-    try {
-        let session = _getSession();
-        let msg = Soup.Message.new("GET", url);
-        if (SOUP3) {
-            session.send_and_read_async(msg, GLib.PRIORITY_DEFAULT, null,
-                function (s, res) {
-                    try {
-                        let bytes = s.send_and_read_finish(res);
-                        let status = msg.get_status();
-                        if (status >= 200 && status < 300 && bytes) {
-                            GLib.file_set_contents(dest, bytes.get_data());
-                            cb(true);
-                        } else { L.error("icon GET http " + status); cb(false); }
-                    } catch (e) { L.error("icon finish: " + e.toString()); cb(false); }
-                });
-        } else {
-            session.queue_message(msg, function (s, message) {
-                try {
-                    if (message.status_code >= 200 && message.status_code < 300
-                        && message.response_body && message.response_body.data) {
-                        GLib.file_set_contents(dest, message.response_body.data);
-                        cb(true);
-                    } else { L.error("icon GET http " + message.status_code); cb(false); }
-                } catch (e) { L.error("icon queue: " + e.toString()); cb(false); }
-            });
+    Http.request("GET", url).then((res) => {
+        try {
+            if (res.status >= 200 && res.status < 300 && res.bytes.length > 0) {
+                GLib.file_set_contents(dest, res.bytes);
+                cb(true);
+            } else {
+                L.error("icon GET http " + res.status);
+                cb(false);
+            }
+        } catch (e) {
+            L.error("icon write: " + e.toString());
+            cb(false);
         }
-    } catch (e) {
+    }).catch((e) => {
         L.error("_download: " + e.toString());
         cb(false);
-    }
+    });
 }
 
 // Public: return an St actor for `icon` right now, and if it's a URL not yet
