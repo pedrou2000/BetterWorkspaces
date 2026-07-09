@@ -375,18 +375,31 @@ var MyApplet = class MyApplet extends Applet.Applet {
             + " (was v" + stored + ")");
     }
 
-    _registerKeybindings() {
-        this._applyKeybindingScheme();
+    // Grab every non-empty binding from current settings into a fresh
+    // KeyBinder (tearing down the previous one), and re-apply the tiling
+    // gsettings assignments. Shared by first registration and every rebind.
+    _forceBindAll() {
+        if (this._keybinder) this._keybinder.teardown();
         this._keybinder = new KeyBinder();
-        let specs = this._bindingSpecs();
-        specs.forEach((spec) => {
+        this._bindingSpecs().forEach((spec) => {
             let accel = this.settings.getValue(spec.setting);
             if (!accel) return;
             this._keybinder.force(spec.name, accel, () => {
                 try { spec.run(); }
                 catch (e) { logError("hotkey " + spec.name + ": " + e.toString()); }
             });
-            // Re-bind live when the user edits this shortcut in settings.
+        });
+        this._assignTiling();
+    }
+
+    _registerKeybindings() {
+        this._applyKeybindingScheme();
+
+        // Re-bind live when the user edits any shortcut in settings. Listeners
+        // are bound for EVERY spec — including ones whose accel is currently
+        // empty — so filling in a blank shortcut takes effect immediately.
+        let specs = this._bindingSpecs();
+        specs.forEach((spec) => {
             this.settings.bindProperty(Settings.BindingDirection.IN, spec.setting,
                 spec.setting, () => this._rebindKeys());
         });
@@ -396,7 +409,8 @@ var MyApplet = class MyApplet extends Applet.Applet {
             this.settings.bindProperty(Settings.BindingDirection.IN, setting,
                 setting, () => this._rebindKeys());
         }
-        this._assignTiling();
+
+        this._forceBindAll();
         log("registered " + (specs.length + Object.keys(WM_ASSIGN).length)
             + " keybindings (settings-driven)");
     }
@@ -413,17 +427,7 @@ var MyApplet = class MyApplet extends Applet.Applet {
 
     // Re-register all keybindings from current settings (called on any change).
     _rebindKeys() {
-        if (this._keybinder) this._keybinder.teardown();
-        this._keybinder = new KeyBinder();
-        this._bindingSpecs().forEach((spec) => {
-            let accel = this.settings.getValue(spec.setting);
-            if (!accel) return;
-            this._keybinder.force(spec.name, accel, () => {
-                try { spec.run(); }
-                catch (e) { logError("hotkey " + spec.name + ": " + e.toString()); }
-            });
-        });
-        this._assignTiling();
+        this._forceBindAll();
         log("re-registered keybindings after settings change");
     }
 
