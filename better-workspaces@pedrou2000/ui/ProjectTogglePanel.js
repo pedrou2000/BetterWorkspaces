@@ -3,13 +3,17 @@
  *
  * The Project Toggle Panel (Design Doc §9). A modal, searchable, scrollable
  * list of ALL non-archived Notion projects, each with a toggle bound to its
- * Workspace checkbox. Flipping a toggle delegates to an onToggle handler
- * provided by the applet:
+ * Workspace checkbox. Handlers are ID-KEYED (never row/deck positions, which
+ * can drift when a background sync refreshes the list):
  *
- *   onToggle(project, newValue, doneCb)
- *       -> applet writes to Notion + adds/removes the project from the live
- *          deck (with confirmation on destructive removal), then calls
- *          doneCb(err). On err the panel reverts the toggle's visual state.
+ *   onToggle(project, newValue) -> Promise
+ *       applet updates the store + deck (with confirmation on destructive
+ *       removal); rejection reverts the toggle's visual state.
+ *   onReorder(movedId, toOnPos)
+ *       reorder the ON project with id `movedId` to position `toOnPos`.
+ *
+ * refresh() re-renders from getProjects() while open (no-op when closed) —
+ * called by the applet after a sync merge changes the catalog.
  *
  * The panel is pure UI: it renders rows and reflects state; it owns none of the
  * Notion/WM logic.
@@ -31,8 +35,9 @@ var ProjectTogglePanel = class ProjectTogglePanel {
 
     // getProjects(): returns the current array of {id,name,icon,inWorkspace,...},
     //   with the ON (inWorkspace) projects already in deck order.
-    // onToggle(project, newValue, doneCb): performs the change; doneCb(err).
-    // onReorder(fromOnIdx, toOnIdx): reorder among the ON projects (deck order).
+    // onToggle(project, newValue): performs the change; returns a Promise.
+    // onReorder(movedId, toOnPos): reorder the ON project `movedId` to position
+    //   `toOnPos` among the ON projects.
     constructor(getProjects, onToggle, onReorder) {
         this._getProjects = getProjects;
         this._onToggle = onToggle;
@@ -40,15 +45,24 @@ var ProjectTogglePanel = class ProjectTogglePanel {
         this._rows = [];
         this._filter = "";
 
-        // Drag-to-reorder for the ON rows (shared ui/DndReorder helper).
+        // Drag-to-reorder for the ON rows (shared ui/DndReorder helper). The
+        // DnD layer works in row positions; translate the source position to
+        // the project ID here, at drop time, so the applet never sees an index
+        // that could have drifted.
         this._dnd = new DndReorderHelper({
             axis: 'y',
             getItems: () => this._onRowActors || [],
             onReorder: (from, to) => {
-                this._onReorder(from, to);
+                let row = (this._onRowActors || [])[from];
+                if (row && row._bwProjectId) this._onReorder(row._bwProjectId, to);
                 this._renderRows();
             },
         });
+    }
+
+    // Re-render from getProjects() if open (called after a sync merge).
+    refresh() {
+        if (this._dialog) this._renderRows();
     }
 
     open() {
@@ -192,8 +206,10 @@ var ProjectTogglePanel = class ProjectTogglePanel {
         this._rows.push({ project: project, toggle: toggle });
 
         // Make ON rows draggable to reorder; the floating drag actor is a
-        // label with the project name.
+        // label with the project name. The row carries its project ID so the
+        // drop handler reports ids, not positions.
         if (onIdx >= 0) {
+            row._bwProjectId = project.id;
             this._onRowActors.push(row);
             this._dnd.makeDraggable(row, onIdx, () => new St.Label({
                 style_class: 'better-workspaces-drag-actor',
@@ -213,19 +229,18 @@ var ProjectTogglePanel = class ProjectTogglePanel {
         this._paintToggle(toggle);
         toggle.reactive = false; // lock while the change is in flight
 
-        this._onToggle(project, newValue, (err) => {
+        this._onToggle(project, newValue).then(() => {
             toggle.reactive = true;
-            if (err) {
-                // Revert on failure.
-                L.log("toggle for '" + project.name + "' failed (" + err + "), reverting");
-                toggle.set_checked(!newValue);
-                this._paintToggle(toggle);
-            } else {
-                // Membership changed — re-render so the row moves between the
-                // "In workspaces" and "Other projects" sections.
-                project.inWorkspace = newValue;
-                this._renderRows();
-            }
+            // Membership changed — re-render so the row moves between the
+            // "In workspaces" and "Other projects" sections. (The store is the
+            // source of truth; _renderRows re-reads it via getProjects.)
+            this._renderRows();
+        }).catch((e) => {
+            toggle.reactive = true;
+            L.log("toggle for '" + project.name + "' failed ("
+                + (e && e.message ? e.message : e) + "), reverting");
+            toggle.set_checked(!newValue);
+            this._paintToggle(toggle);
         });
     }
 

@@ -7,14 +7,17 @@
  *
  * This file is the wiring layer. It owns lifecycle (settings, keybindings,
  * signals, cleanup) and composes the real parts:
- *   core/*   — the model (State/mapping) and the Controller façade over it
+ *   core/*   — the model (State/mapping), the Controller façade, and the
+ *              ProjectStore (single owner of the project catalog + disk cache)
  *   wm/*     — the only code allowed to touch Cinnamon workspace APIs
- *   notion/* — background sync to/from the Notion database + disk cache
+ *   notion/* — the Notion transport (pull loop + writes for the store's queue)
  *   ui/*     — panel indicator, switcher overlay, toggle panel, OSD, dialogs
  *
- * The deck loads from the on-disk Notion cache at startup (instant, offline);
- * a background sync refreshes the cache for the NEXT load. Live deck changes
- * (toggle a project on/off, reorder) write back to Notion as they happen.
+ * The deck loads from the store at startup (instant, offline). Mutations are
+ * optimistic: store + UI update immediately, Notion writes are queued (a
+ * failed write reverts the field and shows the error dot). Background pulls
+ * merge into the store — names/icons update live, a project newly checked in
+ * Notion auto-appends to the deck end, and nothing is ever auto-removed.
  *
  * Released under the GNU General Public License v2 (see LICENSE).
  */
@@ -27,13 +30,14 @@ const UUID = "better-workspaces@pedrou2000";
 const AppletDir = imports.ui.appletManager.applets[UUID];
 const WorkspaceManager = AppletDir.wm.WorkspaceManager.WorkspaceManager;
 const Controller = AppletDir.core.Controller.Controller;
+const ProjectStore = AppletDir.core.ProjectStore.ProjectStore;
 const PanelIndicator = AppletDir.ui.PanelIndicator.PanelIndicator;
 const ProjectSwitcher = AppletDir.ui.ProjectSwitcher.ProjectSwitcher;
 const ProjectTogglePanel = AppletDir.ui.ProjectTogglePanel.ProjectTogglePanel;
 const OSD = AppletDir.ui.OSD.OSD;
 const Dialogs = AppletDir.ui.Dialogs.Dialogs;
 const SyncService = AppletDir.notion.SyncService.SyncService;
-const ProjectMapper = AppletDir.notion.ProjectMapper.ProjectMapper;
+const Persistence = AppletDir.lib.persistence.Persistence;
 const KeyBinder = AppletDir.lib.keybindings.KeyBinder;
 const Constants = AppletDir.lib.constants.Constants;
 
@@ -102,13 +106,16 @@ var MyApplet = class MyApplet extends Applet.Applet {
             this.controller = new Controller(this.wm);
             this.osd = new OSD();
 
+            // The store owns the project catalog (loads the disk cache once).
+            this.store = new ProjectStore(Persistence);
+
             // Settings first: we need the token before we decide the deck.
-            // This also creates this.sync.
+            // This also creates this.sync and wires it to the store.
             this._initSettingsAndSync(instanceId);
 
-            // Load the deck from the on-disk Notion cache (instant, offline).
-            // Falls back to a placeholder if nothing is cached yet.
-            this._loadDeckFromCache();
+            // Load the deck from the store (instant, offline). Falls back to a
+            // placeholder if the catalog is empty.
+            this._loadDeckFromStore();
 
             this.panelUI = new PanelIndicator(
                 this.actor, this.controller, orientation,
@@ -116,11 +123,11 @@ var MyApplet = class MyApplet extends Applet.Applet {
             this.switcher = new ProjectSwitcher(this.controller);
             this.switcher.onCommit(() => this._afterNav());
 
-            // When projects are reordered, rebuild the panel and persist the new
-            // order to Notion (Workspace Order = 0,1,2,...).
+            // When projects are reordered, rebuild the panel and persist the
+            // new order (store applies it optimistically and pushes to Notion).
             this.controller.onOrderChanged((orderedIds) => {
                 if (this.panelUI) this.panelUI.rebuild();
-                if (this.sync) this.sync.persistOrder(orderedIds);
+                if (this.store) this.store.setOrders(orderedIds);
             });
 
             // Initial status: unconfigured if no token, else neutral until sync.
@@ -160,20 +167,19 @@ var MyApplet = class MyApplet extends Applet.Applet {
         };
     }
 
-    // Build the deck from cached Notion projects, filtered to the ones whose
-    // Workspace checkbox is true (inWorkspace). The cache holds ALL non-archived
-    // projects (for the toggle panel); the DECK is the inWorkspace subset.
-    _loadDeckFromCache() {
-        let cached = this.sync ? this.sync.readCache() : [];
-        let inDeck = cached.filter((p) => p.inWorkspace);
-        if (!inDeck || inDeck.length === 0) {
-            L.log("_loadDeckFromCache: no in-workspace projects cached -> placeholder deck");
+    // Build the deck from the store's catalog, filtered to the projects whose
+    // Workspace checkbox is true (inWorkspace). The catalog holds ALL non-
+    // archived projects (for the toggle panel); the DECK is the inWorkspace
+    // subset, in Workspace Order (store.all() is sorted).
+    _loadDeckFromStore() {
+        let inDeck = this.store.all().filter((p) => p.inWorkspace);
+        if (inDeck.length === 0) {
+            L.log("_loadDeckFromStore: no in-workspace projects -> placeholder deck");
             this.controller.loadProjects(PLACEHOLDER_PROJECTS);
             return;
         }
         this.controller.loadProjects(inDeck.map((p) => this._toDef(p)));
-        L.log("_loadDeckFromCache: loaded " + inDeck.length + " in-workspace projects (of "
-            + cached.length + " cached)");
+        L.log("_loadDeckFromStore: loaded " + inDeck.length + " in-workspace projects");
     }
 
     _refresh() {
@@ -202,14 +208,36 @@ var MyApplet = class MyApplet extends Applet.Applet {
 
         this.sync = new SyncService(token, dbId, { intervalSec: interval });
 
-        // A completed sync refreshes the on-disk cache (for the NEXT launch) and
-        // logs the result. We deliberately do NOT reshape the live deck mid-
-        // session — that could move workspaces and scatter your open windows.
-        // New Notion changes take effect on the next Cinnamon reload/login.
-        this.sync.onUpdate((projects) => {
-            L.log("sync refreshed cache: " + projects.length + " projects ["
-                + projects.map((p) => p.name).join(", ")
-                + "] — applies on next reload");
+        // The store pushes its optimistic mutations to Notion through the sync
+        // transport; failed pushes revert the field and surface the error dot.
+        this.store.setWriter(this.sync);
+        this.store.onWriteError(() => {
+            if (this.panelUI) this.panelUI.setStatus("error");
+        });
+
+        // A completed pull merges into the store: catalog fields (name/icon/
+        // url) update live; deck-relevant fields keep local pending writes.
+        // Deck projects are protected from removal. A project newly checked in
+        // Notion (e.g. from another device) auto-APPENDS to the deck end —
+        // append never moves existing workspaces. Unchecking in Notion never
+        // auto-removes; that stays behind the explicit toggle-off flow.
+        this.sync.onPull((projects) => {
+            let deckIds = [];
+            let n = this.controller.state.projectCount();
+            for (let i = 0; i < n; i++) deckIds.push(this.controller.state.getProject(i).id);
+
+            let result = this.store.merge(projects, deckIds);
+
+            for (let i = 0; i < result.newlyInWorkspace.length; i++) {
+                let p = result.newlyInWorkspace[i];
+                if (this.controller.state.indexOfProjectId(p.id) >= 0) continue;
+                this.controller.addProjectLive(this._toDef(p));
+                L.log("sync: auto-appended newly-on project " + p.name);
+            }
+
+            if (this.panelUI) this.panelUI.rebuild();
+            if (this._togglePanel) this._togglePanel.refresh();
+            this._refresh();
         });
 
         // Reflect sync status in the panel (degraded-state feedback).
@@ -247,27 +275,17 @@ var MyApplet = class MyApplet extends Applet.Applet {
 
     // ---- M9: Project Toggle Panel ------------------------------------------
 
-    // Open the searchable toggle panel. Reads the full cached project list
-    // (sorted by Workspace Order so ON rows match the deck); toggles go through
-    // _handleToggle, reorders through reorderProject.
+    // Open the searchable toggle panel over the store's catalog (sorted, so ON
+    // rows match the deck). Toggles go through _handleToggle; reorders arrive
+    // id-keyed and resolve to deck indices here, at action time.
     openTogglePanel() {
         try {
             let panel = new ProjectTogglePanel(
-                () => {
-                    let cache = this.sync ? this.sync.readCache() : [];
-                    return ProjectMapper.sortByOrder(cache);
-                },
-                (project, newValue, doneCb) => {
-                    // Bridge the panel's doneCb(err) protocol to the async
-                    // handler: null on success, an error string on failure.
-                    this._handleToggle(project, newValue)
-                        .then(() => doneCb(null))
-                        .catch((e) => doneCb(e.message || e.toString()));
-                },
-                (fromOnIdx, toOnIdx) => {
-                    // ON-project index == deck index; reorder relocates windows
-                    // and persists Workspace Order.
-                    this.controller.reorderProject(fromOnIdx, toOnIdx);
+                () => this.store.all(),
+                (project, newValue) => this._handleToggle(project, newValue),
+                (movedId, toOnPos) => {
+                    let from = this.controller.state.indexOfProjectId(movedId);
+                    if (from >= 0) this.controller.reorderProject(from, toOnPos);
                 });
             this._togglePanel = panel;
             panel.open();
@@ -276,29 +294,31 @@ var MyApplet = class MyApplet extends Applet.Applet {
         }
     }
 
-    // Perform a Workspace toggle: write to Notion, then add/remove the project
-    // from the live deck. Resolves on success; rejects to revert the toggle.
+    // Perform a Workspace toggle OPTIMISTICALLY: the store + deck update
+    // immediately and the Notion write is queued (store reverts the field and
+    // shows the error dot if the push later fails). Resolves on success;
+    // rejects only when the change didn't happen (cancelled / windows open).
     async _handleToggle(project, newValue) {
-        if (!this.sync) throw new Error("no-sync");
+        if (!this.store) throw new Error("no-store");
 
         if (newValue) {
-            // Turning ON: write Notion, add to the live deck (appends to end),
-            // and assign Workspace Order = max+1 so "bottom" survives reload.
-            await this.sync.setWorkspaceFlag(project.id, true);
+            // Turning ON: append to the deck and the store, Workspace Order =
+            // max+1 so "bottom" survives reload. Writes are queued by the store.
             this.controller.addProjectLive(this._toDef(project));
-            this.sync.setWorkspaceOrder(project.id, this.sync.maxOrder() + 1).catch(() => {});
+            this.store.setInWorkspace(project.id, true);
+            this.store.setOrder(project.id, this.store.maxOrder() + 1);
             this.panelUI.rebuild();
             this._refresh();
             return;
         }
 
-        // Turning OFF: destructive. Find the deck index, confirm, then remove
-        // (which gracefully closes windows). Only on success do we write
-        // Workspace=false to Notion.
+        // Turning OFF: destructive — confirm, then remove from the deck (which
+        // gracefully closes windows). Only after the deck removal succeeds does
+        // the store flip the flag (and queue the Notion writes).
         let deckIdx = this.controller.state.indexOfProjectId(project.id);
         if (deckIdx < 0) {
-            // Not in the live deck (shouldn't happen) — just write the flag.
-            await this.sync.setWorkspaceFlag(project.id, false);
+            // Not in the live deck (shouldn't happen) — just flip the flag.
+            this.store.setInWorkspace(project.id, false);
             return;
         }
         let confirmed = await this._confirmRemoval(project);
@@ -313,11 +333,9 @@ var MyApplet = class MyApplet extends Applet.Applet {
         }
         this.panelUI.rebuild();
         this._refresh();
-        // Deck change succeeded; persist Workspace=false and clear its order so
-        // it sorts last if reactivated later. If the flag write fails, the
-        // rejection reverts the panel's toggle.
-        this.sync.clearWorkspaceOrder(project.id).catch(() => {});
-        await this.sync.setWorkspaceFlag(project.id, false);
+        // Clear the order so it sorts last if reactivated later.
+        this.store.setInWorkspace(project.id, false);
+        this.store.setOrder(project.id, null);
     }
 
     // Confirm destructive removal via a modal. Resolves to true/false.
@@ -516,6 +534,7 @@ var MyApplet = class MyApplet extends Applet.Applet {
             }
             if (this._togglePanel) { this._togglePanel.destroy(); this._togglePanel = null; }
             if (this.sync) { this.sync.destroy(); this.sync = null; }
+            if (this.store) { this.store.destroy(); this.store = null; }
             if (this.settings) { this.settings.finalize(); this.settings = null; }
             if (this.switcher) { this.switcher.destroy(); this.switcher = null; }
             if (this.panelUI) { this.panelUI.destroy(); this.panelUI = null; }
