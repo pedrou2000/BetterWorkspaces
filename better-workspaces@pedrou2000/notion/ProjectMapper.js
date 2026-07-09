@@ -1,7 +1,6 @@
-/* notion/ProjectMapper.js — raw Notion pages -> project records; owns the schema. */
-
-// If the Notion Projects DB schema changes, only this file changes. We keep ALL
-// non-archived projects tagged with inWorkspace; the deck filters to true.
+/* notion/ProjectMapper.js — raw Notion pages -> project records; the only file
+   that knows the Projects DB schema. Keeps all non-archived projects; the deck
+   filters to inWorkspace. */
 
 const AppletDir = imports.ui.appletManager.applets["better-workspaces@pedrou2000"];
 const L = AppletDir.lib.logger.Logger.makeLogger("mapper");
@@ -11,8 +10,6 @@ const WORKSPACE_PROP = "Workspace";
 const ARCHIVE_PROP = "Archive";
 const ORDER_PROP = "Workspace Order";
 
-// Notion API query body: fetch all non-archived projects (we tag each with its
-// Workspace flag in the mapper rather than filtering it out server-side).
 function buildQueryBody() {
     return {
         page_size: 100,
@@ -53,8 +50,8 @@ function _number(page, propName) {
     return null;
 }
 
+// Either Notion's page-level archive or our own Archive checkbox.
 function _isArchived(page) {
-    // Page-level archived flag OR our Archive checkbox.
     if (page.archived === true) return true;
     return _checkbox(page, ARCHIVE_PROP);
 }
@@ -95,7 +92,7 @@ function mapPage(page) {
         icon: _icon(page),
         notionUrl: page.url || null,
         inWorkspace: _wantsWorkspace(page),
-        order: _number(page, ORDER_PROP), // Workspace Order; null if unset
+        order: _number(page, ORDER_PROP),
     };
 }
 

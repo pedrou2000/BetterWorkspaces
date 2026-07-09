@@ -1,18 +1,13 @@
 /* core/KeybindingCoordinator.js — settings-driven keybinding registration. */
 
-// Owns what applet.js used to do inline: reset shortcuts to defaults on a scheme
-// bump, force-grab every non-empty binding via a fresh KeyBinder, reassign
-// Cinnamon's own tiling/maximize actions in gsettings, and re-run all of that
-// live when any shortcut setting changes. GJS collaborators (settings, the
-// KeyBinder class, the IN binding-direction) are INJECTED.
+// GJS collaborators (settings, the KeyBinder class, the IN binding-direction)
+// are injected, so this is unit-testable with fakes.
 
 const AppletDir = imports.ui.appletManager.applets["better-workspaces@pedrou2000"];
 const L = AppletDir.lib.logger.Logger.makeLogger("kb-coord");
 
-// Default keybindings, and a scheme version. When we change these defaults we
-// bump KB_SCHEME_VERSION; on load, if the user's stored scheme is older, we
-// reset the keybindings to these values (token/other settings untouched). This
-// lets default changes actually take effect without a manual settings wipe.
+// Bumping KB_SCHEME_VERSION resets shortcuts to KB_DEFAULTS on next load (other
+// settings untouched), so changed defaults take effect without a manual wipe.
 const KB_SCHEME_VERSION = 5;
 const KB_DEFAULTS = {
     // Super = navigate; +Alt = project axis; +Ctrl = carry the window.
@@ -36,10 +31,8 @@ const KB_DEFAULTS = {
     kbMinimize: "<Alt>s",
 };
 
-// These reassign Cinnamon's OWN window-management actions (not our handlers):
-// each maps a gsettings action key in org.cinnamon.desktop.keybindings.wm to
-// the applet setting holding the desired accelerator. Editable in Configure;
-// applied to gsettings on load and on change; restored on unload.
+// Reassign Cinnamon's OWN wm actions (gsettings action key -> our setting),
+// applied on load/change and restored on unload.
 const WM_SCHEMA = "org.cinnamon.desktop.keybindings.wm";
 const WM_ASSIGN = {
     "push-tile-left":  "kbTileLeft",
@@ -66,14 +59,11 @@ var KeybindingCoordinator = class KeybindingCoordinator {
         this._keybinder = null;
     }
 
-    // First registration: apply the scheme, bind live-rebind listeners for every
-    // spec + WM action, then grab everything from current settings.
     register() {
         this._applyScheme();
 
-        // Re-bind live when the user edits any shortcut. Listeners are bound for
-        // EVERY spec — including ones whose accel is currently empty — so filling
-        // in a blank shortcut takes effect immediately.
+        // Bind a listener for EVERY spec, including empty ones, so filling in a
+        // blank shortcut later takes effect immediately (not just on reload).
         let specs = this._getSpecs();
         specs.forEach((spec) => {
             this._settings.bindProperty(this._IN, spec.setting,
@@ -90,7 +80,6 @@ var KeybindingCoordinator = class KeybindingCoordinator {
             + " keybindings (settings-driven)");
     }
 
-    // Re-register all keybindings from current settings (any change).
     rebind() {
         this._forceBindAll();
         L.log("re-registered keybindings after settings change");
@@ -103,9 +92,6 @@ var KeybindingCoordinator = class KeybindingCoordinator {
         }
     }
 
-    // If the stored scheme is older than the current one, overwrite the shortcut
-    // values with the current defaults (token/other settings untouched). Makes
-    // changed defaults take effect without a manual wipe.
     _applyScheme() {
         let stored = this._settings.getValue("kbSchemeVersion") || 0;
         if (stored >= KB_SCHEME_VERSION) return;
@@ -117,9 +103,8 @@ var KeybindingCoordinator = class KeybindingCoordinator {
             + " (was v" + stored + ")");
     }
 
-    // Grab every non-empty binding from current settings into a fresh KeyBinder
-    // (tearing down the previous one), and re-apply the tiling gsettings
-    // assignments. Shared by first registration and every rebind.
+    // Fresh KeyBinder + grab every non-empty binding + reapply tiling. Shared by
+    // first registration and every rebind.
     _forceBindAll() {
         if (this._keybinder) this._keybinder.teardown();
         this._keybinder = new this._KeyBinder();
@@ -134,8 +119,6 @@ var KeybindingCoordinator = class KeybindingCoordinator {
         this._assignTiling();
     }
 
-    // Reassign Cinnamon's own window-management actions to the accelerators
-    // stored in our settings. Recorded and restored on unload by the KeyBinder.
     _assignTiling() {
         for (let action in WM_ASSIGN) {
             let accel = this._settings.getValue(WM_ASSIGN[action]);

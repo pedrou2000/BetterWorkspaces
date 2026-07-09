@@ -31,7 +31,6 @@ var DeckCoordinator = class DeckCoordinator {
     _refresh() { if (this._hooks.refresh) this._hooks.refresh(); }
     _refreshTogglePanel() { if (this._hooks.refreshTogglePanel) this._hooks.refreshTogglePanel(); }
 
-    // Cached project entry -> controller project def.
     toDef(p) {
         return {
             id: p.id,
@@ -42,8 +41,7 @@ var DeckCoordinator = class DeckCoordinator {
         };
     }
 
-    // Build the deck from the store's catalog, filtered to inWorkspace projects
-    // (in Workspace Order — store.all() is sorted). Placeholder deck when empty.
+    // The deck is the inWorkspace subset of the catalog, in Workspace Order.
     loadDeckFromStore() {
         let inDeck = this._store.all().filter((p) => p.inWorkspace);
         if (inDeck.length === 0) {
@@ -85,16 +83,13 @@ var DeckCoordinator = class DeckCoordinator {
         if (from >= 0) this._controller.reorderProject(from, toOnPos);
     }
 
-    // Perform a Workspace toggle OPTIMISTICALLY: the store + deck update
-    // immediately and the Notion write is queued (store reverts + shows the error
-    // dot if the push later fails). Resolves on success; rejects only when the
-    // change didn't happen (cancelled / windows open).
+    // Optimistic: store + deck update now, Notion writes queued by the store.
+    // Resolves on success; rejects only when nothing changed (cancelled/windows-open).
     async handleToggle(project, newValue) {
         if (!this._store) throw new Error("no-store");
 
         if (newValue) {
-            // Turning ON: append to the deck and the store, Workspace Order =
-            // max+1 so "bottom" survives reload. Writes are queued by the store.
+            // Order = max+1 so "bottom" survives reload.
             this._controller.addProjectLive(this.toDef(project));
             this._store.setInWorkspace(project.id, true);
             this._store.setOrder(project.id, this._store.maxOrder() + 1);
@@ -103,13 +98,11 @@ var DeckCoordinator = class DeckCoordinator {
             return;
         }
 
-        // Turning OFF: destructive — confirm, then remove from the deck (which
-        // gracefully closes windows). Only after the deck removal succeeds does
-        // the store flip the flag (and queue the Notion writes).
+        // Destructive: confirm, remove from the deck (closes windows), then flip
+        // the store flag only once the removal actually succeeds.
         let deckIdx = this._controller.state.indexOfProjectId(project.id);
         if (deckIdx < 0) {
-            // Not in the live deck (shouldn't happen) — just flip the flag.
-            this._store.setInWorkspace(project.id, false);
+            this._store.setInWorkspace(project.id, false); // not in deck (shouldn't happen)
             return;
         }
         let confirmed = await this._confirmRemoval(project);
@@ -124,12 +117,10 @@ var DeckCoordinator = class DeckCoordinator {
         }
         this._rebuildPanel();
         this._refresh();
-        // Clear the order so it sorts last if reactivated later.
         this._store.setInWorkspace(project.id, false);
-        this._store.setOrder(project.id, null);
+        this._store.setOrder(project.id, null); // clear order so it sorts last if reactivated
     }
 
-    // Confirm destructive removal via a modal. Resolves to true/false.
     _confirmRemoval(project) {
         let deckIdx = this._controller.state.indexOfProjectId(project.id);
         let p = this._controller.state.getProject(deckIdx);
