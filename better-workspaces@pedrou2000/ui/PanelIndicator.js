@@ -16,9 +16,8 @@ const DND = imports.ui.dnd;
 
 const AppletDir = imports.ui.appletManager.applets["better-workspaces@pedrou2000"];
 const IconRenderer = AppletDir.ui.IconRenderer.IconRenderer;
-
-const UUID = "better-workspaces@pedrou2000";
-function log(msg) { global.log(UUID + " [panel]: " + msg); }
+const _L = AppletDir.lib.logger.Logger.makeLogger("panel");
+function log(msg) { _L.log(msg); }
 
 const ICON_SIZE = 22;
 

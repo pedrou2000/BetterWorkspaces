@@ -14,9 +14,24 @@
  */
 
 const UUID = "better-workspaces@pedrou2000";
-function log(msg) { global.log(UUID + " [state]: " + msg); }
+const AppletDir = imports.ui.appletManager.applets[UUID];
+const _L = AppletDir.lib.logger.Logger.makeLogger("state");
+function log(msg) { _L.log(msg); }
 
-// project := { id, name, wsCount, lastLocal }
+// Build a project record from a def. Single source of truth for the shape;
+// every project (>= 1 workspace, the home) starts on local 0.
+function makeProject(def) {
+    return {
+        id: def.id,
+        name: def.name,
+        wsCount: Math.max(1, def.wsCount || 1),
+        lastLocal: 0,
+        icon: def.icon || null,
+        notionUrl: def.notionUrl || null,
+    };
+}
+
+// project := { id, name, wsCount, lastLocal, icon, notionUrl }
 function State() {
     this._init();
 }
@@ -32,16 +47,7 @@ State.prototype = {
     // Replace the whole project set. `defs` is
     // [{id, name, wsCount, icon, notionUrl}, ...].
     setProjects: function (defs) {
-        this.projects = defs.map(function (d) {
-            return {
-                id: d.id,
-                name: d.name,
-                wsCount: Math.max(1, d.wsCount || 1), // every project >= 1 (home)
-                lastLocal: 0,
-                icon: d.icon || null,
-                notionUrl: d.notionUrl || null,
-            };
-        });
+        this.projects = defs.map(makeProject);
         this.activeProjectIdx = 0;
         this._mru = this.projects.map(function (_, i) { return i; });
         log("setProjects: " + this.projects.length + " projects, counts=["
@@ -105,14 +111,7 @@ State.prototype = {
 
     // Append a project to the end of the deck. Returns its new index.
     appendProject: function (def) {
-        this.projects.push({
-            id: def.id,
-            name: def.name,
-            wsCount: Math.max(1, def.wsCount || 1),
-            lastLocal: 0,
-            icon: def.icon || null,
-            notionUrl: def.notionUrl || null,
-        });
+        this.projects.push(makeProject(def));
         let idx = this.projects.length - 1;
         this._mru.push(idx); // least-recent until visited
         log("appendProject: " + def.name + " at index " + idx);

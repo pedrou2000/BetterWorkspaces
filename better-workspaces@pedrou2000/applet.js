@@ -18,6 +18,7 @@ const ModalDialog = imports.ui.modalDialog;
 const Clutter = imports.gi.Clutter;
 
 const UUID = "better-workspaces@pedrou2000";
+const VERSION = "0.12.0";
 
 const AppletDir = imports.ui.appletManager.applets[UUID];
 const WorkspaceManager = AppletDir.wm.WorkspaceManager;
@@ -95,7 +96,7 @@ MyApplet.prototype = {
         Applet.Applet.prototype._init.call(this, orientation, panel_height, instanceId);
 
         try {
-            log("loaded (M12 v0.12.4 clear-hotkey-conflicts-real-api)");
+            log("loaded v" + VERSION);
 
             this.wm = new WorkspaceManager.WorkspaceManager();
             this.controller = new ControllerModule.Controller(this.wm);

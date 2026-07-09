@@ -14,9 +14,25 @@
  */
 
 const UUID = "better-workspaces@pedrou2000";
+const AppletDir = imports.ui.appletManager.applets[UUID];
 
-function log(msg) { global.log(UUID + " [wm]: " + msg); }
-function logError(msg) { global.logError(UUID + " [wm]: " + msg); }
+const _L = AppletDir.lib.logger.Logger.makeLogger("wm");
+function log(msg) { _L.log(msg); }
+function logError(msg) { _L.error(msg); }
+
+// Non-pinned windows on a workspace object (windows pinned to all workspaces
+// appear on every workspace and would otherwise make each look non-empty).
+function realWindows(ws) {
+    if (!ws) return [];
+    let out = [];
+    let windows = ws.list_windows();
+    for (let i = 0; i < windows.length; i++) {
+        let w = windows[i];
+        if (w.is_on_all_workspaces && w.is_on_all_workspaces()) continue;
+        out.push(w);
+    }
+    return out;
+}
 
 function WorkspaceManager() {
     this._init();
@@ -51,16 +67,7 @@ WorkspaceManager.prototype = {
     // workspaces (sticky windows appear in every workspace's list and would
     // otherwise make every workspace look non-empty).
     countWindows: function (index) {
-        let ws = this._wm().get_workspace_by_index(index);
-        if (!ws) return 0;
-        let windows = ws.list_windows();
-        let n = 0;
-        for (let i = 0; i < windows.length; i++) {
-            let w = windows[i];
-            if (w.is_on_all_workspaces && w.is_on_all_workspaces()) continue;
-            n++;
-        }
-        return n;
+        return realWindows(this._wm().get_workspace_by_index(index)).length;
     },
 
     // ---- Switching ---------------------------------------------------------
@@ -167,16 +174,7 @@ WorkspaceManager.prototype = {
 
     // List non-pinned windows on a single workspace index.
     listWindowsOnWorkspace: function (index) {
-        let ws = this._wm().get_workspace_by_index(index);
-        if (!ws) return [];
-        let out = [];
-        let windows = ws.list_windows();
-        for (let i = 0; i < windows.length; i++) {
-            let w = windows[i];
-            if (w.is_on_all_workspaces && w.is_on_all_workspaces()) continue;
-            out.push(w);
-        }
-        return out;
+        return realWindows(this._wm().get_workspace_by_index(index));
     },
 
     // Move a specific window object to workspace `index`.
@@ -191,13 +189,9 @@ WorkspaceManager.prototype = {
     // Skips windows pinned to all workspaces (is_on_all_workspaces()).
     moveAllWindows: function (from, to) {
         try {
-            let ws = this._wm().get_workspace_by_index(from);
-            if (!ws) return false;
-            let windows = ws.list_windows();
+            let windows = realWindows(this._wm().get_workspace_by_index(from));
             for (let i = 0; i < windows.length; i++) {
-                let w = windows[i];
-                if (w.is_on_all_workspaces && w.is_on_all_workspaces()) continue;
-                w.change_workspace_by_index(to, false);
+                windows[i].change_workspace_by_index(to, false);
             }
             return true;
         } catch (e) {
@@ -213,14 +207,8 @@ WorkspaceManager.prototype = {
         let out = [];
         try {
             for (let k = 0; k < indices.length; k++) {
-                let ws = this._wm().get_workspace_by_index(indices[k]);
-                if (!ws) continue;
-                let windows = ws.list_windows();
-                for (let i = 0; i < windows.length; i++) {
-                    let w = windows[i];
-                    if (w.is_on_all_workspaces && w.is_on_all_workspaces()) continue;
-                    out.push(w);
-                }
+                let wins = realWindows(this._wm().get_workspace_by_index(indices[k]));
+                for (let i = 0; i < wins.length; i++) out.push(wins[i]);
             }
         } catch (e) {
             logError("listWindowsOnWorkspaces: " + e.toString());

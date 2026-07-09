@@ -16,28 +16,15 @@ const UUID = "better-workspaces@pedrou2000";
 const AppletDir = imports.ui.appletManager.applets[UUID];
 const Mapping = AppletDir.core.mapping.Mapping;
 const StateModule = AppletDir.core.State;
-const Util = imports.misc.util;
+const Browser = AppletDir.lib.browser.Browser;
 const Mainloop = imports.mainloop;
-const GLib = imports.gi.GLib;
-
-// Map an xdg default-web-browser .desktop id -> the binary to launch with
-// --new-window. Mainstream browsers all accept --new-window. Anything not
-// listed falls back to xdg-open (default browser, but a new tab).
-const BROWSER_BINARIES = [
-    { match: "firefox",  bin: "firefox" },
-    { match: "chrome",   bin: "google-chrome" },
-    { match: "chromium", bin: "chromium" },
-    { match: "brave",    bin: "brave-browser" },
-    { match: "edge",     bin: "microsoft-edge" },
-    { match: "vivaldi",  bin: "vivaldi" },
-    { match: "opera",    bin: "opera" },
-];
 
 // How long to wait after requesting window closes before rechecking (ms).
 const CLOSE_GRACE_MS = 700;
 
-function log(msg) { global.log(UUID + " [ctrl]: " + msg); }
-function logError(msg) { global.logError(UUID + " [ctrl]: " + msg); }
+const _L = AppletDir.lib.logger.Logger.makeLogger("ctrl");
+function log(msg) { _L.log(msg); }
+function logError(msg) { _L.error(msg); }
 
 function Controller(wm) {
     this._init(wm);
@@ -187,23 +174,28 @@ Controller.prototype = {
             log("openActiveProjectHome: no Notion URL for active project");
             return false;
         }
-        this._openUrlNewWindow(p.notionUrl);
+        Browser.openUrlNewWindow(p.notionUrl);
         log("openActiveProjectHome: opened " + p.notionUrl + " in a new window");
         return true;
     },
 
-    // Cycle to the next/previous project in *project order* (not MRU) — useful
-    // as a simple deterministic navigation for testing.
-    goToNextProjectInOrder: function () {
+    // The project index `delta` steps from the active one, wrapping. Returns -1
+    // if there are no projects.
+    _stepProjectIdx: function (delta) {
         let n = this.state.projectCount();
-        if (n === 0) return false;
-        return this.goToProject((this.state.activeProjectIdx + 1) % n);
+        if (n === 0) return -1;
+        return (this.state.activeProjectIdx + delta + n) % n;
+    },
+
+    // Cycle to the next/previous project in list order (wrapping).
+    goToNextProjectInOrder: function () {
+        let idx = this._stepProjectIdx(1);
+        return idx < 0 ? false : this.goToProject(idx);
     },
 
     goToPrevProjectInOrder: function () {
-        let n = this.state.projectCount();
-        if (n === 0) return false;
-        return this.goToProject((this.state.activeProjectIdx + n - 1) % n);
+        let idx = this._stepProjectIdx(-1);
+        return idx < 0 ? false : this.goToProject(idx);
     },
 
     // ---- Intents: navigating within the active project ---------------------
@@ -299,18 +291,16 @@ Controller.prototype = {
         return false;
     },
 
-    // Move the focused window to the next/previous project in LIST order
+    // Move the focused window to the next/previous project in list order
     // (wrapping), following it there.
     moveWindowToNextProjectInOrder: function () {
-        let n = this.state.projectCount();
-        if (n === 0) return false;
-        return this.moveWindowToProject((this.state.activeProjectIdx + 1) % n);
+        let idx = this._stepProjectIdx(1);
+        return idx < 0 ? false : this.moveWindowToProject(idx);
     },
 
     moveWindowToPrevProjectInOrder: function () {
-        let n = this.state.projectCount();
-        if (n === 0) return false;
-        return this.moveWindowToProject((this.state.activeProjectIdx + n - 1) % n);
+        let idx = this._stepProjectIdx(-1);
+        return idx < 0 ? false : this.moveWindowToProject(idx);
     },
 
     // ---- Intents: adding/removing a workspace to the active project --------
@@ -419,45 +409,6 @@ Controller.prototype = {
         log("removeEmptyWorkspacesOfActiveProject: " + p.name + " removed "
             + toRemove.length + ", now " + this.state.getProject(pIdx).wsCount);
         return toRemove.length;
-    },
-
-    // The user's default browser binary, or null if we can't determine one that
-    // we know how to open with --new-window. Cached after first lookup.
-    _defaultBrowserBin: function () {
-        if (this._browserBin !== undefined) return this._browserBin;
-        this._browserBin = null;
-        try {
-            // xdg-settings returns e.g. "firefox.desktop" / "google-chrome.desktop".
-            let [ok, out] = GLib.spawn_command_line_sync("xdg-settings get default-web-browser");
-            if (ok && out) {
-                let desktop = (out instanceof Uint8Array
-                    ? imports.byteArray.toString(out) : String(out)).trim().toLowerCase();
-                for (let i = 0; i < BROWSER_BINARIES.length; i++) {
-                    if (desktop.indexOf(BROWSER_BINARIES[i].match) !== -1) {
-                        this._browserBin = BROWSER_BINARIES[i].bin;
-                        break;
-                    }
-                }
-                log("_defaultBrowserBin: default=" + desktop + " -> " + this._browserBin);
-            }
-        } catch (e) {
-            logError("_defaultBrowserBin: " + e.toString());
-        }
-        return this._browserBin;
-    },
-
-    // Open a URL in a new window of the DEFAULT browser on the CURRENT
-    // workspace. Falls back to xdg-open (default browser, new tab) if we don't
-    // recognize the browser or the launch fails.
-    _openUrlNewWindow: function (url) {
-        let bin = this._defaultBrowserBin();
-        let cmd = bin ? [bin, "--new-window", url] : ["xdg-open", url];
-        try {
-            Util.spawn(cmd);
-        } catch (e) {
-            logError("_openUrlNewWindow: spawn failed: " + e.toString() + " — trying xdg-open");
-            try { Util.spawn(["xdg-open", url]); } catch (e2) {}
-        }
     },
 
     // ---- M9: live add / remove of whole projects ---------------------------

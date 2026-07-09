@@ -17,9 +17,8 @@ const Mainloop = imports.mainloop;
 
 const AppletDir = imports.ui.appletManager.applets["better-workspaces@pedrou2000"];
 const IconRenderer = AppletDir.ui.IconRenderer.IconRenderer;
-
-const UUID = "better-workspaces@pedrou2000";
-function log(msg) { global.log(UUID + " [switcher]: " + msg); }
+const _L = AppletDir.lib.logger.Logger.makeLogger("switcher");
+function log(msg) { _L.log(msg); }
 
 const COMMIT_DELAY_MS = 600; // after the last Tab, commit to the selection
 
