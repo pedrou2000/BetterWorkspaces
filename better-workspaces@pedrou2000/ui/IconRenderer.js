@@ -150,5 +150,4 @@ function makeActor(icon, name, size, onReady) {
 
 var IconRenderer = {
     makeActor: makeActor,
-    cachePathFor: _cachePathFor,
 };

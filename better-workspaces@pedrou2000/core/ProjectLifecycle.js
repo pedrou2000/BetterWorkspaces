@@ -16,8 +16,7 @@ const Mapping = AppletDir.core.mapping.Mapping;
 const Mainloop = imports.mainloop;
 const CLOSE_GRACE_MS = AppletDir.lib.constants.Constants.CLOSE_GRACE_MS;
 
-const _L = AppletDir.lib.logger.Logger.makeLogger("lifecycle");
-function log(msg) { _L.log(msg); }
+const L = AppletDir.lib.logger.Logger.makeLogger("lifecycle");
 
 var ProjectLifecycle = class ProjectLifecycle {
 
@@ -32,7 +31,7 @@ var ProjectLifecycle = class ProjectLifecycle {
         let have = c.wm.getWorkspaceCount();
         while (c.wm.getWorkspaceCount() < need) c.wm.createWorkspace();
         while (c.wm.getWorkspaceCount() > need) c.wm.removeLastWorkspace();
-        log("reconcileWorkspaceCount: need " + need + ", had " + have
+        L.log("reconcileWorkspaceCount: need " + need + ", had " + have
             + ", now " + c.wm.getWorkspaceCount());
     }
 
@@ -59,7 +58,7 @@ var ProjectLifecycle = class ProjectLifecycle {
         c.state.incWorkspaceCount(pIdx);
         this.reconcileWorkspaceCount();
 
-        log("growActiveProjectStrip: " + c.state.getProject(pIdx).name
+        L.log("growActiveProjectStrip: " + c.state.getProject(pIdx).name
             + " now " + c.state.getProject(pIdx).wsCount
             + " (inserted at flat " + insertAt + ")");
         return c.state.getProject(pIdx).wsCount - 1;
@@ -81,7 +80,7 @@ var ProjectLifecycle = class ProjectLifecycle {
         let p = c.state.getProject(pIdx);
         if (!p) return false;
         if (p.wsCount <= 1) {
-            log("removeLastWorkspaceOfActiveProject: " + p.name
+            L.log("removeLastWorkspaceOfActiveProject: " + p.name
                 + " keeps its home workspace (>=1)");
             return false;
         }
@@ -102,7 +101,7 @@ var ProjectLifecycle = class ProjectLifecycle {
         if (!loc || loc.projectIdx !== pIdx || loc.localIdx > last) {
             c.goToLocalWorkspace(last);
         }
-        log("removeLastWorkspaceOfActiveProject: " + p.name + " now "
+        L.log("removeLastWorkspaceOfActiveProject: " + p.name + " now "
             + c.state.getProject(pIdx).wsCount + " (removed flat " + removeAt + ")");
         return true;
     }
@@ -137,7 +136,7 @@ var ProjectLifecycle = class ProjectLifecycle {
             c.state.decWorkspaceCount(pIdx);
         }
         if (toRemove.length > 0) this.reconcileWorkspaceCount();
-        log("removeEmptyWorkspacesOfActiveProject: " + p.name + " removed "
+        L.log("removeEmptyWorkspacesOfActiveProject: " + p.name + " removed "
             + toRemove.length + ", now " + c.state.getProject(pIdx).wsCount);
         return toRemove.length;
     }
@@ -153,7 +152,7 @@ var ProjectLifecycle = class ProjectLifecycle {
         // The new project's single home workspace goes at the global end, which
         // is exactly where Cinnamon appends — so a plain reconcile is correct.
         this.reconcileWorkspaceCount();
-        log("addProjectLive: " + def.name + " (index " + idx + ")");
+        L.log("addProjectLive: " + def.name + " (index " + idx + ")");
         return idx;
     }
 
@@ -175,7 +174,7 @@ var ProjectLifecycle = class ProjectLifecycle {
 
         // 1) Request graceful close of all windows in this partition.
         let windows = c.wm.listWindowsOnWorkspaces(indices);
-        log("removeProjectLive: " + p.name + " has " + windows.length
+        L.log("removeProjectLive: " + p.name + " has " + windows.length
             + " windows across workspaces [" + indices.join(",") + "]");
         for (let i = 0; i < windows.length; i++) c.wm.requestCloseWindow(windows[i]);
 
@@ -189,7 +188,7 @@ var ProjectLifecycle = class ProjectLifecycle {
             let titles = remaining.map((w) => {
                 try { return w.get_title(); } catch (e) { return "(window)"; }
             });
-            log("removeProjectLive: ABORT — " + remaining.length + " window(s) still open");
+            L.log("removeProjectLive: ABORT — " + remaining.length + " window(s) still open");
             let err = new Error("windows-open");
             err.openTitles = titles;
             throw err;
@@ -217,6 +216,6 @@ var ProjectLifecycle = class ProjectLifecycle {
             if (target < 0 || target >= c.state.projectCount()) target = 0;
             c.goToProject(target);
         }
-        log("removeProjectLive: removed " + p.name);
+        L.log("removeProjectLive: removed " + p.name);
     }
 };

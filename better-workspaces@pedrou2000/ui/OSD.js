@@ -21,9 +21,7 @@ const Mainloop = imports.mainloop;
 const AppletDir = imports.ui.appletManager.applets["better-workspaces@pedrou2000"];
 const OSD_HIDE_MS = AppletDir.lib.constants.Constants.OSD_HIDE_MS;
 
-const _L = AppletDir.lib.logger.Logger.makeLogger("osd");
-function log(msg) { _L.log(msg); }
-function logError(msg) { _L.error(msg); }
+const L = AppletDir.lib.logger.Logger.makeLogger("osd");
 
 var OSD = class OSD {
 
@@ -68,7 +66,7 @@ var OSD = class OSD {
                 return false;
             });
         } catch (e) {
-            logError("show: " + e.toString());
+            L.error("show: " + e.toString());
         }
     }
 
@@ -86,9 +84,9 @@ var OSD = class OSD {
             }
             this._builtinWasVisible = this._cinSettings.get_boolean("workspace-osd-visible");
             this._cinSettings.set_boolean("workspace-osd-visible", false);
-            log("built-in workspace OSD suppressed (was " + this._builtinWasVisible + ")");
+            L.log("built-in workspace OSD suppressed (was " + this._builtinWasVisible + ")");
         } catch (e) {
-            logError("suppressBuiltin: " + e.toString());
+            L.error("suppressBuiltin: " + e.toString());
         }
     }
 

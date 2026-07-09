@@ -18,8 +18,7 @@ const AppletDir = imports.ui.appletManager.applets[UUID];
 const Mapping = AppletDir.core.mapping.Mapping;
 const Browser = AppletDir.lib.browser.Browser;
 
-const _L = AppletDir.lib.logger.Logger.makeLogger("nav");
-function log(msg) { _L.log(msg); }
+const L = AppletDir.lib.logger.Logger.makeLogger("nav");
 
 var Navigation = class Navigation {
 
@@ -33,14 +32,14 @@ var Navigation = class Navigation {
     goToProject(projectIdx) {
         let c = this._c;
         if (!c.state.setActiveProject(projectIdx)) {
-            log("goToProject: invalid project " + projectIdx);
+            L.log("goToProject: invalid project " + projectIdx);
             return false;
         }
         let local = c.state.getLastLocal(projectIdx);
         let p = c.state.getProject(projectIdx);
         if (local > p.wsCount - 1) local = p.wsCount - 1; // clamp defensively
         let flat = Mapping.globalIndex(c.state.counts(), projectIdx, local);
-        log("goToProject: project " + projectIdx + " (" + p.name
+        L.log("goToProject: project " + projectIdx + " (" + p.name
             + ") -> local " + local + " -> flat " + flat);
         return c.wm.goToWorkspace(flat);
     }
@@ -71,11 +70,11 @@ var Navigation = class Navigation {
     openActiveProjectHome() {
         let p = this._c.state.activeProject();
         if (!p || !p.notionUrl) {
-            log("openActiveProjectHome: no Notion URL for active project");
+            L.log("openActiveProjectHome: no Notion URL for active project");
             return false;
         }
         Browser.openUrlNewWindow(p.notionUrl);
-        log("openActiveProjectHome: opened " + p.notionUrl + " in a new window");
+        L.log("openActiveProjectHome: opened " + p.notionUrl + " in a new window");
         return true;
     }
 
@@ -86,7 +85,7 @@ var Navigation = class Navigation {
         let pIdx = c.state.activeProjectIdx;
         let p = c.state.getProject(pIdx);
         if (!p || localIdx < 0 || localIdx > p.wsCount - 1) {
-            log("goToLocalWorkspace: local " + localIdx + " out of range for "
+            L.log("goToLocalWorkspace: local " + localIdx + " out of range for "
                 + (p ? p.name : "?"));
             return false;
         }
@@ -122,7 +121,7 @@ var Navigation = class Navigation {
         let pIdx = c.state.activeProjectIdx;
         let p = c.state.getProject(pIdx);
         if (!p || localIdx < 0 || localIdx > p.wsCount - 1) {
-            log("moveWindowToLocalWorkspace: local " + localIdx + " out of range");
+            L.log("moveWindowToLocalWorkspace: local " + localIdx + " out of range");
             return false;
         }
         let flat = Mapping.globalIndex(c.state.counts(), pIdx, localIdx);
@@ -161,7 +160,7 @@ var Navigation = class Navigation {
         let c = this._c;
         let p = c.state.getProject(projectIdx);
         if (!p) {
-            log("moveWindowToProject: invalid project " + projectIdx);
+            L.log("moveWindowToProject: invalid project " + projectIdx);
             return false;
         }
         let local = c.state.getLastLocal(projectIdx);
@@ -171,7 +170,7 @@ var Navigation = class Navigation {
             c.state.setActiveProject(projectIdx);
             c.state.setLastLocal(projectIdx, local);
             c.wm.goToWorkspace(flat);
-            log("moveWindowToProject: moved window to " + p.name + " local " + local);
+            L.log("moveWindowToProject: moved window to " + p.name + " local " + local);
             return true;
         }
         return false;

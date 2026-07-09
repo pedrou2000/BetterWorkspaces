@@ -6,17 +6,16 @@
  * per-project "last local workspace" so switching back to a project returns you
  * where you left off.
  *
- * Pure data + bookkeeping — no Cinnamon, no Notion. In M2 the projects are
- * seeded from a hardcoded list; later milestones feed them from the Notion
- * sync cache instead.
+ * Pure data + bookkeeping — no Cinnamon, no Notion. Seeded from the Notion
+ * sync cache at load (or the placeholder deck when unconfigured); mutated by
+ * the live add/remove/reorder flows.
  *
  * Released under the GNU General Public License v2 (see LICENSE).
  */
 
 const UUID = "better-workspaces@pedrou2000";
 const AppletDir = imports.ui.appletManager.applets[UUID];
-const _L = AppletDir.lib.logger.Logger.makeLogger("state");
-function log(msg) { _L.log(msg); }
+const L = AppletDir.lib.logger.Logger.makeLogger("state");
 
 // Build a project record from a def. Single source of truth for the shape;
 // every project (>= 1 workspace, the home) starts on local 0.
@@ -46,7 +45,7 @@ var State = class State {
         this.projects = defs.map(makeProject);
         this.activeProjectIdx = 0;
         this._mru = this.projects.map((_, i) => i);
-        log("setProjects: " + this.projects.length + " projects, counts=["
+        L.log("setProjects: " + this.projects.length + " projects, counts=["
             + this.counts().join(",") + "]");
     }
 
@@ -65,6 +64,14 @@ var State = class State {
 
     activeProject() {
         return this.getProject(this.activeProjectIdx);
+    }
+
+    // Deck index of the project with this id, or -1.
+    indexOfProjectId(id) {
+        for (let i = 0; i < this.projects.length; i++) {
+            if (this.projects[i].id === id) return i;
+        }
+        return -1;
     }
 
     // ---- Active project + recency bookkeeping ------------------------------
@@ -110,7 +117,7 @@ var State = class State {
         this.projects.push(makeProject(def));
         let idx = this.projects.length - 1;
         this._mru.push(idx); // least-recent until visited
-        log("appendProject: " + def.name + " at index " + idx);
+        L.log("appendProject: " + def.name + " at index " + idx);
         return idx;
     }
 
@@ -131,7 +138,7 @@ var State = class State {
         } else if (this.activeProjectIdx > idx) {
             this.activeProjectIdx -= 1;
         }
-        log("removeProject: removed index " + idx + ", " + this.projects.length + " remain");
+        L.log("removeProject: removed index " + idx + ", " + this.projects.length + " remain");
         return true;
     }
 
@@ -158,7 +165,7 @@ var State = class State {
         this._mru = this._mru.map((i) => newOf[i]);
         this.activeProjectIdx = newOf[this.activeProjectIdx];
 
-        log("moveProject: " + from + " -> " + to);
+        L.log("moveProject: " + from + " -> " + to);
         return order;
     }
 

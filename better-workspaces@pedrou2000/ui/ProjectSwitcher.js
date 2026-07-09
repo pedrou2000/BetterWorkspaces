@@ -16,8 +16,7 @@ const Mainloop = imports.mainloop;
 
 const AppletDir = imports.ui.appletManager.applets["better-workspaces@pedrou2000"];
 const IconRenderer = AppletDir.ui.IconRenderer.IconRenderer;
-const _L = AppletDir.lib.logger.Logger.makeLogger("switcher");
-function log(msg) { _L.log(msg); }
+const L = AppletDir.lib.logger.Logger.makeLogger("switcher");
 
 const COMMIT_DELAY_MS = AppletDir.lib.constants.Constants.COMMIT_DELAY_MS;
 const CARD_ICON_SIZE = AppletDir.lib.constants.Constants.ROW_ICON_SIZE;
@@ -61,7 +60,7 @@ var ProjectSwitcher = class ProjectSwitcher {
         let projectIdx = this._order[this._selection];
         this._close();
         this.controller.goToProject(projectIdx);
-        log("committed to project " + projectIdx);
+        L.log("committed to project " + projectIdx);
         if (this._onCommit) { try { this._onCommit(); } catch (e) {} }
         return false; // don't repeat the timeout
     }

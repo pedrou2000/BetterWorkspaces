@@ -1,11 +1,20 @@
 /*
- * BetterWorkspaces — Cinnamon applet
+ * BetterWorkspaces — Cinnamon applet (entry point)
  *
- * M4: Notion client + sync (headless). Adds Settings (token, database id, sync
- * interval, "sync now" button) and notion/SyncService, which pulls + filters +
- * caches the real project list to disk and logs the result. The deck driving
- * the workspaces is STILL the hardcoded one — fusing Notion data into the deck
- * is M5. This milestone only proves the pull/filter/cache pipeline.
+ * Organizes virtual workspaces by project: each project from the user's Notion
+ * Projects database owns a contiguous strip of workspaces, and the deck of
+ * projects drives navigation, the panel indicator, and the Super+Tab switcher.
+ *
+ * This file is the wiring layer. It owns lifecycle (settings, keybindings,
+ * signals, cleanup) and composes the real parts:
+ *   core/*   — the model (State/mapping) and the Controller façade over it
+ *   wm/*     — the only code allowed to touch Cinnamon workspace APIs
+ *   notion/* — background sync to/from the Notion database + disk cache
+ *   ui/*     — panel indicator, switcher overlay, toggle panel, OSD, dialogs
+ *
+ * The deck loads from the on-disk Notion cache at startup (instant, offline);
+ * a background sync refreshes the cache for the NEXT load. Live deck changes
+ * (toggle a project on/off, reorder) write back to Notion as they happen.
  *
  * Released under the GNU General Public License v2 (see LICENSE).
  */
@@ -28,9 +37,7 @@ const ProjectMapper = AppletDir.notion.ProjectMapper.ProjectMapper;
 const KeyBinder = AppletDir.lib.keybindings.KeyBinder;
 const Constants = AppletDir.lib.constants.Constants;
 
-const _L = AppletDir.lib.logger.Logger.makeLogger("applet");
-function log(msg) { _L.log(msg); }
-function logError(msg) { _L.error(msg); }
+const L = AppletDir.lib.logger.Logger.makeLogger("applet");
 
 // Shown only when no Notion cache exists yet (first run / unconfigured), so the
 // applet is never empty. Replaced by the real deck as soon as a sync lands.
@@ -89,7 +96,7 @@ var MyApplet = class MyApplet extends Applet.Applet {
         super(orientation, panel_height, instanceId);
 
         try {
-            log("loaded v" + (metadata && metadata.version ? metadata.version : "?"));
+            L.log("loaded v" + (metadata && metadata.version ? metadata.version : "?"));
 
             this.wm = new WorkspaceManager();
             this.controller = new Controller(this.wm);
@@ -132,7 +139,7 @@ var MyApplet = class MyApplet extends Applet.Applet {
             // Kick off a background sync to refresh the cache for NEXT launch.
             if (this.sync && this._notionConfigured()) this.sync.start();
         } catch (e) {
-            logError("init exception: " + e.toString());
+            L.error("init exception: " + e.toString());
         }
     }
 
@@ -160,12 +167,12 @@ var MyApplet = class MyApplet extends Applet.Applet {
         let cached = this.sync ? this.sync.readCache() : [];
         let inDeck = cached.filter((p) => p.inWorkspace);
         if (!inDeck || inDeck.length === 0) {
-            log("_loadDeckFromCache: no in-workspace projects cached -> placeholder deck");
+            L.log("_loadDeckFromCache: no in-workspace projects cached -> placeholder deck");
             this.controller.loadProjects(PLACEHOLDER_PROJECTS);
             return;
         }
         this.controller.loadProjects(inDeck.map((p) => this._toDef(p)));
-        log("_loadDeckFromCache: loaded " + inDeck.length + " in-workspace projects (of "
+        L.log("_loadDeckFromCache: loaded " + inDeck.length + " in-workspace projects (of "
             + cached.length + " cached)");
     }
 
@@ -173,7 +180,7 @@ var MyApplet = class MyApplet extends Applet.Applet {
         try {
             if (this.panelUI) this.panelUI.update();
         } catch (e) {
-            logError("_refresh exception: " + e.toString());
+            L.error("_refresh exception: " + e.toString());
         }
     }
 
@@ -200,7 +207,7 @@ var MyApplet = class MyApplet extends Applet.Applet {
         // session — that could move workspaces and scatter your open windows.
         // New Notion changes take effect on the next Cinnamon reload/login.
         this.sync.onUpdate((projects) => {
-            log("sync refreshed cache: " + projects.length + " projects ["
+            L.log("sync refreshed cache: " + projects.length + " projects ["
                 + projects.map((p) => p.name).join(", ")
                 + "] — applies on next reload");
         });
@@ -220,7 +227,7 @@ var MyApplet = class MyApplet extends Applet.Applet {
             });
 
         if (!token || !dbId) {
-            log("Notion not configured — open settings, add your token, click "
+            L.log("Notion not configured — open settings, add your token, click "
                 + "'Sync now', then reload Cinnamon (Alt+F2, r) to load the deck.");
         }
     }
@@ -234,7 +241,7 @@ var MyApplet = class MyApplet extends Applet.Applet {
                 this.sync.syncNow();
             }
         } catch (e) {
-            logError("onSyncNowClicked: " + e.toString());
+            L.error("onSyncNowClicked: " + e.toString());
         }
     }
 
@@ -265,7 +272,7 @@ var MyApplet = class MyApplet extends Applet.Applet {
             this._togglePanel = panel;
             panel.open();
         } catch (e) {
-            logError("openTogglePanel: " + e.toString());
+            L.error("openTogglePanel: " + e.toString());
         }
     }
 
@@ -288,7 +295,7 @@ var MyApplet = class MyApplet extends Applet.Applet {
         // Turning OFF: destructive. Find the deck index, confirm, then remove
         // (which gracefully closes windows). Only on success do we write
         // Workspace=false to Notion.
-        let deckIdx = this._deckIndexOf(project.id);
+        let deckIdx = this.controller.state.indexOfProjectId(project.id);
         if (deckIdx < 0) {
             // Not in the live deck (shouldn't happen) — just write the flag.
             await this.sync.setWorkspaceFlag(project.id, false);
@@ -313,19 +320,9 @@ var MyApplet = class MyApplet extends Applet.Applet {
         await this.sync.setWorkspaceFlag(project.id, false);
     }
 
-    // Index of a project in the live controller deck by Notion id, or -1.
-    _deckIndexOf(projectId) {
-        let n = this.controller.state.projectCount();
-        for (let i = 0; i < n; i++) {
-            let p = this.controller.state.getProject(i);
-            if (p && p.id === projectId) return i;
-        }
-        return -1;
-    }
-
     // Confirm destructive removal via a modal. Resolves to true/false.
     _confirmRemoval(project) {
-        let deckIdx = this._deckIndexOf(project.id);
+        let deckIdx = this.controller.state.indexOfProjectId(project.id);
         let p = this.controller.state.getProject(deckIdx);
         let wsCount = p ? p.wsCount : 1;
         return Dialogs.confirm(
@@ -371,7 +368,7 @@ var MyApplet = class MyApplet extends Applet.Applet {
             try { this.settings.setValue(key, KB_DEFAULTS[key]); } catch (e) {}
         }
         this.settings.setValue("kbSchemeVersion", KB_SCHEME_VERSION);
-        log("keybindings reset to scheme v" + KB_SCHEME_VERSION
+        L.log("keybindings reset to scheme v" + KB_SCHEME_VERSION
             + " (was v" + stored + ")");
     }
 
@@ -386,7 +383,7 @@ var MyApplet = class MyApplet extends Applet.Applet {
             if (!accel) return;
             this._keybinder.force(spec.name, accel, () => {
                 try { spec.run(); }
-                catch (e) { logError("hotkey " + spec.name + ": " + e.toString()); }
+                catch (e) { L.error("hotkey " + spec.name + ": " + e.toString()); }
             });
         });
         this._assignTiling();
@@ -411,7 +408,7 @@ var MyApplet = class MyApplet extends Applet.Applet {
         }
 
         this._forceBindAll();
-        log("registered " + (specs.length + Object.keys(WM_ASSIGN).length)
+        L.log("registered " + (specs.length + Object.keys(WM_ASSIGN).length)
             + " keybindings (settings-driven)");
     }
 
@@ -428,7 +425,7 @@ var MyApplet = class MyApplet extends Applet.Applet {
     // Re-register all keybindings from current settings (called on any change).
     _rebindKeys() {
         this._forceBindAll();
-        log("re-registered keybindings after settings change");
+        L.log("re-registered keybindings after settings change");
     }
 
     _unregisterKeybindings() {
@@ -443,7 +440,7 @@ var MyApplet = class MyApplet extends Applet.Applet {
         let addAction = (label, fn) => {
             let item = new PopupMenu.PopupMenuItem(label);
             item.connect('activate', () => {
-                try { fn(); } catch (e) { logError("menu: " + e.toString()); }
+                try { fn(); } catch (e) { L.error("menu: " + e.toString()); }
                 this._refresh();
             });
             menu.addMenuItem(item);
@@ -474,7 +471,7 @@ var MyApplet = class MyApplet extends Applet.Applet {
             let sub = new PopupMenu.PopupMenuItem(p.name);
             sub.connect('activate', () => {
                 try { this.controller.moveWindowToProject(idx); }
-                catch (e) { logError("move-to-project menu: " + e.toString()); }
+                catch (e) { L.error("move-to-project menu: " + e.toString()); }
                 this._refresh();
             });
             moveMenu.menu.addMenuItem(sub);
@@ -495,7 +492,7 @@ var MyApplet = class MyApplet extends Applet.Applet {
             this.panelUI.update();
         });
         addAction("Log current state", () => {
-            log(this.controller.describe());
+            L.log(this.controller.describe());
         });
     }
 
@@ -524,9 +521,9 @@ var MyApplet = class MyApplet extends Applet.Applet {
             if (this.panelUI) { this.panelUI.destroy(); this.panelUI = null; }
             if (this.controller) { this.controller.destroy(); this.controller = null; }
             if (this.wm) { this.wm.destroy(); this.wm = null; }
-            log("removed, cleaned up");
+            L.log("removed, cleaned up");
         } catch (e) {
-            logError("cleanup exception: " + e.toString());
+            L.error("cleanup exception: " + e.toString());
         }
     }
 };

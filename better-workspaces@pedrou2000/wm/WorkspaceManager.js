@@ -16,9 +16,7 @@
 const UUID = "better-workspaces@pedrou2000";
 const AppletDir = imports.ui.appletManager.applets[UUID];
 
-const _L = AppletDir.lib.logger.Logger.makeLogger("wm");
-function log(msg) { _L.log(msg); }
-function logError(msg) { _L.error(msg); }
+const L = AppletDir.lib.logger.Logger.makeLogger("wm");
 
 // Non-pinned windows on a workspace object (windows pinned to all workspaces
 // appear on every workspace and would otherwise make each look non-empty).
@@ -74,14 +72,14 @@ var WorkspaceManager = class WorkspaceManager {
         try {
             let ws = this._wm().get_workspace_by_index(index);
             if (ws === null) {
-                log("goToWorkspace: index " + index + " out of range (count="
+                L.log("goToWorkspace: index " + index + " out of range (count="
                     + this.getWorkspaceCount() + "), ignoring");
                 return false;
             }
             ws.activate(this._now());
             return true;
         } catch (e) {
-            logError("goToWorkspace(" + index + "): " + e.toString());
+            L.error("goToWorkspace(" + index + "): " + e.toString());
             return false;
         }
     }
@@ -96,14 +94,14 @@ var WorkspaceManager = class WorkspaceManager {
             let after = this.getWorkspaceCount();
             if (after > before) {
                 let newIndex = after - 1;
-                log("createWorkspace: added workspace at index " + newIndex
+                L.log("createWorkspace: added workspace at index " + newIndex
                     + " (count " + before + " -> " + after + ")");
                 return newIndex;
             }
-            log("createWorkspace: count did not increase (still " + after + ")");
+            L.log("createWorkspace: count did not increase (still " + after + ")");
             return -1;
         } catch (e) {
-            logError("createWorkspace: " + e.toString());
+            L.error("createWorkspace: " + e.toString());
             return -1;
         }
     }
@@ -122,7 +120,7 @@ var WorkspaceManager = class WorkspaceManager {
             this._wm().reorder_workspace(ws, toIndex);
             return true;
         } catch (e) {
-            logError("reorderWorkspaceObject(-> " + toIndex + "): " + e.toString());
+            L.error("reorderWorkspaceObject(-> " + toIndex + "): " + e.toString());
             return false;
         }
     }
@@ -133,11 +131,11 @@ var WorkspaceManager = class WorkspaceManager {
         let count = this.getWorkspaceCount();
         if (fromIndex === toIndex) return true;
         if (fromIndex < 0 || fromIndex >= count || toIndex < 0 || toIndex >= count) {
-            log("reorderWorkspace: index out of range " + fromIndex + "->" + toIndex);
+            L.log("reorderWorkspace: index out of range " + fromIndex + "->" + toIndex);
             return false;
         }
         let ok = this.reorderWorkspaceObject(this.getWorkspace(fromIndex), toIndex);
-        if (ok) log("reorderWorkspace: " + fromIndex + " -> " + toIndex);
+        if (ok) L.log("reorderWorkspace: " + fromIndex + " -> " + toIndex);
         return ok;
     }
 
@@ -149,21 +147,21 @@ var WorkspaceManager = class WorkspaceManager {
         try {
             let count = this.getWorkspaceCount();
             if (count <= 1) {
-                log("removeWorkspace: refusing to remove the last workspace");
+                L.log("removeWorkspace: refusing to remove the last workspace");
                 return false;
             }
             let ws = this._wm().get_workspace_by_index(index);
             if (ws === null) {
-                log("removeWorkspace: index " + index + " out of range (count="
+                L.log("removeWorkspace: index " + index + " out of range (count="
                     + count + "), ignoring");
                 return false;
             }
             this._wm().remove_workspace(ws, this._now());
-            log("removeWorkspace: removed index " + index
+            L.log("removeWorkspace: removed index " + index
                 + " (count " + count + " -> " + this.getWorkspaceCount() + ")");
             return true;
         } catch (e) {
-            logError("removeWorkspace(" + index + "): " + e.toString());
+            L.error("removeWorkspace(" + index + "): " + e.toString());
             return false;
         }
     }
@@ -182,21 +180,21 @@ var WorkspaceManager = class WorkspaceManager {
         try {
             let count = this.getWorkspaceCount();
             if (index < 0 || index > count - 1) {
-                log("moveFocusedWindowTo: index " + index + " out of range");
+                L.log("moveFocusedWindowTo: index " + index + " out of range");
                 return false;
             }
             let win = global.display.get_focus_window();
             if (!win) {
-                log("moveFocusedWindowTo: no focused window");
+                L.log("moveFocusedWindowTo: no focused window");
                 return false;
             }
             // Muffin: change_workspace_by_index(space_index, append)
             win.change_workspace_by_index(index, false);
-            log("moveFocusedWindowTo: moved '" + win.get_title()
+            L.log("moveFocusedWindowTo: moved '" + win.get_title()
                 + "' to workspace " + index);
             return true;
         } catch (e) {
-            logError("moveFocusedWindowTo(" + index + "): " + e.toString());
+            L.error("moveFocusedWindowTo(" + index + "): " + e.toString());
             return false;
         }
     }
@@ -218,7 +216,7 @@ var WorkspaceManager = class WorkspaceManager {
             }
             return true;
         } catch (e) {
-            logError("moveAllWindows(" + from + "->" + to + "): " + e.toString());
+            L.error("moveAllWindows(" + from + "->" + to + "): " + e.toString());
             return false;
         }
     }
@@ -234,7 +232,7 @@ var WorkspaceManager = class WorkspaceManager {
                 for (let i = 0; i < wins.length; i++) out.push(wins[i]);
             }
         } catch (e) {
-            logError("listWindowsOnWorkspaces: " + e.toString());
+            L.error("listWindowsOnWorkspaces: " + e.toString());
         }
         return out;
     }
@@ -246,7 +244,7 @@ var WorkspaceManager = class WorkspaceManager {
             win.delete(this._now());
             return true;
         } catch (e) {
-            logError("requestCloseWindow: " + e.toString());
+            L.error("requestCloseWindow: " + e.toString());
             return false;
         }
     }

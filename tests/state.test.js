@@ -41,6 +41,16 @@ test("getProject out of range returns null", () => {
     assert.equal(s.getProject(3), null);
 });
 
+test("indexOfProjectId finds by id, -1 when absent", () => {
+    const s = makeState();
+    assert.equal(s.indexOfProjectId("a"), 0);
+    assert.equal(s.indexOfProjectId("c"), 2);
+    assert.equal(s.indexOfProjectId("nope"), -1);
+    // Tracks reorders.
+    s.moveProject(0, 2);
+    assert.equal(s.indexOfProjectId("a"), 2);
+});
+
 test("setActiveProject validates and touches MRU", () => {
     const s = makeState();
     assert.equal(s.setActiveProject(2), true);

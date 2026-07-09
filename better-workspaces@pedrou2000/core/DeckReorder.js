@@ -15,8 +15,7 @@ const UUID = "better-workspaces@pedrou2000";
 const AppletDir = imports.ui.appletManager.applets[UUID];
 const Mapping = AppletDir.core.mapping.Mapping;
 
-const _L = AppletDir.lib.logger.Logger.makeLogger("reorder");
-function log(msg) { _L.log(msg); }
+const L = AppletDir.lib.logger.Logger.makeLogger("reorder");
 
 var DeckReorder = class DeckReorder {
 
@@ -90,7 +89,7 @@ var DeckReorder = class DeckReorder {
         }
         if (this._onOrderChanged) this._onOrderChanged(orderedIds);
 
-        log("reorderProject: " + from + " -> " + to + " done");
+        L.log("reorderProject: " + from + " -> " + to + " done");
         return true;
     }
 

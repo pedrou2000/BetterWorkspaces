@@ -15,8 +15,7 @@ const Tooltips = imports.ui.tooltips;
 const AppletDir = imports.ui.appletManager.applets["better-workspaces@pedrou2000"];
 const IconRenderer = AppletDir.ui.IconRenderer.IconRenderer;
 const DndReorderHelper = AppletDir.ui.DndReorder.DndReorderHelper;
-const _L = AppletDir.lib.logger.Logger.makeLogger("panel");
-function log(msg) { _L.log(msg); }
+const L = AppletDir.lib.logger.Logger.makeLogger("panel");
 
 const ICON_SIZE = AppletDir.lib.constants.Constants.PANEL_ICON_SIZE;
 
@@ -141,7 +140,7 @@ var PanelIndicator = class PanelIndicator {
                 text: "⋯",
             }));
             manage.connect('clicked', () => {
-                try { this._opts.onManage(); } catch (e) { log("onManage: " + e.toString()); }
+                try { this._opts.onManage(); } catch (e) { L.log("onManage: " + e.toString()); }
             });
             this._addTooltip(manage, "Manage workspace projects");
             this.actor.add(manage, { y_align: St.Align.MIDDLE, y_fill: false });
@@ -161,7 +160,7 @@ var PanelIndicator = class PanelIndicator {
             () => {
                 if (this._buttons.indexOf(btn) === -1) return; // rebuilt since
                 try { btn.set_child(this._makeIcon(project, btn)); }
-                catch (e) { log("icon swap failed: " + e.toString()); }
+                catch (e) { L.log("icon swap failed: " + e.toString()); }
             });
     }
 
