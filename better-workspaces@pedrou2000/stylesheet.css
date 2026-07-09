@@ -59,7 +59,9 @@
 }
 
 .better-workspaces-status {
-    padding: 0 4px;
+    /* Extra right padding: breathing room between the status glyph and the
+       first project icon (project buttons have only 2px of their own). */
+    padding: 0 8px 0 4px;
     color: #e0a030;
     font-size: 12px;
 }

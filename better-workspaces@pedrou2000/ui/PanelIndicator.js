@@ -179,7 +179,11 @@ var PanelIndicator = class PanelIndicator {
         }
 
         if (this._posLabel) {
-            this._posLabel.set_text(loc ? this._dotsFor(loc) : "");
+            let dots = loc ? this._dotsFor(loc) : "";
+            this._posLabel.set_text(dots);
+            // Hide entirely when empty: an empty St.Label still occupies its
+            // CSS padding, leaving a phantom gap before the manage button.
+            this._posLabel.visible = (dots.length > 0);
         }
     }
 
