@@ -43,9 +43,28 @@ class FakeNotionClient {
     }
 }
 
+// Fake Gio.NetworkMonitor: tests flip availability and emit network-changed.
+function makeFakeNetMonitor(initiallyOnline) {
+    let online = initiallyOnline !== false;
+    const handlers = new Map();
+    let seq = 0;
+    return {
+        get_network_available: () => online,
+        connect(signal, cb) { handlers.set(++seq, cb); return seq; },
+        disconnect(id) { handlers.delete(id); },
+        handlerCount() { return handlers.size; },
+        // Test helper: change availability and emit the signal.
+        setOnline(value) {
+            online = !!value;
+            for (const cb of handlers.values()) cb(this, online);
+        },
+    };
+}
+
 function makeSync(opts) {
     opts = opts || {};
     const mainloop = makeFakeMainloop();
+    const netMonitor = makeFakeNetMonitor(opts.online);
     const SyncService = loadGjsModule("notion/SyncService.js", "SyncService", {
         applet: {
             lib: { constants: { Constants: { DEFAULT_SYNC_INTERVAL_S: 300 } } },
@@ -54,7 +73,10 @@ function makeSync(opts) {
                 ProjectMapper: { ProjectMapper: ProjectMapper },
             },
         },
-        extraImports: { mainloop: mainloop },
+        extraImports: {
+            mainloop: mainloop,
+            gi: { Gio: { NetworkMonitor: { get_default: () => netMonitor } } },
+        },
     });
     const sync = new SyncService(
         opts.token !== undefined ? opts.token : "tok",
@@ -62,7 +84,7 @@ function makeSync(opts) {
     const client = FakeNotionClient.last;
     const statuses = [];
     sync.onStatus((s) => statuses.push(s));
-    return { sync, client, mainloop, statuses };
+    return { sync, client, mainloop, netMonitor, statuses };
 }
 
 // A minimal raw Notion page the real ProjectMapper can digest.
@@ -173,4 +195,56 @@ test("destroy stops the timer", () => {
     sync.start();
     sync.destroy();
     assert.equal(mainloop.pendingCount(), 0);
+});
+
+// ---- reconnect ------------------------------------------------------------------------
+
+test("offline->online transition triggers an immediate pull", async () => {
+    const { sync, client, netMonitor } = makeSync({ online: false });
+    sync.start();                                        // initial pull fires (and fails or not — irrelevant)
+    await new Promise((r) => setImmediate(r));
+    const before = client.calls.filter(c => c.method === "queryDatabase").length;
+
+    netMonitor.setOnline(true);                          // reconnect
+    await new Promise((r) => setImmediate(r));
+    const after = client.calls.filter(c => c.method === "queryDatabase").length;
+    assert.equal(after, before + 1);                     // exactly one extra pull
+});
+
+test("reconnect pull recovers status from error to ok", async () => {
+    const { sync, client, netMonitor, statuses } = makeSync({ online: true });
+    client.failAll = new Error("http-0");                // network down: pulls fail
+    sync.start();
+    await new Promise((r) => setImmediate(r));
+    assert.equal(statuses[statuses.length - 1], "error");
+
+    netMonitor.setOnline(false);                         // offline edge (no pull)
+    client.failAll = null;                               // network back
+    netMonitor.setOnline(true);                          // online edge -> pull
+    await new Promise((r) => setImmediate(r));
+    assert.equal(statuses[statuses.length - 1], "ok");   // error dot clears
+});
+
+test("online->online churn (routes/VPN) does not cause a pull storm", async () => {
+    const { sync, client, netMonitor } = makeSync({ online: true });
+    sync.start();
+    await new Promise((r) => setImmediate(r));
+    const before = client.calls.filter(c => c.method === "queryDatabase").length;
+
+    netMonitor.setOnline(true);                          // no edge: already online
+    netMonitor.setOnline(true);
+    await new Promise((r) => setImmediate(r));
+    const after = client.calls.filter(c => c.method === "queryDatabase").length;
+    assert.equal(after, before);                         // no extra pulls
+});
+
+test("stop/destroy disconnect the network watcher", () => {
+    const { sync, netMonitor } = makeSync();
+    sync.start();
+    assert.equal(netMonitor.handlerCount(), 1);
+    sync.stop();
+    assert.equal(netMonitor.handlerCount(), 0);
+    sync.start();
+    sync.destroy();
+    assert.equal(netMonitor.handlerCount(), 0);
 });

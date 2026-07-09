@@ -8,12 +8,17 @@
  *     (the applet feeds the result into ProjectStore.merge)
  *   - push: setWorkspaceFlag/setWorkspaceOrder are plain Notion writes used as
  *     the store's writer; the store owns queueing, optimism, and reverts
+ *   - reconnect: while started, Gio.NetworkMonitor is watched and the
+ *     offline->online transition triggers an immediate pull, so stale state
+ *     and the error dot recover right away instead of waiting out the
+ *     interval timer
  *
  * Status callback states: "unconfigured" | "loading" | "ok" | "error".
  *
  * Released under the GNU General Public License v2 (see LICENSE).
  */
 const Mainloop = imports.mainloop;
+const Gio = imports.gi.Gio;
 
 const AppletDir = imports.ui.appletManager.applets["better-workspaces@pedrou2000"];
 const L = AppletDir.lib.logger.Logger.makeLogger("sync");
@@ -90,13 +95,47 @@ var SyncService = class SyncService {
         }
     }
 
-    // Start periodic background pulls (and do one immediately).
+    // Start periodic background pulls (and do one immediately), and watch the
+    // network so the offline->online transition pulls right away.
     start() {
         this.stop();
         this.syncNow();
         this._timer = Mainloop.timeout_add_seconds(
             this.intervalSec, () => { this.syncNow(); return true; });
+        this._watchNetwork();
         L.log("started: interval " + this.intervalSec + "s");
+    }
+
+    // Subscribe to Gio.NetworkMonitor. Only the offline->online EDGE triggers
+    // a pull (the monitor fires network-changed for many reasons — routes,
+    // VPNs, metered flips — and we don't want a pull storm). Fully guarded:
+    // on platforms where the monitor is unavailable we just keep the timer.
+    _watchNetwork() {
+        try {
+            this._netMonitor = Gio.NetworkMonitor.get_default();
+            if (!this._netMonitor) return;
+            this._wasOnline = this._netMonitor.get_network_available();
+            this._netChangedId = this._netMonitor.connect(
+                'network-changed', (monitor, available) => {
+                    let online = !!available;
+                    if (online && !this._wasOnline) {
+                        L.log("network restored — pulling now");
+                        this.syncNow();
+                    }
+                    this._wasOnline = online;
+                });
+        } catch (e) {
+            L.error("_watchNetwork: " + e.toString());
+            this._netMonitor = null;
+        }
+    }
+
+    _unwatchNetwork() {
+        if (this._netMonitor && this._netChangedId) {
+            try { this._netMonitor.disconnect(this._netChangedId); } catch (e) {}
+        }
+        this._netChangedId = 0;
+        this._netMonitor = null;
     }
 
     stop() {
@@ -104,6 +143,7 @@ var SyncService = class SyncService {
             Mainloop.source_remove(this._timer);
             this._timer = 0;
         }
+        this._unwatchNetwork();
     }
 
     destroy() {
