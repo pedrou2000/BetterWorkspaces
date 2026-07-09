@@ -409,15 +409,13 @@ var Controller = class Controller {
 
     // Remove a project from the live deck (destructive). Requests a graceful
     // close of every window in the project's partition, waits, then:
-    //   - if any window survives -> ABORT (cb receives the surviving windows'
-    //     titles); the project stays.
+    //   - if any window survives -> ABORT: rejects with Error("windows-open")
+    //     carrying .openTitles (the surviving windows' titles); the project stays.
     //   - else -> remove the partition's workspaces and the project from the
     //     model, landing on the MRU-previous project if we removed the active one.
-    // cb(err, info): err null on success; err "windows-open" with
-    // info.openTitles when aborted.
-    removeProjectLive(projectIdx, cb) {
+    async removeProjectLive(projectIdx) {
         let p = this.state.getProject(projectIdx);
-        if (!p) { cb && cb("invalid-project"); return; }
+        if (!p) throw new Error("invalid-project");
 
         let counts = this.state.counts();
         let offset = Mapping.offsetOf(counts, projectIdx);
@@ -431,43 +429,44 @@ var Controller = class Controller {
         for (let i = 0; i < windows.length; i++) this.wm.requestCloseWindow(windows[i]);
 
         // 2) After a grace period, recheck.
-        Mainloop.timeout_add(CLOSE_GRACE_MS, () => {
-            let remaining = this.wm.listWindowsOnWorkspaces(indices);
-            if (remaining.length > 0) {
-                let titles = remaining.map(function (w) {
-                    try { return w.get_title(); } catch (e) { return "(window)"; }
-                });
-                log("removeProjectLive: ABORT — " + remaining.length + " window(s) still open");
-                cb && cb("windows-open", { openTitles: titles });
-                return false;
-            }
-
-            // 3) All closed — remove the partition's workspaces high->low so
-            //    indices stay valid, then remove the project from the model.
-            let curCounts = this.state.counts();
-            let curOffset = Mapping.offsetOf(curCounts, projectIdx);
-            for (let i = p.wsCount - 1; i >= 0; i--) {
-                this.wm.removeWorkspace(curOffset + i);
-            }
-            let wasActive = (this.state.activeProjectIdx === projectIdx);
-            // MRU-previous is captured as an OLD index; removeProject() shifts
-            // every index above projectIdx down by one, so adjust to match.
-            let mruPrev = this.state.previousProjectIdx();
-            if (mruPrev > projectIdx) mruPrev -= 1;
-            this.state.removeProject(projectIdx);
-            this._reconcileWorkspaceCount();
-
-            // 4) If we removed the active project, land on the MRU-previous one
-            //    (clamped to a valid index after the reindex).
-            if (wasActive && this.state.projectCount() > 0) {
-                let target = mruPrev;
-                if (target < 0 || target >= this.state.projectCount()) target = 0;
-                this.goToProject(target);
-            }
-            log("removeProjectLive: removed " + p.name);
-            cb && cb(null);
-            return false;
+        await new Promise((resolve) => {
+            Mainloop.timeout_add(CLOSE_GRACE_MS, () => { resolve(); return false; });
         });
+
+        let remaining = this.wm.listWindowsOnWorkspaces(indices);
+        if (remaining.length > 0) {
+            let titles = remaining.map((w) => {
+                try { return w.get_title(); } catch (e) { return "(window)"; }
+            });
+            log("removeProjectLive: ABORT — " + remaining.length + " window(s) still open");
+            let err = new Error("windows-open");
+            err.openTitles = titles;
+            throw err;
+        }
+
+        // 3) All closed — remove the partition's workspaces high->low so
+        //    indices stay valid, then remove the project from the model.
+        let curCounts = this.state.counts();
+        let curOffset = Mapping.offsetOf(curCounts, projectIdx);
+        for (let i = p.wsCount - 1; i >= 0; i--) {
+            this.wm.removeWorkspace(curOffset + i);
+        }
+        let wasActive = (this.state.activeProjectIdx === projectIdx);
+        // MRU-previous is captured as an OLD index; removeProject() shifts
+        // every index above projectIdx down by one, so adjust to match.
+        let mruPrev = this.state.previousProjectIdx();
+        if (mruPrev > projectIdx) mruPrev -= 1;
+        this.state.removeProject(projectIdx);
+        this._reconcileWorkspaceCount();
+
+        // 4) If we removed the active project, land on the MRU-previous one
+        //    (clamped to a valid index after the reindex).
+        if (wasActive && this.state.projectCount() > 0) {
+            let target = mruPrev;
+            if (target < 0 || target >= this.state.projectCount()) target = 0;
+            this.goToProject(target);
+        }
+        log("removeProjectLive: removed " + p.name);
     }
 
     // ---- Introspection for logging / future UI -----------------------------

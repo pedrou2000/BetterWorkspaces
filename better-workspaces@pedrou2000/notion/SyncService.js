@@ -6,7 +6,9 @@
  * the Core can react. Everything upstream reads the cache, never the live
  * client, so the panel is instant and offline-safe.
  *
- * M4 scope: headless. Prove we can pull + filter + cache the real project list.
+ * Write methods (setWorkspaceFlag/setWorkspaceOrder/syncNow) are async and
+ * resolve on success / reject with Error("no-token"|"http-<status>"|...) on
+ * failure; callers await them and revert UI state on rejection.
  *
  * Released under the GNU General Public License v2 (see LICENSE).
  */
@@ -54,50 +56,45 @@ var SyncService = class SyncService {
         return (cached && cached.projects) ? cached.projects : [];
     }
 
+    // Update one cached project via `mutate(project)`, then rewrite the cache.
+    _updateCached(pageId, mutate) {
+        let projects = this.readCache();
+        for (let i = 0; i < projects.length; i++) {
+            if (projects[i].id === pageId) { mutate(projects[i]); break; }
+        }
+        this._writeCache(projects);
+    }
+
     // Write the Workspace checkbox for a project back to Notion, then update the
-    // cached entry's inWorkspace flag on success. cb(err) — err null on success.
-    setWorkspaceFlag(pageId, value, cb) {
-        if (!this.client.hasToken()) { cb && cb("no-token"); return; }
-        this.client.updatePageCheckbox(pageId, "Workspace", value, (err) => {
-            if (err) {
-                L.error("setWorkspaceFlag failed for " + pageId + ": " + err);
-                cb && cb(err);
-                return;
-            }
-            // Reflect the change in the on-disk cache so it survives reloads.
-            let projects = this.readCache();
-            for (let i = 0; i < projects.length; i++) {
-                if (projects[i].id === pageId) { projects[i].inWorkspace = !!value; break; }
-            }
-            this._writeCache(projects);
-            L.log("setWorkspaceFlag: " + pageId + " -> " + value);
-            cb && cb(null);
-        });
+    // cached entry's inWorkspace flag on success. Rejects on failure.
+    async setWorkspaceFlag(pageId, value) {
+        try {
+            await this.client.updatePageCheckbox(pageId, "Workspace", value);
+        } catch (e) {
+            L.error("setWorkspaceFlag failed for " + pageId + ": " + e.message);
+            throw e;
+        }
+        // Reflect the change in the on-disk cache so it survives reloads.
+        this._updateCached(pageId, (p) => { p.inWorkspace = !!value; });
+        L.log("setWorkspaceFlag: " + pageId + " -> " + value);
     }
 
     // Write the Workspace Order number for a project back to Notion and update
-    // the cached entry. cb(err) — err null on success.
-    setWorkspaceOrder(pageId, order, cb) {
-        if (!this.client.hasToken()) { cb && cb("no-token"); return; }
-        this.client.updatePageNumber(pageId, "Workspace Order", order, (err) => {
-            if (err) {
-                L.error("setWorkspaceOrder failed for " + pageId + ": " + err);
-                cb && cb(err);
-                return;
-            }
-            let projects = this.readCache();
-            for (let i = 0; i < projects.length; i++) {
-                if (projects[i].id === pageId) { projects[i].order = order; break; }
-            }
-            this._writeCache(projects);
-            cb && cb(null);
-        });
+    // the cached entry. Rejects on failure.
+    async setWorkspaceOrder(pageId, order) {
+        try {
+            await this.client.updatePageNumber(pageId, "Workspace Order", order);
+        } catch (e) {
+            L.error("setWorkspaceOrder failed for " + pageId + ": " + e.message);
+            throw e;
+        }
+        this._updateCached(pageId, (p) => { p.order = order; });
     }
 
     // Clear a project's Workspace Order (set to null in Notion + cache), so it
     // sorts last (nulls-last) once deactivated.
-    clearWorkspaceOrder(pageId, cb) {
-        this.setWorkspaceOrder(pageId, null, cb);
+    clearWorkspaceOrder(pageId) {
+        return this.setWorkspaceOrder(pageId, null);
     }
 
     // Highest Workspace Order currently in the cache (among any project), or -1
@@ -114,7 +111,8 @@ var SyncService = class SyncService {
 
     // Persist an ordered list of project ids as Workspace Order = 0,1,2,...
     // First update the local cache SYNCHRONOUSLY (so an immediate re-render sees
-    // the new order), then fire the async Notion writes.
+    // the new order), then fire the async Notion writes (fire-and-forget; each
+    // write logs its own failure).
     persistOrder(orderedIds) {
         // 1) Synchronous cache update.
         let projects = this.readCache();
@@ -125,15 +123,15 @@ var SyncService = class SyncService {
         }
         this._writeCache(projects);
 
-        // 2) Async Notion writes (each also re-updates the cache when it returns).
+        // 2) Async Notion writes (each also re-updates the cache when it lands).
         for (let i = 0; i < orderedIds.length; i++) {
-            this.setWorkspaceOrder(orderedIds[i], i, null);
+            this.setWorkspaceOrder(orderedIds[i], i).catch(() => {});
         }
         L.log("persistOrder: cache updated + writing order for " + orderedIds.length + " projects");
     }
 
     // Trigger one sync now. Non-blocking; result flows via cache + onUpdate.
-    syncNow() {
+    async syncNow() {
         if (!this.databaseId || !this.client.hasToken()) {
             L.log("syncNow: not configured, skipping");
             this._setStatus("unconfigured");
@@ -142,23 +140,24 @@ var SyncService = class SyncService {
 
         L.log("syncNow: querying database " + this.databaseId);
         this._setStatus("loading");
-        let body = ProjectMapper.buildQueryBody();
-        this.client.queryDatabase(this.databaseId, body, (err, result) => {
-            if (err) {
-                L.error("syncNow failed: " + err + " (serving cache)");
-                this._setStatus("error");
-                return;
-            }
-            let projects = ProjectMapper.mapResults(result);
-            this._setStatus("ok");
-            this._writeCache(projects);
-            L.log("syncNow: cached " + projects.length + " projects: ["
-                + projects.map((p) => p.name).join(", ") + "]");
-            if (this._onUpdate) {
-                try { this._onUpdate(projects); }
-                catch (e) { L.error("onUpdate cb: " + e.toString()); }
-            }
-        });
+        let result;
+        try {
+            result = await this.client.queryDatabase(
+                this.databaseId, ProjectMapper.buildQueryBody());
+        } catch (e) {
+            L.error("syncNow failed: " + e.message + " (serving cache)");
+            this._setStatus("error");
+            return;
+        }
+        let projects = ProjectMapper.mapResults(result);
+        this._setStatus("ok");
+        this._writeCache(projects);
+        L.log("syncNow: cached " + projects.length + " projects: ["
+            + projects.map((p) => p.name).join(", ") + "]");
+        if (this._onUpdate) {
+            try { this._onUpdate(projects); }
+            catch (e) { L.error("onUpdate cb: " + e.toString()); }
+        }
     }
 
     _writeCache(projects) {

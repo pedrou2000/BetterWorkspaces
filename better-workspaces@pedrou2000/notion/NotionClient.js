@@ -3,8 +3,9 @@
  *
  * Raw HTTP against the Notion REST API via libsoup (Design Doc §3.A). Knows
  * about tokens, endpoints, JSON, and libsoup version differences (Soup 2.4 vs
- * 3.0) — nothing about "projects". Exposes queryDatabase(dbId, body, cb) which
- * POSTs to /v1/databases/{id}/query and calls cb(errorOrNull, resultObj).
+ * 3.0) — nothing about "projects". Exposes async queryDatabase(dbId, body)
+ * which POSTs to /v1/databases/{id}/query and resolves to the parsed result
+ * (rejecting with Error("no-token" | "http-<status>" | "bad-json") on failure).
  *
  * Released under the GNU General Public License v2 (see LICENSE).
  */
@@ -46,99 +47,80 @@ var NotionClient = class NotionClient {
         h.append("Content-Type", "application/json");
     }
 
-    // POST JSON to `path`. Calls cb(err, parsedObjOrNull).
-    _post(path, bodyObj, cb) {
-        this._request("POST", path, bodyObj, cb);
-    }
-
-    // PATCH JSON to `path`. Calls cb(err, parsedObjOrNull).
-    _patch(path, bodyObj, cb) {
-        this._request("PATCH", path, bodyObj, cb);
-    }
-
-    // Send a JSON request with the given HTTP method. cb(err, parsedObjOrNull).
-    _request(method, path, bodyObj, cb) {
-        if (!this.hasToken()) {
-            cb("no-token", null);
-            return;
-        }
+    // Send a JSON request with the given HTTP method. Resolves to the parsed
+    // response object; rejects with Error("no-token"|"http-<status>"|"bad-json").
+    async _request(method, path, bodyObj) {
+        if (!this.hasToken()) throw new Error("no-token");
 
         let url = NOTION_BASE + path;
         let bodyText = JSON.stringify(bodyObj || {});
+        let msg = Soup.Message.new(method, url);
+        this._headers(msg);
 
-        try {
-            let msg = Soup.Message.new(method, url);
-            this._headers(msg);
-
-            if (SOUP3) {
-                let bytes = GLib.Bytes.new(ByteArray.fromString(bodyText));
-                msg.set_request_body_from_bytes("application/json", bytes);
-                this.session.send_and_read_async(
-                    msg, GLib.PRIORITY_DEFAULT, null,
-                    (session, res) => {
-                        try {
-                            let gbytes = session.send_and_read_finish(res);
-                            let status = msg.get_status();
-                            let data = gbytes ? ByteArray.toString(gbytes.get_data()) : "";
-                            this._handleResponse(status, data, cb);
-                        } catch (e) {
-                            L.error("send_and_read_finish: " + e.toString());
-                            cb(e.toString(), null);
-                        }
+        // Bridge libsoup's GAsync callbacks to a Promise; both branches resolve
+        // to [status, dataString].
+        let [status, data] = await new Promise((resolve, reject) => {
+            try {
+                if (SOUP3) {
+                    let bytes = GLib.Bytes.new(ByteArray.fromString(bodyText));
+                    msg.set_request_body_from_bytes("application/json", bytes);
+                    this.session.send_and_read_async(
+                        msg, GLib.PRIORITY_DEFAULT, null,
+                        (session, res) => {
+                            try {
+                                let gbytes = session.send_and_read_finish(res);
+                                let text = gbytes ? ByteArray.toString(gbytes.get_data()) : "";
+                                resolve([msg.get_status(), text]);
+                            } catch (e) {
+                                L.error("send_and_read_finish: " + e.toString());
+                                reject(e);
+                            }
+                        });
+                } else {
+                    // Soup 2.4
+                    msg.set_request("application/json", Soup.MemoryUse.COPY, bodyText);
+                    this.session.queue_message(msg, (session, message) => {
+                        let text = message.response_body ? message.response_body.data : "";
+                        resolve([message.status_code, text]);
                     });
-            } else {
-                // Soup 2.4
-                msg.set_request("application/json", Soup.MemoryUse.COPY, bodyText);
-                this.session.queue_message(msg, (session, message) => {
-                    try {
-                        let status = message.status_code;
-                        let data = message.response_body ? message.response_body.data : "";
-                        this._handleResponse(status, data, cb);
-                    } catch (e) {
-                        L.error("queue_message cb: " + e.toString());
-                        cb(e.toString(), null);
-                    }
-                });
+                }
+            } catch (e) {
+                L.error("_request(" + path + "): " + e.toString());
+                reject(e);
             }
-        } catch (e) {
-            L.error("_request(" + path + "): " + e.toString());
-            cb(e.toString(), null);
-        }
-    }
+        });
 
-    _handleResponse(status, data, cb) {
         if (status < 200 || status >= 300) {
             L.error("HTTP " + status + " — " + (data || "").slice(0, 300));
-            cb("http-" + status, null);
-            return;
+            throw new Error("http-" + status);
         }
         try {
-            cb(null, JSON.parse(data));
+            return JSON.parse(data);
         } catch (e) {
             L.error("JSON parse: " + e.toString());
-            cb("bad-json", null);
+            throw new Error("bad-json");
         }
     }
 
     // Query a database. `body` is the Notion query payload (filter/sorts).
     // Handles a single page of results (up to 100); pagination can be added
     // later if the project list ever exceeds that.
-    queryDatabase(dbId, body, cb) {
-        this._post("/databases/" + dbId + "/query", body, cb);
+    queryDatabase(dbId, body) {
+        return this._request("POST", "/databases/" + dbId + "/query", body);
     }
 
-    // Set a checkbox property on a page. cb(err, parsedObjOrNull).
+    // Set a checkbox property on a page.
     // Requires the integration to have update-content capability.
-    updatePageCheckbox(pageId, propName, value, cb) {
+    updatePageCheckbox(pageId, propName, value) {
         let props = {};
         props[propName] = { checkbox: !!value };
-        this._patch("/pages/" + pageId, { properties: props }, cb);
+        return this._request("PATCH", "/pages/" + pageId, { properties: props });
     }
 
-    // Set a number property on a page. cb(err, parsedObjOrNull).
-    updatePageNumber(pageId, propName, value, cb) {
+    // Set a number property on a page.
+    updatePageNumber(pageId, propName, value) {
         let props = {};
         props[propName] = { number: value };
-        this._patch("/pages/" + pageId, { properties: props }, cb);
+        return this._request("PATCH", "/pages/" + pageId, { properties: props });
     }
 };

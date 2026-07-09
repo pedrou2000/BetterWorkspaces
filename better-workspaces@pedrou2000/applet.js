@@ -317,7 +317,13 @@ var MyApplet = class MyApplet extends Applet.Applet {
                     let cache = this.sync ? this.sync.readCache() : [];
                     return ProjectMapper.sortByOrder(cache);
                 },
-                (project, newValue, doneCb) => this._handleToggle(project, newValue, doneCb),
+                (project, newValue, doneCb) => {
+                    // Bridge the panel's doneCb(err) protocol to the async
+                    // handler: null on success, an error string on failure.
+                    this._handleToggle(project, newValue)
+                        .then(() => doneCb(null))
+                        .catch((e) => doneCb(e.message || e.toString()));
+                },
                 (fromOnIdx, toOnIdx) => {
                     // ON-project index == deck index; reorder relocates windows
                     // and persists Workspace Order.
@@ -331,51 +337,47 @@ var MyApplet = class MyApplet extends Applet.Applet {
     }
 
     // Perform a Workspace toggle: write to Notion, then add/remove the project
-    // from the live deck. doneCb(err) — err non-null reverts the toggle.
-    _handleToggle(project, newValue, doneCb) {
-        if (!this.sync) { doneCb("no-sync"); return; }
+    // from the live deck. Resolves on success; rejects to revert the toggle.
+    async _handleToggle(project, newValue) {
+        if (!this.sync) throw new Error("no-sync");
 
         if (newValue) {
             // Turning ON: write Notion, add to the live deck (appends to end),
             // and assign Workspace Order = max+1 so "bottom" survives reload.
-            this.sync.setWorkspaceFlag(project.id, true, (err) => {
-                if (err) { doneCb(err); return; }
-                this.controller.addProjectLive(this._toDef(project));
-                this.sync.setWorkspaceOrder(project.id, this.sync.maxOrder() + 1, null);
-                this.panelUI.rebuild();
-                this._refresh();
-                doneCb(null);
-            });
-        } else {
-            // Turning OFF: destructive. Find the deck index, confirm, then
-            // remove (which gracefully closes windows). Only on success do we
-            // write Workspace=false to Notion.
-            let deckIdx = this._deckIndexOf(project.id);
-            if (deckIdx < 0) {
-                // Not in the live deck (shouldn't happen) — just write the flag.
-                this.sync.setWorkspaceFlag(project.id, false, (err) => doneCb(err));
-                return;
-            }
-            this._confirmRemoval(project, (confirmed) => {
-                if (!confirmed) { doneCb("cancelled"); return; }
-                this.controller.removeProjectLive(deckIdx, (rmErr, info) => {
-                    if (rmErr === "windows-open") {
-                        this._notifyWindowsOpen(project, info);
-                        doneCb("windows-open");
-                        return;
-                    }
-                    if (rmErr) { doneCb(rmErr); return; }
-                    this.panelUI.rebuild();
-                    this._refresh();
-                    // Deck change succeeded; persist Workspace=false and clear
-                    // its order so it sorts last if reactivated later.
-                    this.sync.clearWorkspaceOrder(project.id, null);
-                    this.sync.setWorkspaceFlag(project.id, false, (wErr) => {
-                        doneCb(wErr); // if the write fails, panel reverts the toggle
-                    });
-                });
-            });
+            await this.sync.setWorkspaceFlag(project.id, true);
+            this.controller.addProjectLive(this._toDef(project));
+            this.sync.setWorkspaceOrder(project.id, this.sync.maxOrder() + 1).catch(() => {});
+            this.panelUI.rebuild();
+            this._refresh();
+            return;
         }
+
+        // Turning OFF: destructive. Find the deck index, confirm, then remove
+        // (which gracefully closes windows). Only on success do we write
+        // Workspace=false to Notion.
+        let deckIdx = this._deckIndexOf(project.id);
+        if (deckIdx < 0) {
+            // Not in the live deck (shouldn't happen) — just write the flag.
+            await this.sync.setWorkspaceFlag(project.id, false);
+            return;
+        }
+        let confirmed = await this._confirmRemoval(project);
+        if (!confirmed) throw new Error("cancelled");
+        try {
+            await this.controller.removeProjectLive(deckIdx);
+        } catch (e) {
+            if (e.message === "windows-open") {
+                this._notifyWindowsOpen(project, { openTitles: e.openTitles });
+            }
+            throw e;
+        }
+        this.panelUI.rebuild();
+        this._refresh();
+        // Deck change succeeded; persist Workspace=false and clear its order so
+        // it sorts last if reactivated later. If the flag write fails, the
+        // rejection reverts the panel's toggle.
+        this.sync.clearWorkspaceOrder(project.id).catch(() => {});
+        await this.sync.setWorkspaceFlag(project.id, false);
     }
 
     // Index of a project in the live controller deck by Notion id, or -1.
@@ -388,8 +390,8 @@ var MyApplet = class MyApplet extends Applet.Applet {
         return -1;
     }
 
-    // Confirm destructive removal via a modal. cb(confirmedBool).
-    _confirmRemoval(project, cb) {
+    // Confirm destructive removal via a modal. Resolves to true/false.
+    _confirmRemoval(project) {
         let deckIdx = this._deckIndexOf(project.id);
         let p = this.controller.state.getProject(deckIdx);
         let wsCount = p ? p.wsCount : 1;
@@ -403,11 +405,13 @@ var MyApplet = class MyApplet extends Applet.Applet {
             text: "This will close its windows and remove its " + wsCount + " workspace(s).",
         }));
         dialog.contentLayout.add(box);
-        dialog.setButtons([
-            { label: "Cancel", action: () => { dialog.close(); cb(false); }, key: Clutter.KEY_Escape },
-            { label: "Remove", action: () => { dialog.close(); cb(true); } },
-        ]);
-        dialog.open();
+        return new Promise((resolve) => {
+            dialog.setButtons([
+                { label: "Cancel", action: () => { dialog.close(); resolve(false); }, key: Clutter.KEY_Escape },
+                { label: "Remove", action: () => { dialog.close(); resolve(true); } },
+            ]);
+            dialog.open();
+        });
     }
 
     _notifyWindowsOpen(project, info) {
