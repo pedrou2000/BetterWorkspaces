@@ -6,9 +6,9 @@
 }
 
 .better-workspaces-project {
-    /* Square-ish, compact: small symmetric padding, minimal gap between icons */
+    /* Square-ish, compact: small symmetric padding + a hair of gap between icons */
     padding: 2px;
-    margin: 0;
+    margin: 0 1px;
     border-radius: 4px;
     color: #bbbbbb;
 }
@@ -32,7 +32,7 @@
 
 .better-workspaces-manage {
     padding: 2px 4px;
-    margin: 0 2px;
+    margin: 0 2px 0 8px;
     border-radius: 4px;
     color: #999999;
 }
@@ -57,7 +57,8 @@
 }
 
 .better-workspaces-position {
-    padding: 0 4px;
+    /* extra left gap sets the dots apart from the project-icon group */
+    padding: 0 4px 0 10px;
 }
 
 /* carousel dots: large ● = current, small · = others; each is clickable */
