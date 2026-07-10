@@ -142,8 +142,7 @@
     font-weight: bold;
 }
 
-/* Icon variants. font-size is set inline in JS (scales with the icon size);
-   emoji/image/fallback all track the configured size that way. */
+/* Icon font-size is set inline in JS so it tracks the configured size. */
 .better-workspaces-icon-fallback {
     font-weight: bold;
     color: #cccccc;
