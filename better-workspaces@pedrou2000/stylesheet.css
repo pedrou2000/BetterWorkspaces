@@ -1,5 +1,10 @@
 /* BetterWorkspaces — shared panel/overlay styling */
 
+/* Replaces applet-box's horizontal padding (dropped to lose its hover highlight). */
+.better-workspaces-applet {
+    padding: 0 5px;
+}
+
 .better-workspaces-project {
     /* Square-ish, compact: small symmetric padding, minimal gap between icons */
     padding: 2px;

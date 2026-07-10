@@ -44,8 +44,10 @@ var MyApplet = class MyApplet extends Applet.Applet {
         try {
             L.log("loaded v" + (metadata && metadata.version ? metadata.version : "?"));
 
-            // Drop the theme's applet-box hover background; our buttons show their own.
+            // Drop the theme's applet-box hover background (our buttons show their
+            // own); keep our own class for the container padding it also provided.
             this.actor.remove_style_class_name("applet-box");
+            this.actor.add_style_class_name("better-workspaces-applet");
 
             this.wm = new WorkspaceManager();
             this.controller = new Controller(this.wm);
