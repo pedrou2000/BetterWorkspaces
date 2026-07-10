@@ -95,14 +95,18 @@ function _download(url, dest, cb) {
 function makeActor(icon, name, size, onReady) {
     size = size || 22;
     if (icon && icon.type === "emoji" && icon.value) {
-        // Pin to the same square box as image icons and fill it: emoji fonts carry
-        // intrinsic side-bearing, so a smaller glyph centered in the box leaves air
-        // on both sides that reads as extra inter-icon spacing vs edge-filling icons.
-        // Box width is locked, so a larger font grows into its own air, not neighbors'.
+        // Locked to the image-icon box; font a touch under it so the glyph's
+        // ascent/descent doesn't overflow and misalign the row.
         return _boxedLabel(
             "better-workspaces-icon-emoji",
             icon.value,
-            "font-size: " + size + "px; width: " + size + "px; text-align: center;",
+            "font-size: " +
+                Math.round(size * 0.82) +
+                "px; width: " +
+                size +
+                "px; height: " +
+                size +
+                "px; text-align: center;",
         );
     }
 
