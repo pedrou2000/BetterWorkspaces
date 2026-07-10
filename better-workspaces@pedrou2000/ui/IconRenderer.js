@@ -6,6 +6,15 @@
 const St = imports.gi.St;
 const Gio = imports.gi.Gio;
 const GLib = imports.gi.GLib;
+const Pango = imports.gi.Pango;
+
+// St.Label pinned to a fixed width otherwise ellipsizes (…) any glyph wider than
+// the box — wide emoji (📁 🏢) collapse to "...". Center in the box, don't clip.
+function _boxedLabel(styleClass, text, style) {
+    const label = new St.Label({ style_class: styleClass, text: text, style: style });
+    label.clutter_text.set_ellipsize(Pango.EllipsizeMode.NONE);
+    return label;
+}
 
 const AppletDir = imports.ui.appletManager.applets["better-workspaces@pedrou2000"];
 const L = AppletDir.lib.logger.Logger.makeLogger("icons");
@@ -42,16 +51,11 @@ function _cachePathFor(url) {
 // Fallback glyph: the project name's first character, uppercased.
 function _fallbackLabel(name, size) {
     const ch = name && name.length ? name.trim().charAt(0).toUpperCase() : "?";
-    return new St.Label({
-        style_class: "better-workspaces-icon-fallback",
-        text: ch,
-        style:
-            "font-size: " +
-            Math.round(size * 0.7) +
-            "px; width: " +
-            size +
-            "px; text-align: center;",
-    });
+    return _boxedLabel(
+        "better-workspaces-icon-fallback",
+        ch,
+        "font-size: " + Math.round(size * 0.7) + "px; width: " + size + "px; text-align: center;",
+    );
 }
 
 function _iconFromFile(path, size) {
@@ -94,16 +98,15 @@ function makeActor(icon, name, size, onReady) {
         // Pin to the same square box as image icons and center the glyph: emoji
         // fonts carry intrinsic side-bearing, so an unconstrained label is wider
         // than a tightly-cropped St.Icon and reads as extra inter-icon spacing.
-        return new St.Label({
-            style_class: "better-workspaces-icon-emoji",
-            text: icon.value,
-            style:
-                "font-size: " +
+        return _boxedLabel(
+            "better-workspaces-icon-emoji",
+            icon.value,
+            "font-size: " +
                 Math.round(size * 0.85) +
                 "px; width: " +
                 size +
                 "px; text-align: center;",
-        });
+        );
     }
 
     if (icon && icon.type === "url" && icon.value) {
