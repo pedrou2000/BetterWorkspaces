@@ -217,13 +217,21 @@ var PanelIndicator = class PanelIndicator {
             return;
         }
 
+        // Uniform box height so different-sized glyphs share one vertical center
+        // (text aligns by baseline otherwise).
+        const boxH = Math.max(this._dotSize, this._dotSizeSmall);
         for (let i = 0; i < p.wsCount; i++) {
             const active = i === loc.localIdx;
             // ○ not ·: the middle dot barely fills its box, so its size won't scale.
             const dot = new St.Button({
                 style_class: "better-workspaces-dot",
                 label: active ? "●" : "○",
-                style: "font-size: " + (active ? this._dotSize : this._dotSizeSmall) + "px;",
+                style:
+                    "font-size: " +
+                    (active ? this._dotSize : this._dotSizeSmall) +
+                    "px; height: " +
+                    boxH +
+                    "px;",
                 reactive: true,
             });
             dot._localIdx = i;
