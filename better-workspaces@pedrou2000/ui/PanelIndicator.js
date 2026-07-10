@@ -111,11 +111,8 @@ var PanelIndicator = class PanelIndicator {
             this._buttons.push(btn);
         }
 
-        this._posLabel = new St.Label({
-            style_class: "better-workspaces-position",
-            text: "",
-        });
-        this.actor.add(this._posLabel, { y_align: St.Align.MIDDLE, y_fill: false });
+        this._posBox = new St.BoxLayout({ style_class: "better-workspaces-position" });
+        this.actor.add(this._posBox, { y_align: St.Align.MIDDLE, y_fill: false });
 
         this._statusDot = new St.Label({
             style_class: "better-workspaces-status",
@@ -175,34 +172,48 @@ var PanelIndicator = class PanelIndicator {
             else this._buttons[i].remove_style_pseudo_class("active");
         }
 
-        if (this._posLabel) {
-            const dots = loc ? this._dotsFor(loc) : "";
-            this._posLabel.set_text(dots);
-            // Hide when empty: an empty St.Label still occupies its CSS padding.
-            this._posLabel.visible = dots.length > 0;
-        }
+        if (this._posBox) this._renderDots(loc);
     }
 
-    // Carousel dots "· ● ·" for the strip; nothing for a 1-workspace project,
-    // compact "n/m" when the strip is too long for dots.
-    _dotsFor(loc) {
-        const p = this.controller.state.getProject(loc.projectIdx);
-        if (!p || p.wsCount <= 1) return "";
+    // Clickable carousel dots for the strip; nothing for a 1-workspace project,
+    // a compact "n/m" label when the strip is too long to click dot-by-dot.
+    _renderDots(loc) {
+        this._posBox.destroy_all_children();
+        const p = loc ? this.controller.state.getProject(loc.projectIdx) : null;
+        this._posBox.visible = !!(p && p.wsCount > 1);
+        if (!this._posBox.visible) return;
+
         if (p.wsCount > 12) {
-            return "  " + (loc.localIdx + 1) + "/" + p.wsCount;
+            this._posBox.add(
+                new St.Label({
+                    style_class: "better-workspaces-dot",
+                    text: loc.localIdx + 1 + "/" + p.wsCount,
+                }),
+                { y_align: St.Align.MIDDLE, y_fill: false },
+            );
+            return;
         }
-        const parts = [];
+
         for (let i = 0; i < p.wsCount; i++) {
-            parts.push(i === loc.localIdx ? "●" : "·");
+            const dot = new St.Button({
+                style_class: "better-workspaces-dot",
+                label: i === loc.localIdx ? "●" : "·",
+                reactive: true,
+            });
+            dot._localIdx = i;
+            dot.connect("clicked", (b) => {
+                this.controller.goToLocalWorkspace(b._localIdx);
+                this.update();
+            });
+            this._posBox.add(dot, { y_align: St.Align.MIDDLE, y_fill: false });
         }
-        return "  " + parts.join(" ");
     }
 
     destroy() {
         this._destroyTooltips();
         if (this.actor) this.actor.destroy_all_children();
         this._buttons = [];
-        this._posLabel = null;
+        this._posBox = null;
         this._statusDot = null;
         this._statusTip = null;
     }

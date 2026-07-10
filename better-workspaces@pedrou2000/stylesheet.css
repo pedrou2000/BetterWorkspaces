@@ -52,10 +52,17 @@
 }
 
 .better-workspaces-position {
-    /* carousel dots: large ● = current, small · = others */
-    padding: 0 6px;
+    padding: 0 4px;
+}
+
+/* carousel dots: large ● = current, small · = others; each is clickable */
+.better-workspaces-dot {
+    padding: 0 2px;
     color: #8899ff;
     font-size: 15px;
+}
+.better-workspaces-dot:hover {
+    color: #ffffff;
 }
 
 .better-workspaces-status {
