@@ -97,7 +97,7 @@ function makeActor(icon, name, size, onReady) {
     if (icon && icon.type === "emoji" && icon.value) {
         // Locked to the image-icon box; font a touch under it so the glyph's
         // ascent/descent doesn't overflow and misalign the row.
-        return _boxedLabel(
+        const label = _boxedLabel(
             "better-workspaces-icon-emoji",
             icon.value,
             "font-size: " +
@@ -108,6 +108,14 @@ function makeActor(icon, name, size, onReady) {
                 size +
                 "px; text-align: center;",
         );
+        // Noto Color Emoji bitmaps carry ~2px of transparent margin per side at
+        // panel sizes, so the visible glyph is narrower than its box and reads as
+        // extra inter-icon spacing next to edge-filling St.Icons. Scale is paint-
+        // only (never layout), so the box metrics the row alignment relies on are
+        // untouched; the drawn glyph just grows into its own baked-in air.
+        label.set_pivot_point(0.5, 0.5);
+        label.set_scale(1.15, 1.15);
+        return label;
     }
 
     if (icon && icon.type === "url" && icon.value) {
