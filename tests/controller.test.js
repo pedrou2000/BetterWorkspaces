@@ -171,6 +171,21 @@ test("moveWindowToProject lands on that project's last-used local", () => {
     assert.deepEqual(wm.layout()[3], ["editor"]);
 });
 
+test("moveWindowToProject keeps the carried window focused across repeated moves", () => {
+    const { controller, wm } = makeController(DECK);
+    // A decoy already living on the destinations, so the destination's MRU is not
+    // the carried window — mirrors real Muffin, where focus would otherwise drift.
+    wm.addWindow(2, "decoy-b");
+    wm.addWindow(5, "decoy-c");
+    const carried = wm.addWindow(0, "editor");
+    wm.focusedWindow = carried;
+
+    assert.equal(controller.moveWindowToProject(1), true);
+    assert.equal(wm.focusedWindow, carried); // still carrying "editor", not "decoy-b"
+    assert.equal(controller.moveWindowToProject(2), true);
+    assert.equal(wm.focusedWindow, carried); // and again, not "decoy-c"
+});
+
 test("moveWindowToProject with no focused window fails without navigating", () => {
     const { controller, wm } = makeController(DECK);
     wm.focusedWindow = null;

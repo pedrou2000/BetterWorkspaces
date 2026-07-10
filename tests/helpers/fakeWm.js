@@ -113,15 +113,26 @@ class FakeWm {
         return this.removeWorkspace(this.workspaces.length - 1);
     }
 
+    // Mirrors Muffin: moving the focused window off the active workspace drops
+    // focus (to the destination's MRU, modeled here as "some other window"), so
+    // the carried window is NOT focused on arrival unless focusWindow re-asserts it.
     moveFocusedWindowTo(index) {
-        if (index < 0 || index >= this.workspaces.length) return false;
-        if (!this.focusedWindow) return false;
-        const from = this._indexOfWindow(this.focusedWindow);
+        if (index < 0 || index >= this.workspaces.length) return null;
+        if (!this.focusedWindow) return null;
+        const win = this.focusedWindow;
+        const from = this._indexOfWindow(win);
         if (from !== -1) {
             const ws = this.workspaces[from];
-            ws.windows.splice(ws.windows.indexOf(this.focusedWindow), 1);
+            ws.windows.splice(ws.windows.indexOf(win), 1);
         }
-        this.workspaces[index].windows.push(this.focusedWindow);
+        this.workspaces[index].windows.push(win);
+        const others = this._real(this.workspaces[index]).filter((w) => w !== win);
+        this.focusedWindow = others.length ? others[0] : null;
+        return win;
+    }
+
+    focusWindow(win) {
+        this.focusedWindow = win || null;
         return true;
     }
 

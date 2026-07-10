@@ -162,23 +162,37 @@ var WorkspaceManager = class WorkspaceManager {
         return this.removeWorkspace(this.getWorkspaceCount() - 1);
     }
 
+    // Returns the moved window (so the caller can re-focus it after following),
+    // or null if there was nothing to move.
     moveFocusedWindowTo(index) {
         try {
             const count = this.getWorkspaceCount();
             if (index < 0 || index > count - 1) {
                 L.log("moveFocusedWindowTo: index " + index + " out of range");
-                return false;
+                return null;
             }
             const win = global.display.get_focus_window();
             if (!win) {
                 L.log("moveFocusedWindowTo: no focused window");
-                return false;
+                return null;
             }
             win.change_workspace_by_index(index, false);
             L.log("moveFocusedWindowTo: moved '" + win.get_title() + "' to workspace " + index);
-            return true;
+            return win;
         } catch (e) {
             L.error("moveFocusedWindowTo(" + index + "): " + e.toString());
+            return null;
+        }
+    }
+
+    // Re-assert focus on a specific window. Must run AFTER the target workspace is
+    // active, or the workspace's own MRU focus overrides it.
+    focusWindow(win) {
+        try {
+            if (win) win.activate(this._now());
+            return true;
+        } catch (e) {
+            L.error("focusWindow: " + e.toString());
             return false;
         }
     }

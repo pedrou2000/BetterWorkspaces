@@ -111,9 +111,11 @@ var Navigation = class Navigation {
             return false;
         }
         const flat = Mapping.globalIndex(c.state.counts(), pIdx, localIdx);
-        if (c.wm.moveFocusedWindowTo(flat)) {
+        const win = c.wm.moveFocusedWindowTo(flat);
+        if (win) {
             c.state.setLastLocal(pIdx, localIdx);
             c.wm.goToWorkspace(flat);
+            c.wm.focusWindow(win); // keep the carried window focused, not the destination's MRU
             return true;
         }
         return false;
@@ -156,10 +158,12 @@ var Navigation = class Navigation {
         let local = c.state.getLastLocal(projectIdx);
         if (local > p.wsCount - 1) local = p.wsCount - 1;
         const flat = Mapping.globalIndex(c.state.counts(), projectIdx, local);
-        if (c.wm.moveFocusedWindowTo(flat)) {
+        const win = c.wm.moveFocusedWindowTo(flat);
+        if (win) {
             c.state.setActiveProject(projectIdx);
             c.state.setLastLocal(projectIdx, local);
             c.wm.goToWorkspace(flat);
+            c.wm.focusWindow(win); // keep the carried window focused, not the destination's MRU
             L.log("moveWindowToProject: moved window to " + p.name + " local " + local);
             return true;
         }
