@@ -72,9 +72,16 @@ var DeckCoordinator = class DeckCoordinator {
         if (this._controller.state.indexOfProjectId("placeholder") >= 0) {
             this.loadDeckFromStore(); // first real pull replaces the placeholder deck
         } else {
+            // Refresh renamed/re-iconed projects already on the deck.
+            const state = this._controller.state;
+            for (let i = 0; i < state.projectCount(); i++) {
+                const cur = state.getProject(i);
+                const fresh = this._store.get(cur.id);
+                if (fresh) state.updateProjectDisplay(cur.id, this.toDef(fresh));
+            }
             for (let i = 0; i < result.newlyInWorkspace.length; i++) {
                 const p = result.newlyInWorkspace[i];
-                if (this._controller.state.indexOfProjectId(p.id) >= 0) continue;
+                if (state.indexOfProjectId(p.id) >= 0) continue;
                 this._controller.addProjectLive(this.toDef(p));
                 L.log("onPull: auto-appended newly-on project " + p.name);
             }

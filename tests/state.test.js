@@ -54,6 +54,21 @@ test("indexOfProjectId finds by id, -1 when absent", () => {
     assert.equal(s.indexOfProjectId("a"), 2);
 });
 
+test("updateProjectDisplay refreshes name/icon but not wsCount/lastLocal", () => {
+    const s = makeState();
+    s.incWorkspaceCount(0); // a: 4 ws
+    s.setLastLocal(0, 2);
+    const def = { name: "Renamed", icon: { type: "emoji", value: "🚀" }, notionUrl: null };
+    assert.equal(s.updateProjectDisplay("a", def), true);
+    const p = s.getProject(0);
+    assert.equal(p.name, "Renamed");
+    assert.deepEqual(p.icon, { type: "emoji", value: "🚀" });
+    assert.equal(p.wsCount, 4); // untouched
+    assert.equal(p.lastLocal, 2); // untouched
+    assert.equal(s.updateProjectDisplay("a", def), false); // same def -> no change
+    assert.equal(s.updateProjectDisplay("nope", def), false); // unknown id
+});
+
 test("setActiveProject validates and touches MRU", () => {
     const s = makeState();
     assert.equal(s.setActiveProject(2), true);

@@ -60,6 +60,21 @@ var State = class State {
         return -1;
     }
 
+    // Refresh name/icon/notionUrl only, leaving wsCount/lastLocal intact. Returns true if changed.
+    updateProjectDisplay(id, def) {
+        const p = this.getProject(this.indexOfProjectId(id));
+        if (!p) return false;
+        let changed = false;
+        for (const field of ["name", "icon", "notionUrl"]) {
+            const next = def[field] !== undefined ? def[field] : null;
+            if (JSON.stringify(p[field]) !== JSON.stringify(next)) {
+                p[field] = next;
+                changed = true;
+            }
+        }
+        return changed;
+    }
+
     setActiveProject(idx) {
         if (idx < 0 || idx >= this.projects.length) return false;
         this.activeProjectIdx = idx;

@@ -267,8 +267,20 @@ test("onPull merges catalog fields and auto-appends a newly-on project", () => {
     ]);
 
     assert.equal(store.get("a").name, "A renamed"); // catalog field took remote
+    assert.equal(controller.state.getProject(0).name, "A renamed"); // deck refreshed live
     assert.deepEqual(deckIds(controller), ["a", "b"]); // b auto-appended
     assert.ok(hookCalls.rebuildPanel > 0);
+});
+
+test("onPull refreshes a changed icon on an existing deck project", () => {
+    const { coord, controller } = makeStack([proj("a", true, 0)]);
+    coord.loadDeckFromStore();
+
+    const newIcon = { type: "emoji", value: "🚀" };
+    coord.onPull([
+        { id: "a", name: "A", icon: newIcon, notionUrl: null, inWorkspace: true, order: 0 },
+    ]);
+    assert.deepEqual(controller.state.getProject(0).icon, newIcon);
 });
 
 test("onPull never auto-removes a project unchecked in Notion", () => {
