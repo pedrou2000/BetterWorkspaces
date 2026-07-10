@@ -53,7 +53,7 @@
     },
     "dotSize": {
         "type": "spinbutton",
-        "default": 15,
+        "default": 20,
         "min": 8,
         "max": 64,
         "step": 1,
