@@ -35,7 +35,7 @@
     },
     "panelIconSize": {
         "type": "spinbutton",
-        "default": 22,
+        "default": 23,
         "min": 12,
         "max": 48,
         "step": 1,
@@ -53,7 +53,7 @@
     },
     "emojiZoom": {
         "type": "spinbutton",
-        "default": 115,
+        "default": 85,
         "min": 80,
         "max": 200,
         "step": 5,
@@ -63,7 +63,7 @@
     },
     "dotSize": {
         "type": "spinbutton",
-        "default": 20,
+        "default": 15,
         "min": 8,
         "max": 64,
         "step": 1,
@@ -72,7 +72,7 @@
     },
     "dotSizeSmall": {
         "type": "spinbutton",
-        "default": 12,
+        "default": 15,
         "min": 8,
         "max": 64,
         "step": 1,

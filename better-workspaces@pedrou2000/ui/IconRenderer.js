@@ -92,7 +92,7 @@ function _download(url, dest, cb) {
 
 // Paint-only zoom applied to emoji labels; user-tunable (setEmojiScale) because
 // how much baked-in bitmap margin to eat is a perceptual call, not a computable one.
-let _emojiScale = 1.15;
+let _emojiScale = AppletDir.lib.constants.Constants.PANEL_EMOJI_ZOOM;
 
 function setEmojiScale(scale) {
     _emojiScale = scale > 0 ? scale : 1;

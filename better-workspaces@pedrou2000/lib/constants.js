@@ -9,10 +9,11 @@ var Constants = {
     OSD_HIDE_MS: 900, // project-aware OSD auto-hide
 
     // Sizes (px)
-    PANEL_ICON_SIZE: 22, // project icons in the panel
+    PANEL_ICON_SIZE: 23, // project icons in the panel
     PANEL_PROJECT_SPACING: 2, // px of horizontal margin each side of a project icon
-    PANEL_DOT_SIZE: 20, // font-size (px) of the active workspace dot (●)
-    PANEL_DOT_SIZE_SMALL: 12, // font-size (px) of the inactive workspace dots (○)
+    PANEL_DOT_SIZE: 15, // font-size (px) of the active workspace dot (●)
+    PANEL_DOT_SIZE_SMALL: 15, // font-size (px) of the inactive workspace dots (○)
+    PANEL_EMOJI_ZOOM: 0.85, // paint-only scale on emoji labels (see IconRenderer)
     ROW_ICON_SIZE: 20, // project icons in the toggle panel rows
 
     // Defaults
