@@ -95,18 +95,15 @@ function _download(url, dest, cb) {
 function makeActor(icon, name, size, onReady) {
     size = size || 22;
     if (icon && icon.type === "emoji" && icon.value) {
-        // Font stays under the box height so the glyph's ascent/descent doesn't
-        // overflow and misalign the row; the WIDTH hugs the glyph (an emoji's
-        // advance ≈ its font size) — a full-size-wide box would leave air on both
-        // sides that reads as extra inter-icon spacing vs edge-filling St.Icons.
-        const fontPx = Math.round(size * 0.82);
+        // Locked to the image-icon box; font a touch under it so the glyph's
+        // ascent/descent doesn't overflow and misalign the row.
         return _boxedLabel(
             "better-workspaces-icon-emoji",
             icon.value,
             "font-size: " +
-                fontPx +
+                Math.round(size * 0.82) +
                 "px; width: " +
-                fontPx +
+                size +
                 "px; height: " +
                 size +
                 "px; text-align: center;",
