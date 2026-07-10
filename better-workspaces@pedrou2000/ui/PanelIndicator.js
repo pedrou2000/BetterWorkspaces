@@ -217,8 +217,8 @@ var PanelIndicator = class PanelIndicator {
             return;
         }
 
-        // Uniform box height so different-sized glyphs share one center (else baseline).
-        const boxH = Math.max(this._dotSize, this._dotSizeSmall);
+        // Box taller than the largest font so even the biggest glyph's line box centers.
+        const boxH = Math.ceil(Math.max(this._dotSize, this._dotSizeSmall) * 1.4);
         for (let i = 0; i < p.wsCount; i++) {
             const active = i === loc.localIdx;
             // ○ not ·: the middle dot barely fills its box, so its size won't scale.
