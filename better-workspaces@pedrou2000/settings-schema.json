@@ -51,6 +51,16 @@
         "units": "px",
         "description": "Space between project icons"
     },
+    "emojiZoom": {
+        "type": "spinbutton",
+        "default": 115,
+        "min": 80,
+        "max": 200,
+        "step": 5,
+        "units": "%",
+        "description": "Emoji icon zoom",
+        "tooltip": "Emoji fonts bake transparent margin into each glyph, so emoji look smaller and more spaced than image icons. Zoom is visual only (layout boxes stay aligned); raise it until emoji match your image icons."
+    },
     "dotSize": {
         "type": "spinbutton",
         "default": 20,

@@ -90,6 +90,14 @@ function _download(url, dest, cb) {
         });
 }
 
+// Paint-only zoom applied to emoji labels; user-tunable (setEmojiScale) because
+// how much baked-in bitmap margin to eat is a perceptual call, not a computable one.
+let _emojiScale = 1.15;
+
+function setEmojiScale(scale) {
+    _emojiScale = scale > 0 ? scale : 1;
+}
+
 // icon: {type,value}|null. onReady() fires after a successful async download so
 // the caller can swap in the real icon (returns a fallback meanwhile).
 function makeActor(icon, name, size, onReady) {
@@ -114,7 +122,7 @@ function makeActor(icon, name, size, onReady) {
         // only (never layout), so the box metrics the row alignment relies on are
         // untouched; the drawn glyph just grows into its own baked-in air.
         label.set_pivot_point(0.5, 0.5);
-        label.set_scale(1.15, 1.15);
+        label.set_scale(_emojiScale, _emojiScale);
         return label;
     }
 
@@ -144,4 +152,5 @@ function makeActor(icon, name, size, onReady) {
 
 var IconRenderer = {
     makeActor: makeActor,
+    setEmojiScale: setEmojiScale,
 };

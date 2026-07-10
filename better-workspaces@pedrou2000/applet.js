@@ -19,6 +19,7 @@ const ProjectStore = AppletDir.core.ProjectStore.ProjectStore;
 const DeckCoordinator = AppletDir.core.DeckCoordinator.DeckCoordinator;
 const KeybindingCoordinator = AppletDir.core.KeybindingCoordinator.KeybindingCoordinator;
 const PanelIndicator = AppletDir.ui.PanelIndicator.PanelIndicator;
+const IconRenderer = AppletDir.ui.IconRenderer.IconRenderer;
 const ProjectSwitcher = AppletDir.ui.ProjectSwitcher.ProjectSwitcher;
 const ProjectTogglePanel = AppletDir.ui.ProjectTogglePanel.ProjectTogglePanel;
 const OSD = AppletDir.ui.OSD.OSD;
@@ -79,6 +80,7 @@ var MyApplet = class MyApplet extends Applet.Applet {
             this._initSettingsAndSync(instanceId);
             this.deckCoord.loadDeckFromStore();
 
+            IconRenderer.setEmojiScale(this.settings.getValue("emojiZoom") / 100);
             this.panelUI = new PanelIndicator(this.actor, this.controller, orientation, {
                 onManage: () => this.openTogglePanel(),
                 iconSize: this.settings.getValue("panelIconSize"),
@@ -104,6 +106,15 @@ var MyApplet = class MyApplet extends Applet.Applet {
                     if (this.panelUI) {
                         this.panelUI.setSpacing(this.settings.getValue("projectSpacing"));
                     }
+                },
+            );
+            this.settings.bindProperty(
+                Settings.BindingDirection.IN,
+                "emojiZoom",
+                "emojiZoom",
+                () => {
+                    IconRenderer.setEmojiScale(this.settings.getValue("emojiZoom") / 100);
+                    if (this.panelUI) this.panelUI.rebuild(); // existing labels keep their old scale
                 },
             );
             this.settings.bindProperty(Settings.BindingDirection.IN, "dotSize", "dotSize", () => {
