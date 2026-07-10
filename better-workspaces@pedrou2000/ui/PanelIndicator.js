@@ -217,8 +217,7 @@ var PanelIndicator = class PanelIndicator {
             return;
         }
 
-        // Uniform box height so different-sized glyphs share one vertical center
-        // (text aligns by baseline otherwise).
+        // Uniform box height so different-sized glyphs share one center (else baseline).
         const boxH = Math.max(this._dotSize, this._dotSizeSmall);
         for (let i = 0; i < p.wsCount; i++) {
             const active = i === loc.localIdx;
