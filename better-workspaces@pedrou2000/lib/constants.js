@@ -11,8 +11,8 @@ var Constants = {
     // Sizes (px)
     PANEL_ICON_SIZE: 22, // project icons in the panel
     PANEL_PROJECT_SPACING: 2, // px of horizontal margin each side of a project icon
-    PANEL_DOT_SIZE: 30, // font-size (px) of the active workspace dot (●)
-    PANEL_DOT_SIZE_SMALL: 30, // font-size (px) of the inactive workspace dots (·)
+    PANEL_DOT_SIZE: 15, // font-size (px) of the active workspace dot (●)
+    PANEL_DOT_SIZE_SMALL: 12, // font-size (px) of the inactive workspace dots (○)
     ROW_ICON_SIZE: 20, // project icons in the toggle panel rows
 
     // Defaults

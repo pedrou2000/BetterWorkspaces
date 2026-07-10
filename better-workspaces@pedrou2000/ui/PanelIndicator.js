@@ -219,9 +219,11 @@ var PanelIndicator = class PanelIndicator {
 
         for (let i = 0; i < p.wsCount; i++) {
             const active = i === loc.localIdx;
+            // ○ (not ·) for inactive: the middle dot barely fills its em box, so
+            // its size looks fixed however large the font; the ring scales visibly.
             const dot = new St.Button({
                 style_class: "better-workspaces-dot",
-                label: active ? "●" : "·",
+                label: active ? "●" : "○",
                 style: "font-size: " + (active ? this._dotSize : this._dotSizeSmall) + "px;",
                 reactive: true,
             });

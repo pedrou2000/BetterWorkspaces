@@ -60,7 +60,7 @@
     padding: 0 4px 0 10px;
 }
 
-/* carousel dots: large ● = current, small · = others; font-size is set in JS */
+/* carousel dots: ● = current, ○ = others; font-size is set in JS */
 .better-workspaces-dot {
     padding: 0 2px;
     color: #8899ff;
