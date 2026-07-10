@@ -175,12 +175,12 @@ var PanelIndicator = class PanelIndicator {
         if (this._posBox) this._renderDots(loc);
     }
 
-    // Clickable carousel dots for the strip; nothing for a 1-workspace project,
+    // Clickable carousel dots for the strip (shown even for a single workspace);
     // a compact "n/m" label when the strip is too long to click dot-by-dot.
     _renderDots(loc) {
         this._posBox.destroy_all_children();
         const p = loc ? this.controller.state.getProject(loc.projectIdx) : null;
-        this._posBox.visible = !!(p && p.wsCount > 1);
+        this._posBox.visible = !!p;
         if (!this._posBox.visible) return;
 
         if (p.wsCount > 12) {
