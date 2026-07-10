@@ -45,7 +45,12 @@ function _fallbackLabel(name, size) {
     return new St.Label({
         style_class: "better-workspaces-icon-fallback",
         text: ch,
-        style: "font-size: " + Math.round(size * 0.7) + "px;",
+        style:
+            "font-size: " +
+            Math.round(size * 0.7) +
+            "px; width: " +
+            size +
+            "px; text-align: center;",
     });
 }
 
@@ -86,10 +91,18 @@ function _download(url, dest, cb) {
 function makeActor(icon, name, size, onReady) {
     size = size || 22;
     if (icon && icon.type === "emoji" && icon.value) {
+        // Pin to the same square box as image icons and center the glyph: emoji
+        // fonts carry intrinsic side-bearing, so an unconstrained label is wider
+        // than a tightly-cropped St.Icon and reads as extra inter-icon spacing.
         return new St.Label({
             style_class: "better-workspaces-icon-emoji",
             text: icon.value,
-            style: "font-size: " + Math.round(size * 0.85) + "px;",
+            style:
+                "font-size: " +
+                Math.round(size * 0.85) +
+                "px; width: " +
+                size +
+                "px; text-align: center;",
         });
     }
 
