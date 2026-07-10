@@ -42,6 +42,15 @@
         "units": "px",
         "description": "Panel icon size"
     },
+    "projectSpacing": {
+        "type": "spinbutton",
+        "default": 2,
+        "min": 0,
+        "max": 16,
+        "step": 1,
+        "units": "px",
+        "description": "Space between project icons"
+    },
     "keybindingsSection": {
         "type": "section",
         "description": "Keyboard shortcuts"

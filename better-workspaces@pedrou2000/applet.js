@@ -82,6 +82,7 @@ var MyApplet = class MyApplet extends Applet.Applet {
             this.panelUI = new PanelIndicator(this.actor, this.controller, orientation, {
                 onManage: () => this.openTogglePanel(),
                 iconSize: this.settings.getValue("panelIconSize"),
+                spacing: this.settings.getValue("projectSpacing"),
             });
             this.settings.bindProperty(
                 Settings.BindingDirection.IN,
@@ -90,6 +91,16 @@ var MyApplet = class MyApplet extends Applet.Applet {
                 () => {
                     if (this.panelUI) {
                         this.panelUI.setIconSize(this.settings.getValue("panelIconSize"));
+                    }
+                },
+            );
+            this.settings.bindProperty(
+                Settings.BindingDirection.IN,
+                "projectSpacing",
+                "projectSpacing",
+                () => {
+                    if (this.panelUI) {
+                        this.panelUI.setSpacing(this.settings.getValue("projectSpacing"));
                     }
                 },
             );

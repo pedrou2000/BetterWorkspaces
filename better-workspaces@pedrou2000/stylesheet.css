@@ -6,9 +6,8 @@
 }
 
 .better-workspaces-project {
-    /* Square-ish, compact: small symmetric padding + a hair of gap between icons */
+    /* Square-ish, compact; horizontal margin (gap between icons) is set in JS. */
     padding: 2px;
-    margin: 0 3px;
     border-radius: 4px;
     color: #bbbbbb;
 }
