@@ -8,7 +8,7 @@
 .better-workspaces-project {
     /* Square-ish, compact: small symmetric padding + a hair of gap between icons */
     padding: 2px;
-    margin: 0 1px;
+    margin: 0 3px;
     border-radius: 4px;
     color: #bbbbbb;
 }
