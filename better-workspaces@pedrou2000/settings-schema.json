@@ -51,6 +51,15 @@
         "units": "px",
         "description": "Space between project icons"
     },
+    "dotSize": {
+        "type": "spinbutton",
+        "default": 15,
+        "min": 8,
+        "max": 40,
+        "step": 1,
+        "units": "px",
+        "description": "Workspace dot size"
+    },
     "keybindingsSection": {
         "type": "section",
         "description": "Keyboard shortcuts"

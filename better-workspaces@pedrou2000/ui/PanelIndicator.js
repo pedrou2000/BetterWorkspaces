@@ -10,6 +10,7 @@ const L = AppletDir.lib.logger.Logger.makeLogger("panel");
 
 const DEFAULT_ICON_SIZE = AppletDir.lib.constants.Constants.PANEL_ICON_SIZE;
 const DEFAULT_SPACING = AppletDir.lib.constants.Constants.PANEL_PROJECT_SPACING;
+const DEFAULT_DOT_SIZE = AppletDir.lib.constants.Constants.PANEL_DOT_SIZE;
 
 var PanelIndicator = class PanelIndicator {
     constructor(appletActor, controller, orientation, opts) {
@@ -19,6 +20,7 @@ var PanelIndicator = class PanelIndicator {
         this._opts = opts || {};
         this._iconSize = this._opts.iconSize || DEFAULT_ICON_SIZE;
         this._spacing = this._opts.spacing != null ? this._opts.spacing : DEFAULT_SPACING;
+        this._dotSize = this._opts.dotSize || DEFAULT_DOT_SIZE;
         this._buttons = [];
         this._posLabel = null;
         this._status = "ok";
@@ -42,6 +44,11 @@ var PanelIndicator = class PanelIndicator {
     setSpacing(px) {
         this._spacing = px != null ? px : DEFAULT_SPACING;
         this.rebuild();
+    }
+
+    setDotSize(px) {
+        this._dotSize = px || DEFAULT_DOT_SIZE;
+        this.update();
     }
 
     // Status glyph + tooltip: "unconfigured" | "loading" | "ok" | "error".
@@ -191,11 +198,13 @@ var PanelIndicator = class PanelIndicator {
         this._posBox.visible = !!p;
         if (!this._posBox.visible) return;
 
+        const dotStyle = "font-size: " + this._dotSize + "px;";
         if (p.wsCount > 12) {
             this._posBox.add(
                 new St.Label({
                     style_class: "better-workspaces-dot",
                     text: loc.localIdx + 1 + "/" + p.wsCount,
+                    style: dotStyle,
                 }),
                 { y_align: St.Align.MIDDLE, y_fill: false },
             );
@@ -206,6 +215,7 @@ var PanelIndicator = class PanelIndicator {
             const dot = new St.Button({
                 style_class: "better-workspaces-dot",
                 label: i === loc.localIdx ? "●" : "·",
+                style: dotStyle,
                 reactive: true,
             });
             dot._localIdx = i;
