@@ -40,9 +40,13 @@ function _cachePathFor(url) {
 }
 
 // Fallback glyph: the project name's first character, uppercased.
-function _fallbackLabel(name) {
+function _fallbackLabel(name, size) {
     const ch = name && name.length ? name.trim().charAt(0).toUpperCase() : "?";
-    return new St.Label({ style_class: "better-workspaces-icon-fallback", text: ch });
+    return new St.Label({
+        style_class: "better-workspaces-icon-fallback",
+        text: ch,
+        style: "font-size: " + Math.round(size * 0.7) + "px;",
+    });
 }
 
 function _iconFromFile(path, size) {
@@ -80,10 +84,12 @@ function _download(url, dest, cb) {
 // icon: {type,value}|null. onReady() fires after a successful async download so
 // the caller can swap in the real icon (returns a fallback meanwhile).
 function makeActor(icon, name, size, onReady) {
+    size = size || 22;
     if (icon && icon.type === "emoji" && icon.value) {
         return new St.Label({
             style_class: "better-workspaces-icon-emoji",
             text: icon.value,
+            style: "font-size: " + Math.round(size * 0.85) + "px;",
         });
     }
 
@@ -91,7 +97,7 @@ function makeActor(icon, name, size, onReady) {
         const path = _cachePathFor(icon.value);
         if (Gio.File.new_for_path(path).query_exists(null)) {
             try {
-                return _iconFromFile(path, size || 22);
+                return _iconFromFile(path, size);
             } catch (e) {
                 L.error("iconFromFile: " + e.toString());
             }
@@ -105,10 +111,10 @@ function makeActor(icon, name, size, onReady) {
                 }
             }
         });
-        return _fallbackLabel(name);
+        return _fallbackLabel(name, size);
     }
 
-    return _fallbackLabel(name);
+    return _fallbackLabel(name, size);
 }
 
 var IconRenderer = {

@@ -142,19 +142,11 @@
     font-weight: bold;
 }
 
-/* Icon variants rendered inside project buttons */
-.better-workspaces-icon-emoji {
-    font-size: 16px;
-}
-
+/* Icon variants. font-size is set inline in JS (scales with the icon size);
+   emoji/image/fallback all track the configured size that way. */
 .better-workspaces-icon-fallback {
     font-weight: bold;
-    font-size: 13px;
     color: #cccccc;
-}
-
-.better-workspaces-icon-img {
-    /* St.Icon sizing is driven by icon_size in JS; keep spacing tidy */
 }
 
 /* Super+Tab switcher overlay */
