@@ -53,12 +53,21 @@
     },
     "dotSize": {
         "type": "spinbutton",
-        "default": 15,
+        "default": 30,
         "min": 8,
-        "max": 40,
+        "max": 64,
         "step": 1,
         "units": "px",
-        "description": "Workspace dot size"
+        "description": "Active workspace dot size"
+    },
+    "dotSizeSmall": {
+        "type": "spinbutton",
+        "default": 30,
+        "min": 8,
+        "max": 64,
+        "step": 1,
+        "units": "px",
+        "description": "Other workspace dot size"
     },
     "keybindingsSection": {
         "type": "section",

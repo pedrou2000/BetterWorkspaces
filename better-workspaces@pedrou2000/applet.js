@@ -84,6 +84,7 @@ var MyApplet = class MyApplet extends Applet.Applet {
                 iconSize: this.settings.getValue("panelIconSize"),
                 spacing: this.settings.getValue("projectSpacing"),
                 dotSize: this.settings.getValue("dotSize"),
+                dotSizeSmall: this.settings.getValue("dotSizeSmall"),
             });
             this.settings.bindProperty(
                 Settings.BindingDirection.IN,
@@ -108,6 +109,16 @@ var MyApplet = class MyApplet extends Applet.Applet {
             this.settings.bindProperty(Settings.BindingDirection.IN, "dotSize", "dotSize", () => {
                 if (this.panelUI) this.panelUI.setDotSize(this.settings.getValue("dotSize"));
             });
+            this.settings.bindProperty(
+                Settings.BindingDirection.IN,
+                "dotSizeSmall",
+                "dotSizeSmall",
+                () => {
+                    if (this.panelUI) {
+                        this.panelUI.setDotSizeSmall(this.settings.getValue("dotSizeSmall"));
+                    }
+                },
+            );
             this.switcher = new ProjectSwitcher(this.controller);
             this.switcher.onCommit(() => this._afterNav());
 
