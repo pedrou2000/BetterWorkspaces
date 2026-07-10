@@ -93,9 +93,11 @@ var Navigation = class Navigation {
         return this.goToLocalWorkspace(loc.localIdx + 1);
     }
 
+    // Before the strip start grows it at the front and lands on the new workspace.
     prevLocalWorkspace() {
         const loc = this._c.currentLocation();
         if (!loc) return false;
+        if (loc.localIdx <= 0) return this._c.addWorkspaceToActiveProject(true);
         return this.goToLocalWorkspace(loc.localIdx - 1);
     }
 
@@ -131,9 +133,15 @@ var Navigation = class Navigation {
         return this.moveWindowToLocalWorkspace(loc.localIdx + 1);
     }
 
+    // Before the strip start grows it at the front, then moves the window there.
     moveWindowToPrevLocal() {
-        const loc = this._c.currentLocation();
+        const c = this._c;
+        const loc = c.currentLocation();
         if (!loc) return false;
+        if (loc.localIdx <= 0) {
+            c.lifecycle.growActiveProjectStrip(true);
+            return this.moveWindowToLocalWorkspace(0);
+        }
         return this.moveWindowToLocalWorkspace(loc.localIdx - 1);
     }
 

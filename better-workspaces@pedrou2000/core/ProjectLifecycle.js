@@ -32,13 +32,15 @@ var ProjectLifecycle = class ProjectLifecycle {
 
     // Grow the active strip by one without navigating. Cinnamon only appends at
     // the global end, so append then native-reorder the new empty workspace into
-    // the partition's slot. Returns the new last local index, or -1 on failure.
-    growActiveProjectStrip() {
+    // the partition's slot (its front when atStart, else its end). Returns the
+    // new workspace's local index, or -1 on failure.
+    growActiveProjectStrip(atStart) {
         const c = this._c;
         const pIdx = c.state.activeProjectIdx;
         const counts = c.state.counts();
         const oldTotal = Mapping.totalWorkspaces(counts);
-        const insertAt = Mapping.offsetOf(counts, pIdx) + counts[pIdx];
+        const offset = Mapping.offsetOf(counts, pIdx);
+        const insertAt = atStart ? offset : offset + counts[pIdx];
 
         if (c.wm.createWorkspace() < 0) return -1; // appended at oldTotal
         if (insertAt < oldTotal) {
@@ -57,11 +59,11 @@ var ProjectLifecycle = class ProjectLifecycle {
                 insertAt +
                 ")",
         );
-        return c.state.getProject(pIdx).wsCount - 1;
+        return atStart ? 0 : c.state.getProject(pIdx).wsCount - 1;
     }
 
-    addWorkspaceToActiveProject() {
-        const newLocal = this.growActiveProjectStrip();
+    addWorkspaceToActiveProject(atStart) {
+        const newLocal = this.growActiveProjectStrip(atStart);
         if (newLocal < 0) return false;
         return this._c.goToLocalWorkspace(newLocal);
     }

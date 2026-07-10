@@ -95,10 +95,16 @@ test("project cycling wraps in both directions", () => {
     assert.equal(controller.currentLocation().projectIdx, 2);
 });
 
-test("prevLocalWorkspace stops at the strip start", () => {
-    const { controller } = makeController(DECK);
-    assert.equal(controller.prevLocalWorkspace(), false); // a local 0: no-op
-    assert.deepEqual(controller.currentLocation(), { projectIdx: 0, localIdx: 0 });
+test("prevLocalWorkspace at the strip start grows a new front workspace", () => {
+    const { controller, wm } = makeController(DECK);
+    controller.goToProject(2); // c: single ws at flat 5
+    wm.addWindow(5, "c-home");
+    assert.equal(controller.prevLocalWorkspace(), true);
+    assert.deepEqual(controller.state.counts(), [2, 3, 2]);
+    // Lands on the new front workspace; the old home shifted right with its window.
+    assert.deepEqual(controller.currentLocation(), { projectIdx: 2, localIdx: 0 });
+    assert.deepEqual(wm.layout()[5], []); // new empty front
+    assert.deepEqual(wm.layout()[6], ["c-home"]);
 });
 
 test("nextLocalWorkspace at the strip end grows the strip", () => {
@@ -142,6 +148,16 @@ test("moveWindowToNextLocal at the strip end grows the strip first", () => {
     assert.deepEqual(controller.state.counts(), [2, 3, 2]);
     assert.deepEqual(controller.currentLocation(), { projectIdx: 2, localIdx: 1 });
     assert.deepEqual(wm.layout()[6], ["notes"]);
+});
+
+test("moveWindowToPrevLocal at the strip start grows a front workspace and moves there", () => {
+    const { controller, wm } = makeController(DECK);
+    controller.goToProject(2); // c: single ws at flat 5
+    wm.focusedWindow = wm.addWindow(5, "notes");
+    assert.equal(controller.moveWindowToPrevLocal(), true);
+    assert.deepEqual(controller.state.counts(), [2, 3, 2]);
+    assert.deepEqual(controller.currentLocation(), { projectIdx: 2, localIdx: 0 });
+    assert.deepEqual(wm.layout()[5], ["notes"]); // window on the new front workspace
 });
 
 test("moveWindowToProject lands on that project's last-used local", () => {

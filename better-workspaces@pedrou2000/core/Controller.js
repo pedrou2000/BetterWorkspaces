@@ -80,8 +80,8 @@ var Controller = class Controller {
         this.reorder.onOrderChanged(cb);
     }
 
-    addWorkspaceToActiveProject() {
-        return this.lifecycle.addWorkspaceToActiveProject();
+    addWorkspaceToActiveProject(atStart) {
+        return this.lifecycle.addWorkspaceToActiveProject(atStart);
     }
     removeLastWorkspaceOfActiveProject() {
         return this.lifecycle.removeLastWorkspaceOfActiveProject();
