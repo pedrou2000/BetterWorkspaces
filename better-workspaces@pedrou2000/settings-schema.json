@@ -29,6 +29,19 @@
         "description": "Sync from Notion now",
         "callback": "onSyncNowClicked"
     },
+    "appearanceSection": {
+        "type": "section",
+        "description": "Appearance"
+    },
+    "panelIconSize": {
+        "type": "spinbutton",
+        "default": 22,
+        "min": 12,
+        "max": 48,
+        "step": 1,
+        "units": "px",
+        "description": "Panel icon size"
+    },
     "keybindingsSection": {
         "type": "section",
         "description": "Keyboard shortcuts"

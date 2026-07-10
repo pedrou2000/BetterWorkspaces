@@ -69,11 +69,15 @@ var DeckCoordinator = class DeckCoordinator {
 
         const result = this._store.merge(projects, deckIds);
 
-        for (let i = 0; i < result.newlyInWorkspace.length; i++) {
-            const p = result.newlyInWorkspace[i];
-            if (this._controller.state.indexOfProjectId(p.id) >= 0) continue;
-            this._controller.addProjectLive(this.toDef(p));
-            L.log("onPull: auto-appended newly-on project " + p.name);
+        if (this._controller.state.indexOfProjectId("placeholder") >= 0) {
+            this.loadDeckFromStore(); // first real pull replaces the placeholder deck
+        } else {
+            for (let i = 0; i < result.newlyInWorkspace.length; i++) {
+                const p = result.newlyInWorkspace[i];
+                if (this._controller.state.indexOfProjectId(p.id) >= 0) continue;
+                this._controller.addProjectLive(this.toDef(p));
+                L.log("onPull: auto-appended newly-on project " + p.name);
+            }
         }
 
         this._rebuildPanel();

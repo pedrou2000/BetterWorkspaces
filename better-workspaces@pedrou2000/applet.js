@@ -31,7 +31,9 @@ const Constants = AppletDir.lib.constants.Constants;
 const L = AppletDir.lib.logger.Logger.makeLogger("applet");
 
 // Keeps the applet non-empty on first run/unconfigured; replaced by the real deck.
-const PLACEHOLDER_PROJECTS = [{ id: "placeholder", name: "Connect Notion", wsCount: 1 }];
+const PLACEHOLDER_PROJECTS = [
+    { id: "placeholder", name: "Connect Notion", wsCount: 1, icon: { type: "emoji", value: "🔌" } },
+];
 
 const DEFAULT_WS_PER_PROJECT = Constants.DEFAULT_WS_PER_PROJECT;
 
@@ -74,7 +76,18 @@ var MyApplet = class MyApplet extends Applet.Applet {
 
             this.panelUI = new PanelIndicator(this.actor, this.controller, orientation, {
                 onManage: () => this.openTogglePanel(),
+                iconSize: this.settings.getValue("panelIconSize"),
             });
+            this.settings.bindProperty(
+                Settings.BindingDirection.IN,
+                "panelIconSize",
+                "panelIconSize",
+                () => {
+                    if (this.panelUI) {
+                        this.panelUI.setIconSize(this.settings.getValue("panelIconSize"));
+                    }
+                },
+            );
             this.switcher = new ProjectSwitcher(this.controller);
             this.switcher.onCommit(() => this._afterNav());
 

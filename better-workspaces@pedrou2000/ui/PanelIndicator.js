@@ -8,7 +8,7 @@ const IconRenderer = AppletDir.ui.IconRenderer.IconRenderer;
 const DndReorderHelper = AppletDir.ui.DndReorder.DndReorderHelper;
 const L = AppletDir.lib.logger.Logger.makeLogger("panel");
 
-const ICON_SIZE = AppletDir.lib.constants.Constants.PANEL_ICON_SIZE;
+const DEFAULT_ICON_SIZE = AppletDir.lib.constants.Constants.PANEL_ICON_SIZE;
 
 var PanelIndicator = class PanelIndicator {
     constructor(appletActor, controller, orientation, opts) {
@@ -16,6 +16,7 @@ var PanelIndicator = class PanelIndicator {
         this.controller = controller;
         this.orientation = orientation;
         this._opts = opts || {};
+        this._iconSize = this._opts.iconSize || DEFAULT_ICON_SIZE;
         this._buttons = [];
         this._posLabel = null;
         this._status = "ok";
@@ -28,6 +29,11 @@ var PanelIndicator = class PanelIndicator {
         });
         this._dnd.attachTo(this.actor);
 
+        this.rebuild();
+    }
+
+    setIconSize(px) {
+        this._iconSize = px || DEFAULT_ICON_SIZE;
         this.rebuild();
     }
 
@@ -98,7 +104,7 @@ var PanelIndicator = class PanelIndicator {
 
             // Draggable to reorder; plain clicks still switch (drag starts past threshold).
             this._dnd.makeDraggable(btn, i, () =>
-                IconRenderer.makeActor(p.icon, p.name, ICON_SIZE),
+                IconRenderer.makeActor(p.icon, p.name, this._iconSize),
             );
 
             this.actor.add(btn, { y_align: St.Align.MIDDLE, y_fill: false });
@@ -149,7 +155,7 @@ var PanelIndicator = class PanelIndicator {
     // Capture the BUTTON, not its index: a reorder mid-download must not paint
     // the icon onto whatever button now sits at that index.
     _makeIcon(project, btn) {
-        return IconRenderer.makeActor(project.icon, project.name, ICON_SIZE, () => {
+        return IconRenderer.makeActor(project.icon, project.name, this._iconSize, () => {
             if (this._buttons.indexOf(btn) === -1) return; // rebuilt since
             try {
                 btn.set_child(this._makeIcon(project, btn));

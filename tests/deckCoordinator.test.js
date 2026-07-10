@@ -292,6 +292,18 @@ test("onPull doesn't double-append a project already in the deck", () => {
     assert.deepEqual(deckIds(controller), ["a"]);
 });
 
+test("onPull replaces the placeholder deck with real projects (no leftover)", () => {
+    const { coord, controller } = makeStack(); // empty cache -> placeholder deck
+    coord.loadDeckFromStore();
+    assert.deepEqual(deckIds(controller), ["placeholder"]);
+
+    coord.onPull([
+        { id: "a", name: "A", icon: null, notionUrl: null, inWorkspace: true, order: 0 },
+        { id: "b", name: "B", icon: null, notionUrl: null, inWorkspace: true, order: 1 },
+    ]);
+    assert.deepEqual(deckIds(controller), ["a", "b"]);
+});
+
 // reorderFromPanel
 
 test("reorderFromPanel resolves the moved id to its deck index and reorders", () => {
