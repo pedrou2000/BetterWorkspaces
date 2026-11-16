@@ -3,9 +3,14 @@
 // Handlers are ID-KEYED, never row/deck positions (a background sync can refresh
 // the list under the panel): onToggle(project, newValue)->Promise (reject reverts
 // the switch), onReorder(movedId, toOnPos). refresh() re-renders while open.
+//
+// Keyboard: key focus never leaves the search entry (typing always filters);
+// Tab/Down and Shift+Tab/Up move a highlight over the rows and then the Close
+// button (as Tab would in any dialog); Enter activates whatever is highlighted.
 
 const St = imports.gi.St;
 const Clutter = imports.gi.Clutter;
+const Mainloop = imports.mainloop;
 const ModalDialog = imports.ui.modalDialog;
 
 const AppletDir = imports.ui.appletManager.applets["better-workspaces@pedrou2000"];
@@ -14,6 +19,9 @@ const DndReorderHelper = AppletDir.ui.DndReorder.DndReorderHelper;
 const L = AppletDir.lib.logger.Logger.makeLogger("toggle-panel");
 
 const ROW_ICON_SIZE = AppletDir.lib.constants.Constants.ROW_ICON_SIZE;
+
+// _selectedId value for the Close button; can't collide, project ids are UUIDs.
+const CLOSE_STOP = "__close__";
 
 var ProjectTogglePanel = class ProjectTogglePanel {
     // getProjects() returns {id,name,icon,inWorkspace,...} with the ON projects
@@ -24,6 +32,12 @@ var ProjectTogglePanel = class ProjectTogglePanel {
         this._onReorder = onReorder;
         this._rows = [];
         this._filter = "";
+        // Highlighted row, by project id so it survives re-renders and follows a
+        // project across sections (or CLOSE_STOP). Starts empty on purpose:
+        // toggling OFF closes windows unconfirmed, so a stray Enter must not hit
+        // the first match.
+        this._selectedId = null;
+        this._closeButton = null;
 
         // DnD works in row positions; we translate the source position to the
         // project id at drop time so the applet never sees a drifted index.
@@ -75,8 +89,13 @@ var ProjectTogglePanel = class ProjectTogglePanel {
         } catch (e) {}
         this._search.clutter_text.connect("text-changed", () => {
             this._filter = this._search.get_text().toLowerCase();
+            // Back to filtering: Enter must not dismiss the panel from here.
+            if (this._selectedId === CLOSE_STOP) this._selectedId = null;
             this._renderRows();
         });
+        this._search.clutter_text.connect("key-press-event", (actor, event) =>
+            this._onKeyPress(event),
+        );
         box.add(this._search);
 
         this._scroll = new St.ScrollView({ style_class: "better-workspaces-toggle-scroll" });
@@ -85,17 +104,25 @@ var ProjectTogglePanel = class ProjectTogglePanel {
         this._scroll.add_actor(this._listBox);
         box.add(this._scroll, { expand: true });
 
+        box.add(
+            new St.Label({
+                style_class: "better-workspaces-toggle-hint",
+                text: "Tab / ↑↓ to move · Enter to toggle · Esc to close",
+            }),
+        );
+
         this._dnd.attachTo(this._listBox);
 
         this._renderRows();
 
-        this._dialog.setButtons([
-            {
-                label: "Close",
-                action: () => this.close(),
-                key: Clutter.KEY_Escape,
-            },
-        ]);
+        // ModalDialog hands the St.Button back on the info object.
+        const closeInfo = {
+            label: "Close",
+            action: () => this.close(),
+            key: Clutter.KEY_Escape,
+        };
+        this._dialog.setButtons([closeInfo]);
+        this._closeButton = closeInfo.button || null;
 
         this._dialog.open();
         global.stage.set_key_focus(this._search);
@@ -145,6 +172,97 @@ var ProjectTogglePanel = class ProjectTogglePanel {
                 }),
             );
         }
+
+        if (this._selectedIndex() < 0) this._selectedId = null; // filtered out
+        this._paintSelection();
+        // The new rows aren't allocated until the next frame.
+        Mainloop.idle_add(() => {
+            this._scrollToSelection();
+            return false;
+        });
+    }
+
+    // Stop order: the rows top to bottom, then the Close button.
+    _stopCount() {
+        return this._rows.length + (this._closeButton ? 1 : 0);
+    }
+
+    _selectedIndex() {
+        if (this._selectedId === CLOSE_STOP) return this._closeButton ? this._rows.length : -1;
+        for (let i = 0; i < this._rows.length; i++) {
+            if (this._rows[i].project.id === this._selectedId) return i;
+        }
+        return -1;
+    }
+
+    _paintSelection() {
+        for (let i = 0; i < this._rows.length; i++) {
+            const row = this._rows[i];
+            if (row.project.id === this._selectedId) row.actor.add_style_pseudo_class("selected");
+            else row.actor.remove_style_pseudo_class("selected");
+        }
+        // The theme's own focus look, without giving up the entry's key focus.
+        if (this._closeButton) {
+            if (this._selectedId === CLOSE_STOP) this._closeButton.add_style_pseudo_class("focus");
+            else this._closeButton.remove_style_pseudo_class("focus");
+        }
+    }
+
+    // Wraps; from no selection, forward lands on the first stop and back on the last.
+    _moveSelection(delta) {
+        const n = this._stopCount();
+        if (n === 0) return;
+        const cur = this._selectedIndex();
+        const next = cur < 0 ? (delta > 0 ? 0 : n - 1) : (cur + delta + n) % n;
+        this._selectedId = next < this._rows.length ? this._rows[next].project.id : CLOSE_STOP;
+        this._paintSelection();
+        this._scrollToSelection();
+    }
+
+    _scrollToSelection() {
+        try {
+            if (!this._dialog) return;
+            const row = this._rows[this._selectedIndex()];
+            if (!row) return;
+            const adj = this._scroll.get_vscroll_bar().get_adjustment();
+            const box = row.actor.get_allocation_box();
+            const top = adj.get_value();
+            if (box.y1 < top) adj.set_value(box.y1);
+            else if (box.y2 > top + adj.page_size) adj.set_value(box.y2 - adj.page_size);
+        } catch (e) {
+            L.log("scrollToSelection: " + e.toString());
+        }
+    }
+
+    _activateSelection() {
+        if (this._selectedId === CLOSE_STOP) {
+            this.close();
+            return;
+        }
+        const row = this._rows[this._selectedIndex()];
+        if (!row || !row.toggle.reactive) return; // nothing picked, or change in flight
+        row.toggle.set_checked(!row.toggle.get_checked()); // what a click does itself
+        this._onRowToggled(row.project, row.toggle);
+    }
+
+    // Handled keys stop here so Tab doesn't also walk St's focus chain.
+    _onKeyPress(event) {
+        const sym = event.get_key_symbol();
+        const shift = (event.get_state() & Clutter.ModifierType.SHIFT_MASK) !== 0;
+        if (sym === Clutter.KEY_Down || (sym === Clutter.KEY_Tab && !shift)) {
+            this._moveSelection(1);
+        } else if (
+            sym === Clutter.KEY_Up ||
+            sym === Clutter.KEY_ISO_Left_Tab ||
+            (sym === Clutter.KEY_Tab && shift)
+        ) {
+            this._moveSelection(-1);
+        } else if (sym === Clutter.KEY_Return || sym === Clutter.KEY_KP_Enter) {
+            this._activateSelection();
+        } else {
+            return Clutter.EVENT_PROPAGATE;
+        }
+        return Clutter.EVENT_STOP;
     }
 
     _sectionHeader(text) {
@@ -191,7 +309,7 @@ var ProjectTogglePanel = class ProjectTogglePanel {
         row.add(toggle, { y_align: St.Align.MIDDLE, y_fill: false });
 
         this._listBox.add(row);
-        this._rows.push({ project: project, toggle: toggle });
+        this._rows.push({ project: project, toggle: toggle, actor: row });
 
         // Row carries its project id so the drop handler reports ids, not positions.
         if (onIdx >= 0) {
@@ -243,6 +361,7 @@ var ProjectTogglePanel = class ProjectTogglePanel {
         if (this._dialog) {
             this._dialog.close();
             this._dialog = null;
+            this._closeButton = null;
         }
     }
 

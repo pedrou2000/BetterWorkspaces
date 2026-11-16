@@ -104,6 +104,14 @@
 .better-workspaces-toggle-row:hover {
     background-color: rgba(255, 255, 255, 0.08);
 }
+/* selected = keyboard highlight (pseudo-class we set in JS) */
+.better-workspaces-toggle-row:selected {
+    background-color: rgba(120, 150, 255, 0.40);
+}
+.better-workspaces-toggle-hint {
+    font-size: 11px;
+    color: #999999;
+}
 .better-workspaces-toggle-name {
     font-size: 14px;
 }
