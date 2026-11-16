@@ -160,8 +160,10 @@ var DeckCoordinator = class DeckCoordinator {
         if (!this._store) throw new Error("no-store");
 
         if (newValue) {
-            // Order = max+1 so "bottom" survives reload.
-            this._controller.addProjectLive(this.toDef(project));
+            // Order = max+1 so "bottom" survives reload. Land on the new project:
+            // the user just asked for it (a sync-driven append in onPull does not).
+            const idx = this._controller.addProjectLive(this.toDef(project));
+            this._controller.goToProject(idx);
             this._store.setInWorkspace(project.id, true);
             this._store.setOrder(project.id, this._store.maxOrder() + 1);
             this._rebuildPanel();

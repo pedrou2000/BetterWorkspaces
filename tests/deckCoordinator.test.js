@@ -255,7 +255,7 @@ test("a saved layout that no longer matches the deck or the workspace total is i
 // handleToggle ON
 
 test("handleToggle ON appends to the deck, flips the flag, assigns max+1 order", async () => {
-    const { coord, store, controller, writer, hookCalls } = makeStack([
+    const { coord, store, controller, wm, writer, hookCalls } = makeStack([
         proj("a", true, 0),
         proj("b", false, null),
     ]);
@@ -264,6 +264,8 @@ test("handleToggle ON appends to the deck, flips the flag, assigns max+1 order",
     await coord.handleToggle(store.get("b"), true);
 
     assert.deepEqual(deckIds(controller), ["a", "b"]);
+    assert.equal(controller.state.activeProjectIdx, 1); // and we land on it
+    assert.equal(wm.getActiveIndex(), 1);
     assert.equal(store.get("b").inWorkspace, true);
     assert.equal(store.get("b").order, 1); // maxOrder was 0 -> 0+1
     await new Promise((r) => setImmediate(r)); // let queued pushes drain
@@ -397,7 +399,7 @@ test("removing the same project twice at once removes it once", async () => {
 // onPull
 
 test("onPull merges catalog fields and auto-appends a newly-on project", () => {
-    const { coord, store, controller, hookCalls } = makeStack([proj("a", true, 0)]);
+    const { coord, store, controller, wm, hookCalls } = makeStack([proj("a", true, 0)]);
     coord.loadDeckFromStore();
     assert.deepEqual(deckIds(controller), ["a"]);
 
@@ -409,6 +411,7 @@ test("onPull merges catalog fields and auto-appends a newly-on project", () => {
     assert.equal(store.get("a").name, "A renamed"); // catalog field took remote
     assert.equal(controller.state.getProject(0).name, "A renamed"); // deck refreshed live
     assert.deepEqual(deckIds(controller), ["a", "b"]); // b auto-appended
+    assert.equal(wm.getActiveIndex(), 0); // a background sync never moves the user
     assert.ok(hookCalls.rebuildPanel > 0);
 });
 
