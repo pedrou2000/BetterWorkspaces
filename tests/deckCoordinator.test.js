@@ -46,16 +46,11 @@ function makeAutoWriter() {
     };
 }
 
-// Dialogs double: confirm() answers from a queue; notify() is recorded.
-function makeFakeDialogs(confirmAnswers) {
-    const answers = (confirmAnswers || []).slice();
-    const calls = { confirm: [], notify: [] };
+// Dialogs double: notify() is recorded.
+function makeFakeDialogs() {
+    const calls = { notify: [] };
     return {
         calls,
-        confirm(title, msg, label) {
-            calls.confirm.push({ title, msg, label });
-            return Promise.resolve(answers.length ? answers.shift() : true);
-        },
         notify(title, msg) {
             calls.notify.push({ title, msg });
         },
@@ -101,7 +96,7 @@ function makeStore(persistence) {
 
 // Full stack: seed the cache with `cached` projects, build store + controller +
 // coordinator, and record which hooks fired.
-function makeStack(cached, confirmAnswers) {
+function makeStack(cached) {
     const persistence = makeFakePersistence();
     if (cached) persistence.writeJSON("projects-cache.json", { projects: cached });
 
@@ -110,7 +105,7 @@ function makeStack(cached, confirmAnswers) {
     store.setWriter(writer);
 
     const { controller, wm, mainloop } = makeController();
-    const dialogs = makeFakeDialogs(confirmAnswers);
+    const dialogs = makeFakeDialogs();
     const hookCalls = { rebuildPanel: 0, refresh: 0, refreshTogglePanel: 0 };
 
     const DeckCoordinator = loadGjsModule("core/DeckCoordinator.js", "DeckCoordinator");
@@ -128,14 +123,6 @@ function makeStack(cached, confirmAnswers) {
     });
 
     return { coord, store, controller, wm, mainloop, writer, dialogs, hookCalls, persistence };
-}
-
-// handleToggle OFF awaits the confirm dialog (a microtask) BEFORE
-// removeProjectLive registers its grace timeout, so we must let the microtask
-// queue drain first, then flush the fake mainloop to release the timeout.
-async function drainThenFlush(mainloop) {
-    await new Promise((r) => setImmediate(r));
-    mainloop.flush();
 }
 
 function proj(id, inWorkspace, order) {
@@ -200,50 +187,36 @@ test("handleToggle ON is idempotent — re-toggling an already-deck project does
 
 // handleToggle OFF
 
-test("handleToggle OFF confirms, removes from the deck, clears flag + order", async () => {
-    const { coord, store, controller, wm, mainloop, dialogs } = makeStack(
-        [proj("a", true, 0), proj("b", true, 1)],
-        [true],
-    );
+test("handleToggle OFF removes from the deck without asking, clears flag + order", async () => {
+    const { coord, store, controller, wm, mainloop, dialogs } = makeStack([
+        proj("a", true, 0),
+        proj("b", true, 1),
+    ]);
     coord.loadDeckFromStore();
     assert.equal(wm.getWorkspaceCount(), 2);
 
     const p = coord.handleToggle(store.get("b"), false);
-    await drainThenFlush(mainloop); // confirm resolves, then release the grace timeout
+    mainloop.flush(); // release the close-grace timeout
     await p;
 
-    assert.equal(dialogs.calls.confirm.length, 1);
+    assert.equal(dialogs.calls.notify.length, 0);
     assert.deepEqual(deckIds(controller), ["a"]);
+    assert.equal(wm.getWorkspaceCount(), 1);
     assert.equal(store.get("b").inWorkspace, false);
     assert.equal(store.get("b").order, null);
 });
 
-test("handleToggle OFF rejects with 'cancelled' and leaves the deck intact", async () => {
-    const { coord, store, controller } = makeStack(
-        [proj("a", true, 0), proj("b", true, 1)],
-        [false],
-    );
-    coord.loadDeckFromStore();
-
-    await assert.rejects(
-        () => coord.handleToggle(store.get("b"), false),
-        (e) => e.message === "cancelled",
-    );
-    assert.deepEqual(deckIds(controller), ["a", "b"]);
-    assert.equal(store.get("b").inWorkspace, true); // unchanged
-});
-
 test("handleToggle OFF surfaces windows-open: notifies, rejects, keeps the project", async () => {
-    const { coord, store, controller, wm, mainloop, dialogs } = makeStack(
-        [proj("a", true, 0), proj("b", true, 1)],
-        [true],
-    );
+    const { coord, store, controller, wm, mainloop, dialogs } = makeStack([
+        proj("a", true, 0),
+        proj("b", true, 1),
+    ]);
     coord.loadDeckFromStore();
     // b's home is flat index 1; a stubborn window that ignores the close request.
     wm.addWindow(1, "unsaved.txt");
 
     const p = coord.handleToggle(store.get("b"), false);
-    await drainThenFlush(mainloop); // grace elapses; window still there (no honorCloseRequests)
+    mainloop.flush(); // grace elapses; window still there (no honorCloseRequests)
     await assert.rejects(
         () => p,
         (e) => e.message === "windows-open",

@@ -12,7 +12,7 @@ const L = AppletDir.lib.logger.Logger.makeLogger("deck-coord");
 var DeckCoordinator = class DeckCoordinator {
     // deps: {
     //   store, controller,
-    //   dialogs: {confirm(title,msg,label)->Promise<bool>, notify(title,msg)},
+    //   dialogs: {notify(title,msg)},
     //   defaultWsPerProject: number,
     //   placeholderProjects: [{id,name,wsCount}],
     //   hooks: {rebuildPanel(), refresh(), refreshTogglePanel()},
@@ -100,7 +100,7 @@ var DeckCoordinator = class DeckCoordinator {
     }
 
     // Optimistic: store + deck update now, Notion writes queued by the store.
-    // Resolves on success; rejects only when nothing changed (cancelled/windows-open).
+    // Resolves on success; rejects only when nothing changed (windows-open).
     async handleToggle(project, newValue) {
         if (!this._store) throw new Error("no-store");
 
@@ -114,15 +114,14 @@ var DeckCoordinator = class DeckCoordinator {
             return;
         }
 
-        // Destructive: confirm, remove from the deck (closes windows), then flip
-        // the store flag only once the removal actually succeeds.
+        // Destructive, unconfirmed by design: windows get a graceful close request,
+        // so an app with unsaved work vetoes the removal (windows-open). Flip the
+        // store flag only once the removal actually succeeds.
         const deckIdx = this._controller.state.indexOfProjectId(project.id);
         if (deckIdx < 0) {
             this._store.setInWorkspace(project.id, false); // not in deck (shouldn't happen)
             return;
         }
-        const confirmed = await this._confirmRemoval(project);
-        if (!confirmed) throw new Error("cancelled");
         try {
             await this._controller.removeProjectLive(deckIdx);
         } catch (e) {
@@ -135,17 +134,6 @@ var DeckCoordinator = class DeckCoordinator {
         this._refresh();
         this._store.setInWorkspace(project.id, false);
         this._store.setOrder(project.id, null); // clear order so it sorts last if reactivated
-    }
-
-    _confirmRemoval(project) {
-        const deckIdx = this._controller.state.indexOfProjectId(project.id);
-        const p = this._controller.state.getProject(deckIdx);
-        const wsCount = p ? p.wsCount : 1;
-        return this._dialogs.confirm(
-            "Remove “" + project.name + "” from workspaces?",
-            "This will close its windows and remove its " + wsCount + " workspace(s).",
-            "Remove",
-        );
     }
 
     _notifyWindowsOpen(project, info) {

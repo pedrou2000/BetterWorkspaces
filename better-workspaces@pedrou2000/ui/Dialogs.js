@@ -1,4 +1,4 @@
-/* ui/Dialogs.js — confirm(title,msg)->Promise<bool> and notify(title,msg) modals. */
+/* ui/Dialogs.js — notify(title,msg) modal. */
 
 const St = imports.gi.St;
 const Clutter = imports.gi.Clutter;
@@ -33,18 +33,8 @@ function _open(title, message, buttons) {
     return dialog;
 }
 
-// Escape cancels; confirmLabel defaults to "OK".
-function confirm(title, message, confirmLabel) {
-    return new Promise((resolve) => {
-        _open(title, message, [
-            { label: "Cancel", action: () => resolve(false), key: Clutter.KEY_Escape },
-            { label: confirmLabel || "OK", action: () => resolve(true) },
-        ]);
-    });
-}
-
 function notify(title, message) {
     _open(title, message, [{ label: "OK", key: Clutter.KEY_Escape }]);
 }
 
-var Dialogs = { confirm: confirm, notify: notify };
+var Dialogs = { notify: notify };
