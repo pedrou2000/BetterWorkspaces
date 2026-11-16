@@ -114,7 +114,12 @@ var ContextMenu = class ContextMenu {
             }),
         );
         this._add(new PopupMenu.PopupSeparatorMenuItem());
-        this._action("Remove from workspaces", () => this._deps.onRemoveProject(projectId));
+        this._action(
+            here
+                ? this._withHint("Remove from workspaces", "kbRemoveProject")
+                : "Remove from workspaces",
+            () => this._deps.onRemoveProject(projectId),
+        );
     }
 
     _addGeneralItems() {

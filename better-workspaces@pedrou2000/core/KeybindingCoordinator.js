@@ -22,6 +22,7 @@ const KB_DEFAULTS = {
     kbSwitcher: "<Super>Tab",
     kbOpenNotion: "<Super>n",
     kbTogglePanel: "<Super>p",
+    kbRemoveProject: "<Super>q",
     // Tiling on Super+Shift+arrows; maximize/minimize on Alt+A/S.
     kbTileLeft: "<Super><Shift>Left",
     kbTileRight: "<Super><Shift>Right",

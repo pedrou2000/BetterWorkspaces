@@ -142,6 +142,11 @@
         "default": "<Super>p",
         "description": "Open the project toggle panel"
     },
+    "kbRemoveProject": {
+        "type": "keybinding",
+        "default": "<Super>q",
+        "description": "Remove the current project from workspaces (closes its windows)"
+    },
     "wmSection": {
         "type": "section",
         "description": "Window management (Cinnamon actions, reassigned)"

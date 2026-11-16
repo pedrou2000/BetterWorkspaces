@@ -13,6 +13,7 @@ var Constants = {
     PANEL_PROJECT_SPACING: 2, // px of horizontal margin each side of a project icon
     PANEL_DOT_SIZE: 15, // font-size (px) of the active workspace dot (●)
     PANEL_DOT_SIZE_SMALL: 15, // font-size (px) of the inactive workspace dots (○)
+    PANEL_DOT_SLOTS_CAP: 4, // most dot slots the panel reserves to keep its width steady
     PANEL_EMOJI_ZOOM: 0.85, // paint-only scale on emoji labels (see IconRenderer)
     ROW_ICON_SIZE: 20, // project icons in the toggle panel rows
 

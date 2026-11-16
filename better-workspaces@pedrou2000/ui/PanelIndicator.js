@@ -13,6 +13,7 @@ const DEFAULT_ICON_SIZE = AppletDir.lib.constants.Constants.PANEL_ICON_SIZE;
 const DEFAULT_SPACING = AppletDir.lib.constants.Constants.PANEL_PROJECT_SPACING;
 const DEFAULT_DOT_SIZE = AppletDir.lib.constants.Constants.PANEL_DOT_SIZE;
 const DEFAULT_DOT_SIZE_SMALL = AppletDir.lib.constants.Constants.PANEL_DOT_SIZE_SMALL;
+const DOT_SLOTS_CAP = AppletDir.lib.constants.Constants.PANEL_DOT_SLOTS_CAP;
 
 var PanelIndicator = class PanelIndicator {
     constructor(appletActor, controller, orientation, opts) {
@@ -183,10 +184,16 @@ var PanelIndicator = class PanelIndicator {
         return false;
     }
 
-    // The deck project whose icon contains `actor` (e.g. an event source), or null.
+    // The deck project `actor` (e.g. an event source) belongs to: the one whose
+    // icon contains it, or the current project for the position dots. Else null.
     projectIdAt(actor) {
         for (let a = actor; a && a !== this.actor; a = a.get_parent()) {
             if (this._buttons.indexOf(a) !== -1) return a._projectId;
+            if (a === this._posBox) {
+                const loc = this.controller.currentLocation();
+                const p = loc ? this.controller.state.getProject(loc.projectIdx) : null;
+                return p ? p.id : null;
+            }
         }
         return null;
     }
@@ -219,6 +226,11 @@ var PanelIndicator = class PanelIndicator {
 
     // Clickable carousel dots for the strip (shown even for a single workspace);
     // a compact "n/m" label when the strip is too long to click dot-by-dot.
+    //
+    // The row is padded with invisible dots up to the deck's longest strip
+    // (capped), so its width — one ● plus the same number of ○ — doesn't change
+    // from project to project. Otherwise every project switch would resize the
+    // applet and slide the icons out from under the pointer.
     _renderDots(loc) {
         this._posBox.destroy_all_children();
         const p = loc ? this.controller.state.getProject(loc.projectIdx) : null;
@@ -239,7 +251,10 @@ var PanelIndicator = class PanelIndicator {
 
         // Box taller than the largest font so even the biggest glyph's line box centers.
         const boxH = Math.ceil(Math.max(this._dotSize, this._dotSizeSmall) * 1.4);
-        for (let i = 0; i < p.wsCount; i++) {
+        const longest = Math.max(1, ...this.controller.state.counts());
+        const slots = Math.max(p.wsCount, Math.min(DOT_SLOTS_CAP, longest));
+        for (let i = 0; i < slots; i++) {
+            const real = i < p.wsCount;
             const active = i === loc.localIdx;
             // ○ not ·: the middle dot barely fills its box, so its size won't scale.
             const dot = new St.Button({
@@ -251,13 +266,17 @@ var PanelIndicator = class PanelIndicator {
                     "px; height: " +
                     boxH +
                     "px;",
-                reactive: true,
+                reactive: real,
             });
-            dot._localIdx = i;
-            dot.connect("clicked", (b) => {
-                this.controller.goToLocalWorkspace(b._localIdx);
-                this.update();
-            });
+            if (real) {
+                dot._localIdx = i;
+                dot.connect("clicked", (b) => {
+                    this.controller.goToLocalWorkspace(b._localIdx);
+                    this.update();
+                });
+            } else {
+                dot.opacity = 0; // keeps its width in the layout, unlike hiding it
+            }
             this._posBox.add(dot, { y_align: St.Align.MIDDLE, y_fill: false });
         }
     }

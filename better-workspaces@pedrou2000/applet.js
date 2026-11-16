@@ -169,6 +169,18 @@ var MyApplet = class MyApplet extends Applet.Applet {
         }
     }
 
+    _removeCurrentProject() {
+        const loc = this.controller.currentLocation();
+        const p = loc ? this.controller.state.getProject(loc.projectIdx) : null;
+        if (!p) return;
+        this.deckCoord
+            .removeFromWorkspaces(p.id)
+            .then((removed) => {
+                if (removed && this.osd && this.controller) this.osd.show(this.controller);
+            })
+            .catch((e) => L.error("removeCurrentProject: " + e.toString()));
+    }
+
     _notionConfigured() {
         return (
             this.settings &&
@@ -354,6 +366,11 @@ var MyApplet = class MyApplet extends Applet.Applet {
                 setting: "kbTogglePanel",
                 name: "bw-toggle-panel",
                 run: () => this.openTogglePanel(),
+            },
+            {
+                setting: "kbRemoveProject",
+                name: "bw-remove-project",
+                run: () => this._removeCurrentProject(),
             },
         ];
     }
