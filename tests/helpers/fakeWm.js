@@ -76,6 +76,10 @@ class FakeWm {
         return this.workspaces[index] || null;
     }
 
+    indexOfWorkspace(ws) {
+        return this.workspaces.indexOf(ws);
+    }
+
     reorderWorkspaceObject(ws, toIndex) {
         const from = this.workspaces.indexOf(ws);
         if (from === -1 || toIndex < 0 || toIndex >= this.workspaces.length) return false;

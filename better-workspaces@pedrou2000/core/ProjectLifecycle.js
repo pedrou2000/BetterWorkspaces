@@ -170,6 +170,26 @@ var ProjectLifecycle = class ProjectLifecycle {
         return idx;
     }
 
+    // Auto-clean: drop `ws` if it has no windows, isn't where the user is, and
+    // isn't its project's only workspace. Takes the workspace OBJECT, not an
+    // index, because the caller checks some time after the user left it and the
+    // flat list may have shifted meanwhile. Returns true if removed.
+    removeWorkspaceIfEmpty(ws) {
+        const c = this._c;
+        const flat = c.wm.indexOfWorkspace(ws);
+        if (flat < 0 || flat === c.wm.getActiveIndex()) return false;
+        const loc = Mapping.locationOf(c.state.counts(), flat);
+        if (!loc) return false;
+        const p = c.state.getProject(loc.projectIdx);
+        if (p.wsCount <= 1 || c.wm.countWindows(flat) > 0) return false;
+
+        if (!c.wm.removeWorkspace(flat)) return false;
+        c.state.removeWorkspaceAt(loc.projectIdx, loc.localIdx);
+        this.reconcileWorkspaceCount();
+        L.log("removeWorkspaceIfEmpty: " + p.name + " local " + loc.localIdx + " -> " + p.wsCount);
+        return true;
+    }
+
     // Destructive: gracefully close the partition's windows, wait a grace period,
     // then remove the workspaces + project. If any window survives, abort and
     // reject with Error("windows-open") carrying .openTitles; the project stays.

@@ -103,6 +103,9 @@ var Controller = class Controller {
     removeProjectLive(idx) {
         return this.lifecycle.removeProjectLive(idx);
     }
+    removeWorkspaceIfEmpty(ws) {
+        return this.lifecycle.removeWorkspaceIfEmpty(ws);
+    }
     removeProjectIfEmpty(projectId) {
         return this.lifecycle.removeProjectIfEmpty(projectId);
     }

@@ -98,6 +98,19 @@ var WorkspaceManager = class WorkspaceManager {
         return this._wm().get_workspace_by_index(index);
     }
 
+    // Current index of a workspace OBJECT, or -1 once it no longer exists.
+    indexOfWorkspace(ws) {
+        try {
+            const n = this.getWorkspaceCount();
+            for (let i = 0; i < n; i++) {
+                if (this._wm().get_workspace_by_index(i) === ws) return i;
+            }
+        } catch (e) {
+            L.error("indexOfWorkspace: " + e.toString());
+        }
+        return -1;
+    }
+
     // Native reorder_workspace carries the workspace's windows (no per-window shuffle).
     reorderWorkspaceObject(ws, toIndex) {
         try {

@@ -9,6 +9,7 @@
 const Applet = imports.ui.applet;
 const Settings = imports.ui.settings;
 const Clutter = imports.gi.Clutter;
+const Mainloop = imports.mainloop;
 
 const UUID = "better-workspaces@pedrou2000";
 
@@ -144,9 +145,10 @@ var MyApplet = class MyApplet extends Applet.Applet {
             // Initial status: unconfigured if no token, else neutral until sync.
             this.panelUI.setStatus(this._notionConfigured() ? "ok" : "unconfigured");
 
-            this._switchId = global.window_manager.connect("switch-workspace", () =>
-                this._refresh(),
-            );
+            this._switchId = global.window_manager.connect("switch-workspace", (wmgr, from) => {
+                this._refresh();
+                this._autoCleanLeft(from);
+            });
             this._nWorkspacesId = global.workspace_manager.connect("notify::n-workspaces", () =>
                 this._refresh(),
             );
@@ -167,6 +169,26 @@ var MyApplet = class MyApplet extends Applet.Applet {
         } catch (e) {
             L.error("init exception: " + e.toString());
         }
+    }
+
+    // The workspace the user just left is dropped if it was empty (and not its
+    // project's only one). Grabbed as an object and checked from idle: our own
+    // multi-step moves (grow, carry a window, switch) must finish first, and the
+    // flat indices can shift before we look.
+    _autoCleanLeft(fromIndex) {
+        if (!this.settings.getValue("autoCleanEmptyWorkspaces")) return;
+        const ws = this.wm.getWorkspace(fromIndex);
+        if (!ws) return;
+        Mainloop.idle_add(() => {
+            try {
+                if (this.controller && this.controller.removeWorkspaceIfEmpty(ws)) {
+                    this._refresh();
+                }
+            } catch (e) {
+                L.error("autoClean: " + e.toString());
+            }
+            return false;
+        });
     }
 
     _removeCurrentProject() {

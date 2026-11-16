@@ -29,6 +29,16 @@
         "description": "Sync from Notion now",
         "callback": "onSyncNowClicked"
     },
+    "behaviorSection": {
+        "type": "section",
+        "description": "Behaviour"
+    },
+    "autoCleanEmptyWorkspaces": {
+        "type": "switch",
+        "default": true,
+        "description": "Remove a workspace when you leave it empty",
+        "tooltip": "A project always keeps at least one workspace."
+    },
     "appearanceSection": {
         "type": "section",
         "description": "Appearance"

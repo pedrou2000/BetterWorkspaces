@@ -180,6 +180,19 @@ var State = class State {
         return false;
     }
 
+    // Account for local workspace `localIdx` having been removed: the ones after
+    // it slide down one, so the remembered last-used workspace slides with them.
+    // Refuses to drop below 1, like decWorkspaceCount.
+    removeWorkspaceAt(projectIdx, localIdx) {
+        const p = this.getProject(projectIdx);
+        if (!p || p.wsCount <= 1 || localIdx < 0 || localIdx >= p.wsCount) return false;
+        p.wsCount -= 1;
+        if (p.lastLocal > localIdx) p.lastLocal -= 1;
+        p.lastLocal = Math.min(p.lastLocal, p.wsCount - 1);
+        this._layoutChanged();
+        return true;
+    }
+
     // Refuse to drop below 1 (a project always keeps its home workspace).
     decWorkspaceCount(projectIdx) {
         const p = this.getProject(projectIdx);

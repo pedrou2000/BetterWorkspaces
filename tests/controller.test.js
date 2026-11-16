@@ -373,3 +373,80 @@ test("removeProjectLive with an invalid index rejects", async () => {
     const { controller } = makeController(DECK);
     await assert.rejects(controller.removeProjectLive(9), /invalid-project/);
 });
+
+// auto-clean: a workspace left empty
+
+// Leave flat index `from` for `to`, then run the auto-clean check on what was left.
+function leave(controller, wm, from, to) {
+    const left = wm.getWorkspace(from);
+    wm.goToWorkspace(to);
+    return controller.removeWorkspaceIfEmpty(left);
+}
+
+test("leaving an empty workspace removes it and keeps the others' windows in place", () => {
+    const { controller, wm } = makeController(DECK); // [a0 a1][b0 b1 b2][c0]
+    wm.addWindow(2, "b0-win");
+    wm.addWindow(4, "b2-win");
+    wm.addWindow(5, "c-win");
+    wm.goToWorkspace(3); // on b1, which is empty
+
+    assert.equal(leave(controller, wm, 3, 4), true);
+    assert.deepEqual(controller.state.counts(), [2, 2, 1]);
+    assert.deepEqual(wm.layout(), [[], [], ["b0-win"], ["b2-win"], ["c-win"]]);
+    assert.deepEqual(controller.currentLocation(), { projectIdx: 1, localIdx: 1 }); // still on b2
+});
+
+test("a workspace with windows, or a project's only workspace, is never auto-removed", () => {
+    const { controller, wm } = makeController(DECK);
+    wm.addWindow(1, "a1-win");
+    assert.equal(leave(controller, wm, 1, 0), false); // has a window
+    assert.equal(leave(controller, wm, 5, 0), false); // c's only workspace, empty
+    assert.deepEqual(controller.state.counts(), [2, 3, 1]);
+});
+
+test("the workspace the user is back on is not removed", () => {
+    const { controller, wm } = makeController(DECK);
+    const left = wm.getWorkspace(1);
+    wm.goToWorkspace(0);
+    wm.goToWorkspace(1); // came straight back before the check ran
+    assert.equal(controller.removeWorkspaceIfEmpty(left), false);
+    assert.deepEqual(controller.state.counts(), [2, 3, 1]);
+});
+
+test("the check follows the workspace object when indices shifted meanwhile", () => {
+    const { controller, wm } = makeController(DECK);
+    wm.addWindow(3, "b1-win");
+    const left = wm.getWorkspace(4); // b2, empty
+    wm.goToWorkspace(0);
+    controller.reorderProject(0, 2); // a moves to the end: b2 is now flat 2
+    assert.equal(wm.indexOfWorkspace(left), 2);
+
+    assert.equal(controller.removeWorkspaceIfEmpty(left), true);
+    assert.deepEqual(
+        [0, 1, 2].map((i) => controller.state.getProject(i).id + controller.state.counts()[i]),
+        ["b2", "c1", "a2"],
+    );
+    assert.deepEqual(wm.layout(), [[], ["b1-win"], [], [], []]);
+});
+
+test("a workspace that no longer exists is ignored", () => {
+    const { controller, wm } = makeController(DECK);
+    const gone = wm.getWorkspace(4);
+    wm.goToWorkspace(0);
+    wm.removeWorkspace(4);
+    assert.equal(controller.removeWorkspaceIfEmpty(gone), false);
+});
+
+test("carrying a project's only window to a new workspace leaves one workspace behind", () => {
+    const { controller, wm } = makeController([def("a", 1), def("b", 1)]);
+    wm.focusedWindow = wm.addWindow(0, "a-win");
+    const left = wm.getWorkspace(0);
+
+    controller.moveWindowToNextLocal(); // grows a, moves the window, follows it
+    assert.equal(controller.removeWorkspaceIfEmpty(left), true);
+
+    assert.deepEqual(controller.state.counts(), [1, 1]);
+    assert.deepEqual(wm.layout(), [["a-win"], []]);
+    assert.deepEqual(controller.currentLocation(), { projectIdx: 0, localIdx: 0 });
+    assert.equal(controller.state.getLastLocal(0), 0);
+});

@@ -241,3 +241,30 @@ test("onLayoutChanged fires for shape changes only, and not for refused ones", (
     s.decWorkspaceCount(s.indexOfProjectId("x")); // already at the >=1 floor
     assert.equal(fired, 5);
 });
+
+test("removeWorkspaceAt shrinks the strip and slides lastLocal with it", () => {
+    const s = makeState(); // a has 3 workspaces
+    s.setLastLocal(0, 2);
+    assert.equal(s.removeWorkspaceAt(0, 0), true); // one before the remembered one
+    assert.equal(s.getProject(0).wsCount, 2);
+    assert.equal(s.getLastLocal(0), 1);
+
+    assert.equal(s.removeWorkspaceAt(0, 1), true); // the remembered one itself
+    assert.equal(s.getProject(0).wsCount, 1);
+    assert.equal(s.getLastLocal(0), 0);
+});
+
+test("removeWorkspaceAt leaves lastLocal alone when a later workspace goes", () => {
+    const s = makeState();
+    s.setLastLocal(0, 0);
+    s.removeWorkspaceAt(0, 2);
+    assert.equal(s.getLastLocal(0), 0);
+});
+
+test("removeWorkspaceAt refuses the last workspace and bad indices", () => {
+    const s = makeState();
+    assert.equal(s.removeWorkspaceAt(2, 0), false); // c has only its home
+    assert.equal(s.removeWorkspaceAt(0, 3), false);
+    assert.equal(s.removeWorkspaceAt(9, 0), false);
+    assert.deepEqual(s.counts(), [3, 2, 1]);
+});
