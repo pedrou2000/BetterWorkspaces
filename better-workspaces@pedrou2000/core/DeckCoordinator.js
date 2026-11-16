@@ -29,6 +29,7 @@ var DeckCoordinator = class DeckCoordinator {
         this._placeholder = deps.placeholderProjects || [];
         this._hooks = deps.hooks || {};
         this._persistence = deps.persistence || null;
+        this._closeRequested = new Set(); // gone project ids already asked to close
         if (this._persistence) {
             this._controller.state.onLayoutChanged(() => this._saveLayout());
         }
@@ -117,18 +118,24 @@ var DeckCoordinator = class DeckCoordinator {
     // fields keep local pending writes. A project newly checked in Notion auto-
     // APPENDS to the deck end (append never moves existing workspaces). Unchecking
     // in Notion never auto-removes; that stays behind the explicit toggle-off flow.
-    onPull(projects) {
+    // A project that VANISHED from Notion (archived, deleted) is different: see
+    // _dropGoneProjects. `complete` is false when Notion had more pages to give.
+    onPull(projects, complete) {
+        const state = this._controller.state;
+        const onPlaceholder = state.indexOfProjectId("placeholder") >= 0;
+        if (!onPlaceholder && complete !== false) this._dropGoneProjects(projects);
+
         const deckIds = [];
-        const n = this._controller.state.projectCount();
-        for (let i = 0; i < n; i++) deckIds.push(this._controller.state.getProject(i).id);
+        for (let i = 0; i < state.projectCount(); i++) deckIds.push(state.getProject(i).id);
 
         const result = this._store.merge(projects, deckIds);
 
-        if (this._controller.state.indexOfProjectId("placeholder") >= 0) {
-            this.loadDeckFromStore(); // first real pull replaces the placeholder deck
+        if (onPlaceholder || state.projectCount() === 0) {
+            // First real pull replaces the placeholder deck; a deck emptied by
+            // _dropGoneProjects falls back to it.
+            this.loadDeckFromStore();
         } else {
             // Refresh renamed/re-iconed projects already on the deck.
-            const state = this._controller.state;
             for (let i = 0; i < state.projectCount(); i++) {
                 const cur = state.getProject(i);
                 const fresh = this._store.get(cur.id);
@@ -145,6 +152,69 @@ var DeckCoordinator = class DeckCoordinator {
         this._rebuildPanel();
         this._refreshTogglePanel();
         this._refresh();
+    }
+
+    // A deck project absent from the pull was archived or deleted in Notion, so
+    // it leaves the deck: its windows are asked to close (gracefully — an app with
+    // unsaved work can refuse) and it is removed once none are left. The close
+    // request goes out ONCE per project; after that it is only re-checked on each
+    // pull, so a refused prompt isn't re-raised every sync, and no dialog is
+    // shown for something the user didn't just do. Nothing is written back: the
+    // page may no longer exist.
+    //
+    // Guard: if the pull shares no project with the catalog we already hold, it
+    // is another database (changed id, wrong token), not a mass archive — acting
+    // on it would close every window on the desk.
+    _dropGoneProjects(projects) {
+        const remoteIds = new Set(projects.map((p) => p.id));
+        if (!this._store.all().some((p) => remoteIds.has(p.id))) return;
+
+        const state = this._controller.state;
+        const gone = [];
+        for (let i = 0; i < state.projectCount(); i++) {
+            const p = state.getProject(i);
+            if (!remoteIds.has(p.id)) gone.push(p);
+        }
+        // Forget close requests for projects that came back (un-archived).
+        for (const id of Array.from(this._closeRequested)) {
+            if (remoteIds.has(id)) this._closeRequested.delete(id);
+        }
+
+        for (let i = 0; i < gone.length; i++) {
+            const p = gone[i];
+            if (this._controller.removeProjectIfEmpty(p.id)) {
+                this._closeRequested.delete(p.id);
+                L.log("onPull: " + p.name + " is gone from Notion — removed from the deck");
+            } else if (!this._closeRequested.has(p.id)) {
+                this._closeRequested.add(p.id);
+                L.log("onPull: " + p.name + " is gone from Notion — closing its windows");
+                this._closeAndRemoveGone(p);
+            }
+        }
+    }
+
+    async _closeAndRemoveGone(project) {
+        try {
+            const idx = this._controller.state.indexOfProjectId(project.id);
+            await this._controller.removeProjectLive(idx);
+        } catch (e) {
+            // windows-open: something refused to close; later pulls remove it once
+            // it is empty. already-removed: a pull got there first.
+            L.log("onPull: " + project.name + " not removed yet (" + e.message + ")");
+            return;
+        }
+        this._closeRequested.delete(project.id);
+        this._store.forget(project.id);
+        this._ensureDeckNotEmpty();
+        this._rebuildPanel();
+        this._refreshTogglePanel();
+        this._refresh();
+    }
+
+    // The deck must never be left with no projects: the panel would be empty and
+    // every strip operation assumes at least one.
+    _ensureDeckNotEmpty() {
+        if (this._controller.state.projectCount() === 0) this.loadDeckFromStore();
     }
 
     // Resolve the deck index of the ON project `movedId` and reorder it — the
@@ -187,10 +257,11 @@ var DeckCoordinator = class DeckCoordinator {
             }
             throw e;
         }
-        this._rebuildPanel();
-        this._refresh();
         this._store.setInWorkspace(project.id, false);
         this._store.setOrder(project.id, null); // clear order so it sorts last if reactivated
+        this._ensureDeckNotEmpty(); // after the flag flip, so it isn't loaded back
+        this._rebuildPanel();
+        this._refresh();
     }
 
     // Turn a deck project OFF from outside the toggle panel (context menu,

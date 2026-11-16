@@ -228,7 +228,7 @@ var MyApplet = class MyApplet extends Applet.Applet {
             this._refresh();
         });
 
-        this.sync.onPull((projects) => this.deckCoord.onPull(projects));
+        this.sync.onPull((projects, complete) => this.deckCoord.onPull(projects, complete));
 
         // "ok" doubles as the retry trigger: a successful pull proves Notion is
         // reachable, so writes held by a transient failure (offline toggles) resume.

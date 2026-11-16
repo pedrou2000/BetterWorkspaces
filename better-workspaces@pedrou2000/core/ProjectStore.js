@@ -56,6 +56,20 @@ var ProjectStore = class ProjectStore {
         return this._byId.get(id) || null;
     }
 
+    // Drop a project from the catalog now (it no longer exists remotely), along
+    // with any writes still queued for it. Returns false if it wasn't known.
+    forget(id) {
+        if (!this._byId.delete(id)) return false;
+        this._queue = this._queue.filter((e) => e.id !== id);
+        for (const field of ["inWorkspace", "order"]) {
+            this._dirty.delete(id + "\0" + field);
+            this._acked.delete(id + "\0" + field);
+        }
+        this._persist();
+        this._notify("forget");
+        return true;
+    }
+
     // Highest order, or -1 (for append-at-bottom).
     maxOrder() {
         let max = -1;

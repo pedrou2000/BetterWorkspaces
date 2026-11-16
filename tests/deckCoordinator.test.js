@@ -459,6 +459,153 @@ test("onPull replaces the placeholder deck with real projects (no leftover)", ()
     assert.deepEqual(deckIds(controller), ["a", "b"]);
 });
 
+// onPull: projects gone from Notion (archived / deleted)
+
+function remote(id, inWorkspace, order) {
+    return { id, name: id.toUpperCase(), icon: null, notionUrl: null, inWorkspace, order };
+}
+
+test("a deck project gone from Notion is removed once nothing is open on it", () => {
+    const { coord, store, controller, wm } = makeStack([
+        proj("a", true, 0),
+        proj("b", true, 1),
+        proj("c", true, 2),
+    ]);
+    coord.loadDeckFromStore();
+    wm.addWindow(2, "c-win");
+
+    coord.onPull([remote("a", true, 0), remote("c", true, 2)], true); // b was archived
+
+    assert.deepEqual(deckIds(controller), ["a", "c"]);
+    assert.deepEqual(wm.layout(), [[], ["c-win"]]); // c's window moved with it
+    assert.equal(store.get("b"), null); // and it left the catalog
+});
+
+// Let the async part of a pull-driven removal finish: the close-grace timer,
+// then the promise continuation behind it.
+async function settle(mainloop) {
+    mainloop.flush();
+    await new Promise((r) => setImmediate(r));
+}
+
+test("a gone project's windows are closed and it leaves the deck and the catalog", async () => {
+    const { coord, store, controller, wm, mainloop, dialogs } = makeStack([
+        proj("a", true, 0),
+        proj("b", true, 1),
+    ]);
+    coord.loadDeckFromStore();
+    const win = wm.addWindow(1, "b-notes");
+
+    coord.onPull([remote("a", true, 0)], true); // b was archived
+    assert.equal(win.closeRequested, true);
+    wm.honorCloseRequests(); // the app closes
+    await settle(mainloop);
+
+    assert.deepEqual(deckIds(controller), ["a"]);
+    assert.equal(wm.getWorkspaceCount(), 1);
+    assert.equal(store.get("b"), null);
+    assert.equal(dialogs.calls.notify.length, 0); // a background sync never pops a dialog
+});
+
+test("a window that refuses to close is asked once; the project goes when it does close", async () => {
+    const { coord, controller, wm, mainloop, dialogs } = makeStack([
+        proj("a", true, 0),
+        proj("b", true, 1),
+    ]);
+    coord.loadDeckFromStore();
+    const win = wm.addWindow(1, "unsaved.txt");
+    const pull = [remote("a", true, 0)];
+
+    coord.onPull(pull, true);
+    await settle(mainloop); // grace elapses with the window still open
+    assert.deepEqual(deckIds(controller), ["a", "b"]);
+    assert.equal(dialogs.calls.notify.length, 0);
+
+    win.closeRequested = false;
+    coord.onPull(pull, true); // next sync: no second close request
+    await settle(mainloop);
+    assert.equal(win.closeRequested, false);
+    assert.deepEqual(deckIds(controller), ["a", "b"]);
+
+    win.closeRequested = true;
+    wm.honorCloseRequests(); // the user finally closes it
+    coord.onPull(pull, true);
+    assert.deepEqual(deckIds(controller), ["a"]);
+});
+
+test("a project that comes back and is archived again is asked to close again", async () => {
+    const { coord, wm, mainloop } = makeStack([proj("a", true, 0), proj("b", true, 1)]);
+    coord.loadDeckFromStore();
+    const win = wm.addWindow(1, "unsaved.txt");
+
+    coord.onPull([remote("a", true, 0)], true);
+    await settle(mainloop);
+    win.closeRequested = false;
+
+    coord.onPull([remote("a", true, 0), remote("b", true, 1)], true); // un-archived
+    coord.onPull([remote("a", true, 0)], true); // archived again
+    assert.equal(win.closeRequested, true);
+    await settle(mainloop);
+});
+
+test("a truncated pull, an empty pull, or another database touches nothing", async () => {
+    const { coord, controller, wm, mainloop } = makeStack([proj("a", true, 0), proj("b", true, 1)]);
+    coord.loadDeckFromStore();
+    const win = wm.addWindow(1, "b-notes");
+
+    coord.onPull([remote("a", true, 0)], false); // Notion had more pages
+    coord.onPull([], true); // unreadable database
+    coord.onPull([remote("x", true, 0), remote("y", false, null)], true); // a different one
+    await settle(mainloop);
+
+    assert.equal(win.closeRequested, false);
+    assert.deepEqual(deckIds(controller).slice(0, 2), ["a", "b"]);
+});
+
+test("removing a gone project the user is on lands on the previous project", () => {
+    const { coord, controller, wm } = makeStack([
+        proj("a", true, 0),
+        proj("b", true, 1),
+        proj("c", true, 2),
+    ]);
+    coord.loadDeckFromStore();
+    controller.goToProject(2);
+    controller.goToProject(1); // on b, came from c
+
+    coord.onPull([remote("a", true, 0), remote("c", true, 2)], true);
+    assert.deepEqual(deckIds(controller), ["a", "c"]);
+    assert.equal(controller.state.activeProject().id, "c");
+    assert.equal(wm.getActiveIndex(), 1);
+});
+
+test("a deck whose every project is gone falls back to the placeholder", () => {
+    const { coord, controller, wm } = makeStack([
+        proj("a", true, 0),
+        proj("b", true, 1),
+        proj("c", false, null),
+    ]);
+    coord.loadDeckFromStore();
+
+    coord.onPull([remote("c", false, null)], true); // same database: c is still there
+    assert.deepEqual(deckIds(controller), ["placeholder"]);
+    assert.equal(wm.getWorkspaceCount(), 1);
+});
+
+// an emptied deck
+
+test("removing the last deck project terminates and leaves the placeholder", async () => {
+    const { coord, store, controller, wm, mainloop } = makeStack([proj("a", true, 0)]);
+    coord.loadDeckFromStore();
+
+    const p = coord.removeFromWorkspaces("a");
+    mainloop.flush();
+    assert.equal(await p, true);
+
+    assert.deepEqual(deckIds(controller), ["placeholder"]);
+    assert.equal(wm.getWorkspaceCount(), 1);
+    assert.equal(store.get("a").inWorkspace, false);
+});
+
 // reorderFromPanel
 
 test("reorderFromPanel resolves the moved id to its deck index and reorders", () => {

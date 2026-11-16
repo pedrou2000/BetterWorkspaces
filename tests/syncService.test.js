@@ -149,7 +149,8 @@ test("syncNow: loading -> ok, onPull gets the mapped+sorted projects", async () 
         results: [rawPage("p1", "Zulu", true, 1), rawPage("p2", "Alpha", false, 0)],
     };
     let pulled = null;
-    sync.onPull((projects) => {
+    sync.onPull((projects, complete) => {
+        assert.equal(complete, true);
         pulled = projects;
     });
 

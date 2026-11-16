@@ -14,12 +14,18 @@ var ProjectLifecycle = class ProjectLifecycle {
     }
 
     // Make the real flat workspace count equal the sum of all project strips.
+    // Each loop stops as soon as the WM refuses: it never removes its last
+    // workspace (an empty deck needs 0), and retrying a refusal would spin forever.
     reconcileWorkspaceCount() {
         const c = this._c;
         const need = Mapping.totalWorkspaces(c.state.counts());
         const have = c.wm.getWorkspaceCount();
-        while (c.wm.getWorkspaceCount() < need) c.wm.createWorkspace();
-        while (c.wm.getWorkspaceCount() > need) c.wm.removeLastWorkspace();
+        while (c.wm.getWorkspaceCount() < need) {
+            if (c.wm.createWorkspace() < 0) break;
+        }
+        while (c.wm.getWorkspaceCount() > need) {
+            if (!c.wm.removeLastWorkspace()) break;
+        }
         L.log(
             "reconcileWorkspaceCount: need " +
                 need +
@@ -202,11 +208,8 @@ var ProjectLifecycle = class ProjectLifecycle {
         // at a different project's workspaces.
         projectIdx = c.state.indexOfProjectId(p.id);
         if (projectIdx < 0) throw new Error("already-removed");
-        const curOffset = Mapping.offsetOf(c.state.counts(), projectIdx);
-        const curIndices = [];
-        for (let i = 0; i < p.wsCount; i++) curIndices.push(curOffset + i);
 
-        const remaining = c.wm.listWindowsOnWorkspaces(curIndices);
+        const remaining = this._windowsOf(projectIdx);
         if (remaining.length > 0) {
             const titles = remaining.map((w) => {
                 try {
@@ -221,9 +224,39 @@ var ProjectLifecycle = class ProjectLifecycle {
             throw err;
         }
 
+        this._dropProject(projectIdx);
+        L.log("removeProjectLive: removed " + p.name);
+    }
+
+    // Remove a deck project right now if nothing is open on it (no close
+    // requests, no grace wait). Returns false, leaving it alone, otherwise.
+    removeProjectIfEmpty(projectId) {
+        const c = this._c;
+        const idx = c.state.indexOfProjectId(projectId);
+        if (idx < 0 || this._windowsOf(idx).length > 0) return false;
+        const name = c.state.getProject(idx).name;
+        this._dropProject(idx);
+        L.log("removeProjectIfEmpty: removed " + name);
+        return true;
+    }
+
+    _windowsOf(projectIdx) {
+        const c = this._c;
+        const offset = Mapping.offsetOf(c.state.counts(), projectIdx);
+        const indices = [];
+        for (let i = 0; i < c.state.getProject(projectIdx).wsCount; i++) indices.push(offset + i);
+        return c.wm.listWindowsOnWorkspaces(indices);
+    }
+
+    // Remove the project's workspaces and its deck entry; if the user was on it,
+    // land on the previously used project. The caller has dealt with its windows.
+    _dropProject(projectIdx) {
+        const c = this._c;
+        const p = c.state.getProject(projectIdx);
+        const offset = Mapping.offsetOf(c.state.counts(), projectIdx);
         // Remove high->low so indices stay valid as Cinnamon reindexes.
         for (let i = p.wsCount - 1; i >= 0; i--) {
-            c.wm.removeWorkspace(curOffset + i);
+            c.wm.removeWorkspace(offset + i);
         }
         const wasActive = c.state.activeProjectIdx === projectIdx;
         // mruPrev is an OLD index; removeProject shifts indices above projectIdx down.
@@ -237,6 +270,5 @@ var ProjectLifecycle = class ProjectLifecycle {
             if (target < 0 || target >= c.state.projectCount()) target = 0;
             c.goToProject(target);
         }
-        L.log("removeProjectLive: removed " + p.name);
     }
 };

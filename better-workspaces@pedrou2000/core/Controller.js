@@ -103,6 +103,9 @@ var Controller = class Controller {
     removeProjectLive(idx) {
         return this.lifecycle.removeProjectLive(idx);
     }
+    removeProjectIfEmpty(projectId) {
+        return this.lifecycle.removeProjectIfEmpty(projectId);
+    }
 
     describe() {
         const loc = this.currentLocation();

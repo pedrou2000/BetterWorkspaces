@@ -21,7 +21,7 @@ var SyncService = class SyncService {
         this.intervalSec = opts.intervalSec || DEFAULT_SYNC_INTERVAL_S;
         this.client = new NotionClient(token);
         this._timer = 0;
-        this._onPull = null; // cb(projects[]) — a completed pull
+        this._onPull = null; // cb(projects[], complete) — a successful pull
         this._onStatus = null; // cb(status)
     }
 
@@ -79,11 +79,16 @@ var SyncService = class SyncService {
             return;
         }
         const projects = ProjectMapper.mapResults(result);
+        // We read a single page of results; when Notion has more, a project's
+        // absence from `projects` doesn't mean it is gone.
+        const complete = !result || result.has_more !== true;
         this._setStatus("ok");
-        L.log("syncNow: pulled " + projects.length + " projects");
+        L.log(
+            "syncNow: pulled " + projects.length + " projects" + (complete ? "" : " (truncated)"),
+        );
         if (this._onPull) {
             try {
-                this._onPull(projects);
+                this._onPull(projects, complete);
             } catch (e) {
                 L.error("onPull cb: " + e.toString());
             }
