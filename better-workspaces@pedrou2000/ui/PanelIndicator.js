@@ -7,13 +7,15 @@ const Tooltips = imports.ui.tooltips;
 const AppletDir = imports.ui.appletManager.applets["better-workspaces@pedrou2000"];
 const IconRenderer = AppletDir.ui.IconRenderer.IconRenderer;
 const DndReorderHelper = AppletDir.ui.DndReorder.DndReorderHelper;
+const DotWindow = AppletDir.core.dotWindow.DotWindow;
 const L = AppletDir.lib.logger.Logger.makeLogger("panel");
 
 const DEFAULT_ICON_SIZE = AppletDir.lib.constants.Constants.PANEL_ICON_SIZE;
 const DEFAULT_SPACING = AppletDir.lib.constants.Constants.PANEL_PROJECT_SPACING;
 const DEFAULT_DOT_SIZE = AppletDir.lib.constants.Constants.PANEL_DOT_SIZE;
 const DEFAULT_DOT_SIZE_SMALL = AppletDir.lib.constants.Constants.PANEL_DOT_SIZE_SMALL;
-const DOT_SLOTS_CAP = AppletDir.lib.constants.Constants.PANEL_DOT_SLOTS_CAP;
+const DOT_SLOTS = AppletDir.lib.constants.Constants.PANEL_DOT_SLOTS;
+const EDGE_DOT_SCALE = 0.6; // an edge dot with more workspaces beyond it
 
 var PanelIndicator = class PanelIndicator {
     constructor(appletActor, controller, orientation, opts) {
@@ -26,9 +28,9 @@ var PanelIndicator = class PanelIndicator {
         this._dotSize = this._opts.dotSize || DEFAULT_DOT_SIZE;
         this._dotSizeSmall = this._opts.dotSizeSmall || DEFAULT_DOT_SIZE_SMALL;
         this._buttons = [];
-        this._posLabel = null;
         this._status = "ok";
         this._lastClick = null; // {id, time} of the previous icon click
+        this._dotWindowStart = {}; // project id -> first workspace its dots show
 
         // Reorder handled by the controller; onOrderChanged rebuilds + persists.
         this._dnd = new DndReorderHelper({
@@ -224,38 +226,26 @@ var PanelIndicator = class PanelIndicator {
         if (this._posBox) this._renderDots(loc);
     }
 
-    // Clickable carousel dots for the strip (shown even for a single workspace);
-    // a compact "n/m" label when the strip is too long to click dot-by-dot.
-    //
-    // The row is padded with invisible dots up to the deck's longest strip
-    // (capped), so its width — one ● plus the same number of ○ — doesn't change
-    // from project to project. Otherwise every project switch would resize the
-    // applet and slide the icons out from under the pointer.
+    // Always exactly DOT_SLOTS dots — one ● and the rest ○ — so the row's width is
+    // the same on every project and a project switch never slides the icons out
+    // from under the pointer. A short strip is padded with invisible dots; a long
+    // one is seen through a sliding window whose edge dot shrinks when more
+    // workspaces lie beyond it.
     _renderDots(loc) {
         this._posBox.destroy_all_children();
         const p = loc ? this.controller.state.getProject(loc.projectIdx) : null;
         this._posBox.visible = !!p;
         if (!this._posBox.visible) return;
 
-        if (p.wsCount > 12) {
-            this._posBox.add(
-                new St.Label({
-                    style_class: "better-workspaces-dot",
-                    text: loc.localIdx + 1 + "/" + p.wsCount,
-                    style: "font-size: " + this._dotSize + "px;",
-                }),
-                { y_align: St.Align.MIDDLE, y_fill: false },
-            );
-            return;
-        }
+        const win = DotWindow.place(p.wsCount, loc.localIdx, this._dotWindowStart[p.id], DOT_SLOTS);
+        this._dotWindowStart[p.id] = win.start;
 
         // Box taller than the largest font so even the biggest glyph's line box centers.
         const boxH = Math.ceil(Math.max(this._dotSize, this._dotSizeSmall) * 1.4);
-        const longest = Math.max(1, ...this.controller.state.counts());
-        const slots = Math.max(p.wsCount, Math.min(DOT_SLOTS_CAP, longest));
-        for (let i = 0; i < slots; i++) {
-            const real = i < p.wsCount;
-            const active = i === loc.localIdx;
+        for (let slot = 0; slot < DOT_SLOTS; slot++) {
+            const localIdx = win.start + slot;
+            const real = localIdx < p.wsCount;
+            const active = localIdx === loc.localIdx;
             // ○ not ·: the middle dot barely fills its box, so its size won't scale.
             const dot = new St.Button({
                 style_class: "better-workspaces-dot",
@@ -269,13 +259,20 @@ var PanelIndicator = class PanelIndicator {
                 reactive: real,
             });
             if (real) {
-                dot._localIdx = i;
+                dot._localIdx = localIdx;
                 dot.connect("clicked", (b) => {
                     this.controller.goToLocalWorkspace(b._localIdx);
                     this.update();
                 });
             } else {
                 dot.opacity = 0; // keeps its width in the layout, unlike hiding it
+            }
+            const moreBeyond =
+                (slot === 0 && win.moreBefore) || (slot === DOT_SLOTS - 1 && win.moreAfter);
+            if (moreBeyond) {
+                // Paint-only, like the emoji zoom: a smaller font would narrow the row.
+                dot.set_pivot_point(0.5, 0.5);
+                dot.set_scale(EDGE_DOT_SCALE, EDGE_DOT_SCALE);
             }
             this._posBox.add(dot, { y_align: St.Align.MIDDLE, y_fill: false });
         }
