@@ -323,6 +323,77 @@ test("handleToggle OFF surfaces windows-open: notifies, rejects, keeps the proje
     assert.equal(store.get("b").inWorkspace, true);
 });
 
+// removeFromWorkspaces (context menu / double-click)
+
+test("removeFromWorkspaces removes a deck project and resolves true", async () => {
+    const { coord, store, controller, mainloop } = makeStack([
+        proj("a", true, 0),
+        proj("b", true, 1),
+    ]);
+    coord.loadDeckFromStore();
+
+    const p = coord.removeFromWorkspaces("b");
+    mainloop.flush();
+    assert.equal(await p, true);
+    assert.deepEqual(deckIds(controller), ["a"]);
+    assert.equal(store.get("b").inWorkspace, false);
+});
+
+test("removeFromWorkspaces resolves false for an unknown id or a refused removal", async () => {
+    const { coord, controller, wm, mainloop, dialogs } = makeStack([
+        proj("a", true, 0),
+        proj("b", true, 1),
+    ]);
+    coord.loadDeckFromStore();
+    assert.equal(await coord.removeFromWorkspaces("placeholder"), false);
+
+    wm.addWindow(1, "unsaved.txt"); // b's window ignores the close request
+    const p = coord.removeFromWorkspaces("b");
+    mainloop.flush();
+    assert.equal(await p, false);
+    assert.equal(dialogs.calls.notify.length, 1);
+    assert.deepEqual(deckIds(controller), ["a", "b"]);
+});
+
+test("overlapping removals each remove their own project, not a stale position", async () => {
+    // a and b go while c (with a window) must survive: once a is gone, b's
+    // original position is c's.
+    const { coord, store, controller, wm, mainloop } = makeStack([
+        proj("a", true, 0),
+        proj("b", true, 1),
+        proj("c", true, 2),
+    ]);
+    coord.loadDeckFromStore();
+    wm.addWindow(2, "c-win");
+
+    const p1 = coord.removeFromWorkspaces("a");
+    const p2 = coord.removeFromWorkspaces("b");
+    mainloop.flush(); // both grace periods elapse together
+    assert.deepEqual(await Promise.all([p1, p2]), [true, true]);
+
+    assert.deepEqual(deckIds(controller), ["c"]);
+    assert.deepEqual(wm.layout(), [["c-win"]]);
+    assert.equal(store.get("c").inWorkspace, true);
+});
+
+test("removing the same project twice at once removes it once", async () => {
+    const { coord, controller, wm, mainloop } = makeStack([
+        proj("a", true, 0),
+        proj("b", true, 1),
+        proj("c", true, 2),
+    ]);
+    coord.loadDeckFromStore();
+    wm.addWindow(2, "c-win");
+
+    const p1 = coord.removeFromWorkspaces("b");
+    const p2 = coord.removeFromWorkspaces("b"); // e.g. a triple-click
+    mainloop.flush();
+    assert.deepEqual(await Promise.all([p1, p2]), [true, false]);
+
+    assert.deepEqual(deckIds(controller), ["a", "c"]);
+    assert.deepEqual(wm.layout(), [[], ["c-win"]]);
+});
+
 // onPull
 
 test("onPull merges catalog fields and auto-appends a newly-on project", () => {

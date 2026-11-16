@@ -8,7 +8,7 @@
 
 const Applet = imports.ui.applet;
 const Settings = imports.ui.settings;
-const PopupMenu = imports.ui.popupMenu;
+const Clutter = imports.gi.Clutter;
 
 const UUID = "better-workspaces@pedrou2000";
 
@@ -22,6 +22,7 @@ const PanelIndicator = AppletDir.ui.PanelIndicator.PanelIndicator;
 const IconRenderer = AppletDir.ui.IconRenderer.IconRenderer;
 const ProjectSwitcher = AppletDir.ui.ProjectSwitcher.ProjectSwitcher;
 const ProjectTogglePanel = AppletDir.ui.ProjectTogglePanel.ProjectTogglePanel;
+const ContextMenu = AppletDir.ui.ContextMenu.ContextMenu;
 const OSD = AppletDir.ui.OSD.OSD;
 const Dialogs = AppletDir.ui.Dialogs.Dialogs;
 const SyncService = AppletDir.notion.SyncService.SyncService;
@@ -84,6 +85,7 @@ var MyApplet = class MyApplet extends Applet.Applet {
             IconRenderer.setEmojiScale(this.settings.getValue("emojiZoom") / 100);
             this.panelUI = new PanelIndicator(this.actor, this.controller, orientation, {
                 onManage: () => this.openTogglePanel(),
+                onRemoveProject: (id) => this.deckCoord.removeFromWorkspaces(id),
                 iconSize: this.settings.getValue("panelIconSize"),
                 spacing: this.settings.getValue("projectSpacing"),
                 dotSize: this.settings.getValue("dotSize"),
@@ -157,7 +159,7 @@ var MyApplet = class MyApplet extends Applet.Applet {
             });
             this.keybindings.register();
 
-            this._buildContextMenu();
+            this._initContextMenu();
             this.osd.suppressBuiltin();
             this._refresh();
 
@@ -356,70 +358,38 @@ var MyApplet = class MyApplet extends Applet.Applet {
         ];
     }
 
-    _buildContextMenu() {
-        const menu = this._applet_context_menu;
-        const addAction = (label, fn) => {
-            const item = new PopupMenu.PopupMenuItem(label);
-            item.connect("activate", () => {
-                try {
-                    fn();
-                } catch (e) {
-                    L.error("menu: " + e.toString());
+    // "<Super>p" (a keybinding setting) -> "Super+P"; "" when unset.
+    _shortcutHint(settingKey) {
+        return KeyBinder.label(this.settings.getValue(settingKey));
+    }
+
+    // Capture phase, so the menu is rebuilt for the clicked target before
+    // Cinnamon's own handler on this actor toggles it open.
+    _initContextMenu() {
+        this.contextMenu = new ContextMenu({
+            menu: this._applet_context_menu,
+            controller: this.controller,
+            onManage: () => this.openTogglePanel(),
+            onSync: () => this.onSyncNowClicked(),
+            onRemoveProject: (id) => this.deckCoord.removeFromWorkspaces(id),
+            shortcutHint: (key) => this._shortcutHint(key),
+            afterAction: () => this._refresh(),
+        });
+        this._contextCaptureId = this.actor.connect("captured-event", (actor, event) => {
+            try {
+                if (
+                    event.type() === Clutter.EventType.BUTTON_PRESS &&
+                    event.get_button() === 3 &&
+                    !this._applet_context_menu.isOpen
+                ) {
+                    const id = this.panelUI ? this.panelUI.projectIdAt(event.get_source()) : null;
+                    // The placeholder deck entry isn't a real (store) project.
+                    this.contextMenu.populate(id && this.store.get(id) ? id : null);
                 }
-                this._refresh();
-            });
-            menu.addMenuItem(item);
-        };
-        addAction("Manage workspace projects… (Super+P)", () => {
-            this.openTogglePanel();
-        });
-        addAction("Open active project's Notion page (Super+N)", () => {
-            this.controller.openActiveProjectHome();
-        });
-
-        menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
-        addAction("Move project left (reorder)", () => {
-            this.controller.moveActiveProjectBy(-1);
-            this.panelUI.update();
-        });
-        addAction("Move project right (reorder)", () => {
-            this.controller.moveActiveProjectBy(1);
-            this.panelUI.update();
-        });
-
-        const moveMenu = new PopupMenu.PopupSubMenuMenuItem("Move focused window to project");
-        const nProjects = this.controller.state.projectCount();
-        for (let i = 0; i < nProjects; i++) {
-            const p = this.controller.state.getProject(i);
-            const idx = i;
-            const sub = new PopupMenu.PopupMenuItem(p.name);
-            sub.connect("activate", () => {
-                try {
-                    this.controller.moveWindowToProject(idx);
-                } catch (e) {
-                    L.error("move-to-project menu: " + e.toString());
-                }
-                this._refresh();
-            });
-            moveMenu.menu.addMenuItem(sub);
-        }
-        menu.addMenuItem(moveMenu);
-
-        menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
-        addAction("Add workspace to active project", () => {
-            this.controller.addWorkspaceToActiveProject();
-            this.panelUI.update();
-        });
-        addAction("Remove last workspace of active project", () => {
-            this.controller.removeLastWorkspaceOfActiveProject();
-            this.panelUI.update();
-        });
-        addAction("Remove empty workspaces of active project", () => {
-            this.controller.removeEmptyWorkspacesOfActiveProject();
-            this.panelUI.update();
-        });
-        addAction("Log current state", () => {
-            L.log(this.controller.describe());
+            } catch (e) {
+                L.error("context menu: " + e.toString());
+            }
+            return Clutter.EVENT_PROPAGATE;
         });
     }
 
@@ -445,6 +415,14 @@ var MyApplet = class MyApplet extends Applet.Applet {
             if (this._nWorkspacesId) {
                 global.workspace_manager.disconnect(this._nWorkspacesId);
                 this._nWorkspacesId = 0;
+            }
+            if (this._contextCaptureId) {
+                this.actor.disconnect(this._contextCaptureId);
+                this._contextCaptureId = 0;
+            }
+            if (this.contextMenu) {
+                this.contextMenu.destroy();
+                this.contextMenu = null;
             }
             if (this._togglePanel) {
                 this._togglePanel.destroy();

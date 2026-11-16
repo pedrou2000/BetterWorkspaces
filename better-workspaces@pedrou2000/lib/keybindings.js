@@ -51,6 +51,23 @@ function _open(schema) {
 }
 
 var KeyBinder = class KeyBinder {
+    // A keybinding setting ("<Super>p", or "a::b" alternatives) -> "Super+P" for
+    // display; "" when unset or unparseable.
+    static label(settingValue) {
+        try {
+            const accel = String(settingValue || "")
+                .split("::")
+                .filter((a) => a.length > 0)[0];
+            if (!accel) return "";
+            const res = Gtk.accelerator_parse(accel);
+            const keyval = res.length === 3 ? res[1] : res[0];
+            const mods = res.length === 3 ? res[2] : res[1];
+            return keyval ? Gtk.accelerator_get_label(keyval, mods) : "";
+        } catch (e) {
+            return "";
+        }
+    }
+
     constructor() {
         this._touched = {}; // "schema\0key" -> original [..] (saved once, for restore)
         this._added = []; // hotkey names we registered

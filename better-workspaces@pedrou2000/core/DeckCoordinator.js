@@ -191,6 +191,22 @@ var DeckCoordinator = class DeckCoordinator {
         this._store.setOrder(project.id, null); // clear order so it sorts last if reactivated
     }
 
+    // Turn a deck project OFF from outside the toggle panel (context menu,
+    // double-click). Resolves true if it was removed; refusals resolve false
+    // rather than reject, since handleToggle has already told the user why.
+    async removeFromWorkspaces(projectId) {
+        const project = this._store.get(projectId);
+        if (!project) return false;
+        try {
+            await this.handleToggle(project, false);
+        } catch (e) {
+            L.log("removeFromWorkspaces: kept " + project.name + " (" + e.message + ")");
+            return false;
+        }
+        this._refreshTogglePanel();
+        return true;
+    }
+
     _notifyWindowsOpen(project, info) {
         const titles = info && info.openTitles ? info.openTitles.join(", ") : "";
         this._dialogs.notify(

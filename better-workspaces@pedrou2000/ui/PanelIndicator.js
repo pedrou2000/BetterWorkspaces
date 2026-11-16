@@ -1,6 +1,7 @@
 /* ui/PanelIndicator.js — the always-on panel: one icon button per project. */
 
 const St = imports.gi.St;
+const Clutter = imports.gi.Clutter;
 const Tooltips = imports.ui.tooltips;
 
 const AppletDir = imports.ui.appletManager.applets["better-workspaces@pedrou2000"];
@@ -26,6 +27,7 @@ var PanelIndicator = class PanelIndicator {
         this._buttons = [];
         this._posLabel = null;
         this._status = "ok";
+        this._lastClick = null; // {id, time} of the previous icon click
 
         // Reorder handled by the controller; onOrderChanged rebuilds + persists.
         this._dnd = new DndReorderHelper({
@@ -116,10 +118,16 @@ var PanelIndicator = class PanelIndicator {
                 style: "margin: 0 " + this._spacing + "px;",
             });
             btn._projectIdx = i;
+            btn._projectId = p.id;
 
             btn.set_child(this._makeIcon(p, btn));
 
             btn.connect("clicked", (b) => {
+                if (this._isDoubleClick(b._projectId)) {
+                    // The first click already switched here; the second removes it.
+                    if (this._opts.onRemoveProject) this._opts.onRemoveProject(b._projectId);
+                    return;
+                }
                 this.controller.goToProject(b._projectIdx);
                 this.update();
             });
@@ -160,6 +168,27 @@ var PanelIndicator = class PanelIndicator {
 
         this.update();
         this.setStatus(this._status); // re-apply after rebuild recreates the button
+    }
+
+    // True when this click completes a double-click on the same project icon.
+    _isDoubleClick(projectId) {
+        const now = Date.now();
+        const last = this._lastClick;
+        const limit = Clutter.Settings.get_default().double_click_time;
+        if (last && last.id === projectId && now - last.time <= limit) {
+            this._lastClick = null; // a third click starts over
+            return true;
+        }
+        this._lastClick = { id: projectId, time: now };
+        return false;
+    }
+
+    // The deck project whose icon contains `actor` (e.g. an event source), or null.
+    projectIdAt(actor) {
+        for (let a = actor; a && a !== this.actor; a = a.get_parent()) {
+            if (this._buttons.indexOf(a) !== -1) return a._projectId;
+        }
+        return null;
     }
 
     // Capture the BUTTON, not its index: a reorder mid-download must not paint

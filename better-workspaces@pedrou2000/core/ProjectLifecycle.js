@@ -167,6 +167,7 @@ var ProjectLifecycle = class ProjectLifecycle {
     // Destructive: gracefully close the partition's windows, wait a grace period,
     // then remove the workspaces + project. If any window survives, abort and
     // reject with Error("windows-open") carrying .openTitles; the project stays.
+    // Rejects with Error("already-removed") if it left the deck meanwhile.
     async removeProjectLive(projectIdx) {
         const c = this._c;
         const p = c.state.getProject(projectIdx);
@@ -196,7 +197,16 @@ var ProjectLifecycle = class ProjectLifecycle {
             });
         });
 
-        const remaining = c.wm.listWindowsOnWorkspaces(indices);
+        // Re-resolve by id: the deck can change during the grace period (another
+        // removal, a reorder), and the positions captured above would then point
+        // at a different project's workspaces.
+        projectIdx = c.state.indexOfProjectId(p.id);
+        if (projectIdx < 0) throw new Error("already-removed");
+        const curOffset = Mapping.offsetOf(c.state.counts(), projectIdx);
+        const curIndices = [];
+        for (let i = 0; i < p.wsCount; i++) curIndices.push(curOffset + i);
+
+        const remaining = c.wm.listWindowsOnWorkspaces(curIndices);
         if (remaining.length > 0) {
             const titles = remaining.map((w) => {
                 try {
@@ -212,8 +222,6 @@ var ProjectLifecycle = class ProjectLifecycle {
         }
 
         // Remove high->low so indices stay valid as Cinnamon reindexes.
-        const curCounts = c.state.counts();
-        const curOffset = Mapping.offsetOf(curCounts, projectIdx);
         for (let i = p.wsCount - 1; i >= 0; i--) {
             c.wm.removeWorkspace(curOffset + i);
         }
