@@ -57,7 +57,7 @@ function makeFakeDialogs() {
     };
 }
 
-function makeController() {
+function makeController(wm) {
     const mainloop = makeFakeMainloop();
     const lib = {
         browser: { Browser: { openUrlNewWindow() {} } },
@@ -83,7 +83,7 @@ function makeController() {
         },
         extraImports: { mainloop: mainloop },
     });
-    const wm = new FakeWm(1);
+    wm = wm || new FakeWm(1);
     return { controller: new Controller(wm), wm, mainloop };
 }
 
@@ -95,16 +95,19 @@ function makeStore(persistence) {
 }
 
 // Full stack: seed the cache with `cached` projects, build store + controller +
-// coordinator, and record which hooks fired.
-function makeStack(cached) {
+// coordinator, and record which hooks fired. opts.wm / opts.layout stand in for
+// a session that already exists when the applet loads (a Cinnamon restart).
+function makeStack(cached, opts) {
+    opts = opts || {};
     const persistence = makeFakePersistence();
     if (cached) persistence.writeJSON("projects-cache.json", { projects: cached });
+    if (opts.layout) persistence.writeJSON("layout.json", { strips: opts.layout });
 
     const store = makeStore(persistence);
     const writer = makeAutoWriter();
     store.setWriter(writer);
 
-    const { controller, wm, mainloop } = makeController();
+    const { controller, wm, mainloop } = makeController(opts.wm);
     const dialogs = makeFakeDialogs();
     const hookCalls = { rebuildPanel: 0, refresh: 0, refreshTogglePanel: 0 };
 
@@ -112,6 +115,7 @@ function makeStack(cached) {
     const coord = new DeckCoordinator({
         store,
         controller,
+        persistence,
         dialogs,
         defaultWsPerProject: DEFAULT_WS_PER_PROJECT,
         placeholderProjects: PLACEHOLDER,
@@ -154,6 +158,98 @@ test("loadDeckFromStore falls back to the placeholder when nothing is on", () =>
     const { coord, controller } = makeStack([proj("a", false, null)]);
     coord.loadDeckFromStore();
     assert.deepEqual(deckIds(controller), ["placeholder"]);
+});
+
+// layout persistence (strip sizes across an applet reload)
+
+function savedStrips(persistence) {
+    return persistence.readJSON("layout.json").strips;
+}
+
+// A live session: 5 workspaces laid out as a=[0,1,2] b=[3,4], with windows.
+function liveSession() {
+    const wm = new FakeWm(5);
+    wm.addWindow(1, "a-editor");
+    wm.addWindow(4, "b-browser");
+    wm.activeIndex = 4;
+    return wm;
+}
+
+test("strip growth, deck changes and reorders are all saved to layout.json", async () => {
+    const { coord, store, controller, persistence } = makeStack([
+        proj("a", true, 0),
+        proj("b", true, 1),
+        proj("c", false, null),
+    ]);
+    coord.loadDeckFromStore();
+    assert.deepEqual(savedStrips(persistence), [
+        { id: "a", wsCount: 1 },
+        { id: "b", wsCount: 1 },
+    ]);
+
+    controller.addWorkspaceToActiveProject(); // a grows to 2
+    await coord.handleToggle(store.get("c"), true);
+    controller.reorderProject(2, 0); // c to the front
+    assert.deepEqual(savedStrips(persistence), [
+        { id: "c", wsCount: 1 },
+        { id: "a", wsCount: 2 },
+        { id: "b", wsCount: 1 },
+    ]);
+});
+
+test("reload over a live session restores strip sizes and moves nothing", () => {
+    const wm = liveSession();
+    const { coord, controller } = makeStack([proj("a", true, 0), proj("b", true, 1)], {
+        wm,
+        layout: [
+            { id: "a", wsCount: 3 },
+            { id: "b", wsCount: 2 },
+        ],
+    });
+    coord.loadDeckFromStore();
+
+    assert.deepEqual(controller.state.counts(), [3, 2]);
+    assert.deepEqual(wm.layout(), [[], ["a-editor"], [], [], ["b-browser"]]);
+    assert.equal(wm.activeIndex, 4); // the user stays where they were
+    assert.equal(controller.state.activeProjectIdx, 1);
+    assert.equal(controller.state.getLastLocal(1), 1);
+});
+
+test("an empty session (fresh login) starts from one workspace per project", () => {
+    const { coord, controller, wm } = makeStack([proj("a", true, 0), proj("b", true, 1)], {
+        wm: new FakeWm(5),
+        layout: [
+            { id: "a", wsCount: 3 },
+            { id: "b", wsCount: 2 },
+        ],
+    });
+    coord.loadDeckFromStore();
+    assert.deepEqual(controller.state.counts(), [1, 1]);
+    assert.equal(wm.getWorkspaceCount(), 2);
+});
+
+test("a saved layout that no longer matches the deck or the workspace total is ignored", () => {
+    const cached = [proj("a", true, 0), proj("b", true, 1)];
+    const cases = [
+        [
+            { id: "b", wsCount: 2 }, // deck order differs
+            { id: "a", wsCount: 3 },
+        ],
+        [{ id: "a", wsCount: 5 }], // deck size differs
+        [
+            { id: "a", wsCount: 3 }, // total 4, reality has 5
+            { id: "b", wsCount: 1 },
+        ],
+        [
+            { id: "a", wsCount: 5 }, // corrupt count
+            { id: "b", wsCount: 0 },
+        ],
+    ];
+    for (const layout of cases) {
+        const { coord, controller } = makeStack(cached, { wm: liveSession(), layout });
+        coord.loadDeckFromStore();
+        assert.deepEqual(controller.state.counts(), [1, 1], JSON.stringify(layout));
+    }
 });
 
 // handleToggle ON

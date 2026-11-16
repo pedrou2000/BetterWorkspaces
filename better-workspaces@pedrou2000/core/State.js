@@ -21,12 +21,24 @@ var State = class State {
         this.projects = [];
         this.activeProjectIdx = 0;
         this._mru = []; // project indices, most-recent first
+        this._onLayoutChanged = null;
+    }
+
+    // cb() after any change to the deck's shape: which projects, their order,
+    // their workspace counts — i.e. everything a persisted layout must track.
+    onLayoutChanged(cb) {
+        this._onLayoutChanged = cb;
+    }
+
+    _layoutChanged() {
+        if (this._onLayoutChanged) this._onLayoutChanged();
     }
 
     setProjects(defs) {
         this.projects = defs.map(makeProject);
         this.activeProjectIdx = 0;
         this._mru = this.projects.map((_, i) => i);
+        this._layoutChanged();
         L.log(
             "setProjects: " +
                 this.projects.length +
@@ -110,6 +122,7 @@ var State = class State {
         this.projects.push(makeProject(def));
         const idx = this.projects.length - 1;
         this._mru.push(idx); // least-recent until visited
+        this._layoutChanged();
         L.log("appendProject: " + def.name + " at index " + idx);
         return idx;
     }
@@ -130,6 +143,7 @@ var State = class State {
         } else if (this.activeProjectIdx > idx) {
             this.activeProjectIdx -= 1;
         }
+        this._layoutChanged();
         L.log("removeProject: removed index " + idx + ", " + this.projects.length + " remain");
         return true;
     }
@@ -150,6 +164,7 @@ var State = class State {
 
         this._mru = this._mru.map((i) => newOf[i]);
         this.activeProjectIdx = newOf[this.activeProjectIdx];
+        this._layoutChanged();
 
         L.log("moveProject: " + from + " -> " + to);
         return order;
@@ -159,6 +174,7 @@ var State = class State {
         const p = this.getProject(projectIdx);
         if (p) {
             p.wsCount += 1;
+            this._layoutChanged();
             return true;
         }
         return false;
@@ -169,6 +185,7 @@ var State = class State {
         const p = this.getProject(projectIdx);
         if (p && p.wsCount > 1) {
             p.wsCount -= 1;
+            this._layoutChanged();
             return true;
         }
         return false;

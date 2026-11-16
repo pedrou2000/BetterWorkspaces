@@ -9,9 +9,13 @@
 const AppletDir = imports.ui.appletManager.applets["better-workspaces@pedrou2000"];
 const L = AppletDir.lib.logger.Logger.makeLogger("deck-coord");
 
+const LAYOUT_FILE = "layout.json"; // {strips: [{id, wsCount}]} in deck order
+
 var DeckCoordinator = class DeckCoordinator {
     // deps: {
     //   store, controller,
+    //   persistence: {readJSON, writeJSON} (optional; without it strip sizes
+    //     don't survive a reload),
     //   dialogs: {notify(title,msg)},
     //   defaultWsPerProject: number,
     //   placeholderProjects: [{id,name,wsCount}],
@@ -24,6 +28,50 @@ var DeckCoordinator = class DeckCoordinator {
         this._defaultWsPerProject = deps.defaultWsPerProject;
         this._placeholder = deps.placeholderProjects || [];
         this._hooks = deps.hooks || {};
+        this._persistence = deps.persistence || null;
+        if (this._persistence) {
+            this._controller.state.onLayoutChanged(() => this._saveLayout());
+        }
+    }
+
+    _saveLayout() {
+        const state = this._controller.state;
+        const strips = [];
+        for (let i = 0; i < state.projectCount(); i++) {
+            const p = state.getProject(i);
+            strips.push({ id: p.id, wsCount: p.wsCount });
+        }
+        this._persistence.writeJSON(LAYOUT_FILE, { strips: strips });
+    }
+
+    // Restarting Cinnamon reloads the applet over workspaces and windows that are
+    // still there. Loading every project at its default size would delete the
+    // extra workspaces and dump their windows, so re-adopt the saved strip sizes —
+    // but only while they still describe reality: same deck in the same order,
+    // same workspace total, and windows actually open (an empty session, i.e. a
+    // fresh login, starts from the defaults instead). Mutates defs; true if applied.
+    _restoreLayout(defs) {
+        if (!this._persistence) return false;
+        const saved = this._persistence.readJSON(LAYOUT_FILE, null);
+        const strips = saved && Array.isArray(saved.strips) ? saved.strips : null;
+        if (!strips || strips.length !== defs.length) return false;
+
+        let total = 0;
+        for (let i = 0; i < strips.length; i++) {
+            const s = strips[i];
+            if (!s || s.id !== defs[i].id) return false;
+            if (!Number.isInteger(s.wsCount) || s.wsCount < 1) return false;
+            total += s.wsCount;
+        }
+
+        const wm = this._controller.wm;
+        if (total !== wm.getWorkspaceCount()) return false;
+        let windows = 0;
+        for (let i = 0; i < total; i++) windows += wm.countWindows(i);
+        if (windows === 0) return false;
+
+        for (let i = 0; i < strips.length; i++) defs[i].wsCount = strips[i].wsCount;
+        return true;
     }
 
     _rebuildPanel() {
@@ -54,8 +102,15 @@ var DeckCoordinator = class DeckCoordinator {
             this._controller.loadProjects(this._placeholder);
             return;
         }
-        this._controller.loadProjects(inDeck.map((p) => this.toDef(p)));
-        L.log("loadDeckFromStore: loaded " + inDeck.length + " in-workspace projects");
+        const defs = inDeck.map((p) => this.toDef(p));
+        const restored = this._restoreLayout(defs);
+        this._controller.loadProjects(defs);
+        L.log(
+            "loadDeckFromStore: loaded " +
+                inDeck.length +
+                " in-workspace projects" +
+                (restored ? " (saved strip sizes restored)" : ""),
+        );
     }
 
     // A completed pull merges into the store: catalog fields update live; deck

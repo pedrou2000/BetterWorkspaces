@@ -221,3 +221,23 @@ test("moveProject then removeProject keeps indices coherent", () => {
     assert.equal(s.activeProject().id, "c");
     assert.deepEqual(s.mruOrder().slice().sort(), [0, 1]);
 });
+
+test("onLayoutChanged fires for shape changes only, and not for refused ones", () => {
+    const s = makeState();
+    let fired = 0;
+    s.onLayoutChanged(() => fired++);
+
+    s.incWorkspaceCount(0);
+    s.decWorkspaceCount(0);
+    s.appendProject(def("x", 1));
+    s.moveProject(0, 1);
+    s.removeProject(0);
+    assert.equal(fired, 5);
+
+    s.setActiveProject(1);
+    s.setLastLocal(1, 0);
+    s.moveProject(0, 0); // no-op
+    s.removeProject(99); // invalid
+    s.decWorkspaceCount(s.indexOfProjectId("x")); // already at the >=1 floor
+    assert.equal(fired, 5);
+});

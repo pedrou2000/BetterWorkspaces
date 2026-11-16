@@ -61,6 +61,7 @@ var MyApplet = class MyApplet extends Applet.Applet {
             this.deckCoord = new DeckCoordinator({
                 store: this.store,
                 controller: this.controller,
+                persistence: Persistence,
                 dialogs: Dialogs,
                 defaultWsPerProject: DEFAULT_WS_PER_PROJECT,
                 placeholderProjects: PLACEHOLDER_PROJECTS,

@@ -17,10 +17,18 @@ var Controller = class Controller {
         this.lifecycle = new ProjectLifecycle(this);
     }
 
+    // Adopts wherever the WM already is rather than jumping to project 0, so a
+    // deck reloaded over a live session (Cinnamon restart) leaves the user put.
     loadProjects(defs) {
         this.state.setProjects(defs);
         this.lifecycle.reconcileWorkspaceCount();
-        this.goToProject(0);
+        const loc = this.currentLocation();
+        if (!loc) {
+            this.goToProject(0);
+            return;
+        }
+        this.state.setActiveProject(loc.projectIdx);
+        this.state.setLastLocal(loc.projectIdx, loc.localIdx);
     }
 
     // Reverse-mapped from the WM's real active index, so it stays correct even
