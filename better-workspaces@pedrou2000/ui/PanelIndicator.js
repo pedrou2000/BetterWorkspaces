@@ -58,24 +58,27 @@ var PanelIndicator = class PanelIndicator {
         this.update();
     }
 
-    // Status glyph + tooltip: "unconfigured" | "loading" | "ok" | "error".
+    // "unconfigured" | "loading" | "ok" | "error". Problems repaint the ⋯ button
+    // in place rather than adding a glyph, so the row never changes width.
+    // "loading" is ignored: a background sync every interval isn't worth showing,
+    // and skipping it keeps a standing error from blinking off during each retry.
     setStatus(status) {
+        if (status === "loading") return;
         this._status = status;
-        if (!this._statusDot) return;
+        if (!this._manage) return;
         const map = {
             unconfigured: {
                 text: "⛓",
                 tip: "Notion not connected — open settings to add your token",
             },
-            loading: { text: "⟳", tip: "Syncing with Notion…" },
-            ok: { text: "", tip: "" },
             // "⇄" + U+0338 combining slash = sync broken; fall back to "↯" if a font renders it badly.
             error: { text: "⇄̸", tip: "Notion sync failed — showing cached projects" },
         };
-        const s = map[status] || map.ok;
-        this._statusDot.set_text(s.text);
-        this._statusDot.visible = s.text.length > 0;
-        if (this._statusTip) this._statusTip.set_text(s.tip);
+        const s = map[status];
+        this._manageGlyph.set_text(s ? s.text : "⋯");
+        if (s) this._manage.add_style_pseudo_class("warning");
+        else this._manage.remove_style_pseudo_class("warning");
+        this._manageTip.set_text(s ? s.tip : "Manage workspace projects");
     }
 
     // Tooltips aren't actor children, so destroy_all_children doesn't reach them.
@@ -97,8 +100,8 @@ var PanelIndicator = class PanelIndicator {
         return tip;
     }
 
-    // Row order: project icons, position dots, then meta zone (status glyph + ⋯).
-    // Icons stay hard-left so the transient status glyph never shifts click targets.
+    // Row order: project icons, position dots, then the ⋯ button (which doubles
+    // as the sync-status indicator).
     rebuild() {
         this._destroyTooltips();
         this.actor.destroy_all_children();
@@ -136,39 +139,27 @@ var PanelIndicator = class PanelIndicator {
         this._posBox = new St.BoxLayout({ style_class: "better-workspaces-position" });
         this.actor.add(this._posBox, { y_align: St.Align.MIDDLE, y_fill: false });
 
-        this._statusDot = new St.Label({
-            style_class: "better-workspaces-status",
-            text: "",
-            reactive: true, // labels aren't reactive by default; needed for hover tooltips
+        this._manage = new St.Button({
+            style_class: "better-workspaces-manage",
+            reactive: true,
         });
-        this._statusDot.visible = false;
-        this.actor.add(this._statusDot, { y_align: St.Align.MIDDLE, y_fill: false });
-        this._statusTip = this._addTooltip(this._statusDot, "");
-
-        if (this._opts.onManage) {
-            const manage = new St.Button({
-                style_class: "better-workspaces-manage",
-                reactive: true,
-            });
-            manage.set_child(
-                new St.Label({
-                    style_class: "better-workspaces-manage-glyph",
-                    text: "⋯",
-                }),
-            );
-            manage.connect("clicked", () => {
-                try {
-                    this._opts.onManage();
-                } catch (e) {
-                    L.log("onManage: " + e.toString());
-                }
-            });
-            this._addTooltip(manage, "Manage workspace projects");
-            this.actor.add(manage, { y_align: St.Align.MIDDLE, y_fill: false });
-        }
+        this._manageGlyph = new St.Label({
+            style_class: "better-workspaces-manage-glyph",
+            text: "⋯",
+        });
+        this._manage.set_child(this._manageGlyph);
+        this._manage.connect("clicked", () => {
+            try {
+                if (this._opts.onManage) this._opts.onManage();
+            } catch (e) {
+                L.log("onManage: " + e.toString());
+            }
+        });
+        this._manageTip = this._addTooltip(this._manage, "");
+        this.actor.add(this._manage, { y_align: St.Align.MIDDLE, y_fill: false });
 
         this.update();
-        this.setStatus(this._status); // re-apply after rebuild recreates the dot
+        this.setStatus(this._status); // re-apply after rebuild recreates the button
     }
 
     // Capture the BUTTON, not its index: a reorder mid-download must not paint
@@ -247,7 +238,8 @@ var PanelIndicator = class PanelIndicator {
         if (this.actor) this.actor.destroy_all_children();
         this._buttons = [];
         this._posBox = null;
-        this._statusDot = null;
-        this._statusTip = null;
+        this._manage = null;
+        this._manageGlyph = null;
+        this._manageTip = null;
     }
 };

@@ -39,6 +39,10 @@
     background-color: rgba(255, 255, 255, 0.12);
     color: #ffffff;
 }
+/* warning = Notion unconfigured / sync failed (pseudo-class we set in JS) */
+.better-workspaces-manage:warning {
+    color: #e0a030;
+}
 .better-workspaces-manage-glyph {
     font-weight: bold;
     font-size: 15px;
@@ -67,14 +71,6 @@
 }
 .better-workspaces-dot:hover {
     color: #ffffff;
-}
-
-.better-workspaces-status {
-    /* Sits in the meta zone before ⋯: breathing room on the LEFT (against
-       the icons/dots), snug on the right (⋯ brings its own 2px margin). */
-    padding: 0 4px 0 8px;
-    color: #e0a030;
-    font-size: 12px;
 }
 
 /* Project Toggle Panel (M9) */
