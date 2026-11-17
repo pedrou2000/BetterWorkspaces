@@ -84,6 +84,7 @@ var MyApplet = class MyApplet extends Applet.Applet {
             this.deckCoord.loadDeckFromStore();
 
             IconRenderer.setEmojiScale(this.settings.getValue("emojiZoom") / 100);
+            IconRenderer.setEmojiImages(this.settings.getValue("notionStyleEmoji"));
             this.panelUI = new PanelIndicator(this.actor, this.controller, orientation, {
                 onManage: () => this.openTogglePanel(),
                 onRemoveProject: (id) => this.deckCoord.removeFromWorkspaces(id),
@@ -119,6 +120,15 @@ var MyApplet = class MyApplet extends Applet.Applet {
                 () => {
                     IconRenderer.setEmojiScale(this.settings.getValue("emojiZoom") / 100);
                     if (this.panelUI) this.panelUI.rebuild(); // existing labels keep their old scale
+                },
+            );
+            this.settings.bindProperty(
+                Settings.BindingDirection.IN,
+                "notionStyleEmoji",
+                "notionStyleEmoji",
+                () => {
+                    IconRenderer.setEmojiImages(this.settings.getValue("notionStyleEmoji"));
+                    if (this.panelUI) this.panelUI.rebuild();
                 },
             );
             this.settings.bindProperty(Settings.BindingDirection.IN, "dotSize", "dotSize", () => {

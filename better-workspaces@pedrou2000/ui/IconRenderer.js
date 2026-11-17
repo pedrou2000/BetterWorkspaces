@@ -1,7 +1,9 @@
 /* ui/IconRenderer.js — normalized Notion icon -> St actor (emoji | cached image | fallback). */
 
-// URL icons download once to ~/.config/better-workspaces/icons and swap in via
-// onReady when ready, so the panel never blocks and offline reuse is free.
+// Image icons download once to ~/.config/better-workspaces/icons and swap in via
+// onReady when ready, so the panel never blocks and offline reuse is free. Emoji
+// are images too when setEmojiImages is on (Notion's own artwork), with the
+// system emoji font as the fallback until, or instead of, the download.
 
 const St = imports.gi.St;
 const Gio = imports.gi.Gio;
@@ -20,6 +22,12 @@ const AppletDir = imports.ui.appletManager.applets["better-workspaces@pedrou2000
 const L = AppletDir.lib.logger.Logger.makeLogger("icons");
 const Persistence = AppletDir.lib.persistence.Persistence;
 const Http = AppletDir.lib.http.Http;
+const EmojiImage = AppletDir.lib.emojiImage.EmojiImage;
+
+// How long a failed download is left alone. The server saying no (e.g. 404: no
+// such image) won't change soon; a network error usually clears in seconds.
+const RETRY_REFUSED_MS = 10 * 60 * 1000;
+const RETRY_UNREACHABLE_MS = 20 * 1000;
 
 function _iconsDir() {
     const dir = GLib.build_filenamev([Persistence.configDir(), "icons"]);
@@ -67,31 +75,93 @@ function _iconFromFile(path, size) {
     });
 }
 
-// cb(true) on success.
+// cb(ok, refused): refused = the server answered but not with the file.
 function _download(url, dest, cb) {
     Http.request("GET", url)
         .then((res) => {
             try {
                 if (res.status >= 200 && res.status < 300 && res.bytes.length > 0) {
                     GLib.file_set_contents(dest, res.bytes);
-                    cb(true);
+                    cb(true, false);
                 } else {
                     L.error("icon GET http " + res.status);
-                    cb(false);
+                    cb(false, true);
                 }
             } catch (e) {
                 L.error("icon write: " + e.toString());
-                cb(false);
+                cb(false, false);
             }
         })
         .catch((e) => {
             L.error("_download: " + e.toString());
-            cb(false);
+            cb(false, false);
         });
 }
 
-// Paint-only zoom applied to emoji labels; user-tunable (setEmojiScale) because
-// how much baked-in bitmap margin to eat is a perceptual call, not a computable one.
+// Every surface (panel, toggle panel, switcher) asks for the same icons, and the
+// panel is rebuilt on every sync: share one request per URL and back off after
+// a failure instead of re-hitting the host each time. onReady fires on success.
+const _inFlight = {}; // url -> [onReady]
+const _retryAt = {}; // url -> ms timestamp before which a failed URL isn't retried
+
+function _fetchOnce(url, dest, onReady) {
+    if (_inFlight[url]) {
+        if (onReady) _inFlight[url].push(onReady);
+        return;
+    }
+    if (_retryAt[url] && Date.now() < _retryAt[url]) return;
+
+    _inFlight[url] = onReady ? [onReady] : [];
+    _download(url, dest, function (ok, refused) {
+        const waiting = _inFlight[url] || [];
+        delete _inFlight[url];
+        if (!ok) {
+            _retryAt[url] = Date.now() + (refused ? RETRY_REFUSED_MS : RETRY_UNREACHABLE_MS);
+            return;
+        }
+        delete _retryAt[url];
+        for (let i = 0; i < waiting.length; i++) {
+            try {
+                waiting[i]();
+            } catch (e) {
+                L.error("onReady: " + e.toString());
+            }
+        }
+    });
+}
+
+// The cached image for `url`, or null after starting its download. `inner`
+// (optional, < size) draws the image that large, centered in a size x size box:
+// rendered at the smaller size rather than scaled, so it stays sharp, and the
+// box keeps the row's spacing.
+function _cachedImage(url, size, onReady, inner) {
+    const path = _cachePathFor(url);
+    if (Gio.File.new_for_path(path).query_exists(null)) {
+        try {
+            if (!inner || inner >= size) return _iconFromFile(path, size);
+            return new St.Bin({
+                child: _iconFromFile(path, inner),
+                style: "width: " + size + "px; height: " + size + "px;",
+            });
+        } catch (e) {
+            L.error("iconFromFile: " + e.toString());
+        }
+    }
+    _fetchOnce(url, path, onReady);
+    return null;
+}
+
+let _emojiImages = true;
+
+function setEmojiImages(on) {
+    _emojiImages = !!on;
+}
+
+// How large an emoji is drawn inside its icon box; user-tunable (setEmojiScale)
+// because matching emoji to image icons is a perceptual call, not a computable
+// one. Font emoji carry baked-in margin and get a paint-only zoom; Twemoji
+// images fill their box edge to edge, unlike Notion's padded icons, and are
+// rendered smaller (never larger than the box).
 let _emojiScale = AppletDir.lib.constants.Constants.PANEL_EMOJI_ZOOM;
 
 function setEmojiScale(scale) {
@@ -103,6 +173,12 @@ function setEmojiScale(scale) {
 function makeActor(icon, name, size, onReady) {
     size = size || 22;
     if (icon && icon.type === "emoji" && icon.value) {
+        if (_emojiImages) {
+            const url = EmojiImage.urlFor(icon.value);
+            const inner = Math.max(1, Math.round(size * Math.min(1, _emojiScale)));
+            const image = url ? _cachedImage(url, size, onReady, inner) : null;
+            if (image) return image;
+        }
         // Locked to the image-icon box; font a touch under it so the glyph's
         // ascent/descent doesn't overflow and misalign the row.
         const label = _boxedLabel(
@@ -127,24 +203,7 @@ function makeActor(icon, name, size, onReady) {
     }
 
     if (icon && icon.type === "url" && icon.value) {
-        const path = _cachePathFor(icon.value);
-        if (Gio.File.new_for_path(path).query_exists(null)) {
-            try {
-                return _iconFromFile(path, size);
-            } catch (e) {
-                L.error("iconFromFile: " + e.toString());
-            }
-        }
-        _download(icon.value, path, function (ok) {
-            if (ok && onReady) {
-                try {
-                    onReady();
-                } catch (e) {
-                    L.error("onReady: " + e.toString());
-                }
-            }
-        });
-        return _fallbackLabel(name, size);
+        return _cachedImage(icon.value, size, onReady) || _fallbackLabel(name, size);
     }
 
     return _fallbackLabel(name, size);
@@ -153,4 +212,5 @@ function makeActor(icon, name, size, onReady) {
 var IconRenderer = {
     makeActor: makeActor,
     setEmojiScale: setEmojiScale,
+    setEmojiImages: setEmojiImages,
 };

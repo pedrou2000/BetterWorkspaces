@@ -61,15 +61,21 @@
         "units": "px",
         "description": "Space between project icons"
     },
+    "notionStyleEmoji": {
+        "type": "switch",
+        "default": true,
+        "description": "Draw emoji icons the way Notion does",
+        "tooltip": "Uses Twemoji images (downloaded once and cached) instead of the system emoji font."
+    },
     "emojiZoom": {
         "type": "spinbutton",
         "default": 85,
-        "min": 80,
+        "min": 50,
         "max": 200,
         "step": 5,
         "units": "%",
-        "description": "Emoji icon zoom",
-        "tooltip": "Emoji fonts bake transparent margin into each glyph, so emoji look smaller and more spaced than image icons. Zoom is visual only (layout boxes stay aligned); raise it until emoji match your image icons."
+        "description": "Emoji icon size",
+        "tooltip": "How large emoji are drawn inside their icon box, compared with image icons. Visual only: the spacing between icons doesn't change. Notion-style emoji fill the box at 100% and stop growing there; lower it until they match your other icons."
     },
     "dotSize": {
         "type": "spinbutton",
