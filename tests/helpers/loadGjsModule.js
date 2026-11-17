@@ -33,7 +33,12 @@ function mergeShims(shim, applet, extraImports) {
     for (const top of Object.keys(applet || {})) {
         appletDir[top] = Object.assign(appletDir[top] || {}, applet[top]);
     }
-    Object.assign(shim, extraImports || {});
+    // `ui` is merged, not replaced, so a test can add ui.popupMenu etc. beside
+    // the appletManager shim.
+    for (const top of Object.keys(extraImports || {})) {
+        if (top === "ui") Object.assign(shim.ui, extraImports.ui);
+        else shim[top] = extraImports[top];
+    }
     return shim;
 }
 

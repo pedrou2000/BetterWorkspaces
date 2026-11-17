@@ -1,9 +1,12 @@
-/* ui/ContextMenu.js — the applet's right-click menu, rebuilt for what was clicked. */
+/* ui/ContextMenu.js — the applet's right-click menu, retargeted to what was clicked. */
 
 // A project icon gets that project's actions; anywhere else gets the general
-// ones. Items are rebuilt on every right-click and address projects by id, so
-// they can't go stale when the deck changes. Cinnamon appends its own
-// About/Configure/Remove entries after ours; we only ever touch our own.
+// ones. Every item is created ONCE and only shown/hidden and relabelled per
+// right-click: Cinnamon's PopupMenu keeps a signal-manager entry (and so the
+// item itself) for every item ever added, even after the item is destroyed, so
+// building items per click would leak each one. Actions address the project by
+// id, resolved when activated, so they can't go stale when the deck changes.
+// Cinnamon appends its own About/Configure/Remove entries after ours.
 
 const PopupMenu = imports.ui.popupMenu;
 
@@ -22,37 +25,95 @@ var ContextMenu = class ContextMenu {
         this._menu = deps.menu;
         this._controller = deps.controller;
         this._deps = deps;
+        this._targetId = null; // the project the project items act on
         this._items = [];
+
+        const c = this._controller;
+        this._header = this._add(new PopupMenu.PopupMenuItem("", { reactive: false }));
+        this._openNotion = this._action("Open Notion page", (i) => {
+            this._goTo(i);
+            c.openActiveProjectHome();
+        });
+        this._moveHere = this._action("Move focused window here", (i) => c.moveWindowToProject(i));
+        this._addWorkspace = this._action("Add workspace", (i) => {
+            this._goTo(i);
+            c.addWorkspaceToActiveProject();
+        });
+        this._removeEmpty = this._action("Remove empty workspaces", (i) => {
+            this._goTo(i);
+            c.removeEmptyWorkspacesOfActiveProject();
+        });
+        this._separator = this._add(new PopupMenu.PopupSeparatorMenuItem());
+        this._remove = this._action("Remove from workspaces", () =>
+            this._deps.onRemoveProject(this._targetId),
+        );
+        this._projectItems = this._items.slice();
+
+        this._manage = this._action(
+            "Manage workspace projects…",
+            () => this._deps.onManage(),
+            true,
+        );
+        this._sync = this._action("Sync with Notion now", () => this._deps.onSync(), true);
+
         this.populate(null);
     }
 
     // projectId: the deck project that was right-clicked, or null for the general menu.
     populate(projectId) {
-        for (let i = 0; i < this._items.length; i++) this._items[i].destroy();
-        this._items = [];
+        const state = this._controller.state;
+        const idx = projectId ? state.indexOfProjectId(projectId) : -1;
+        const forProject = idx >= 0;
+        this._targetId = forProject ? projectId : null;
 
-        const idx = projectId ? this._controller.state.indexOfProjectId(projectId) : -1;
-        if (idx >= 0) this._addProjectItems(projectId, idx);
-        else this._addGeneralItems();
+        for (let i = 0; i < this._projectItems.length; i++) {
+            this._projectItems[i].actor.visible = forProject;
+        }
+        this._manage.actor.visible = !forProject;
+        this._sync.actor.visible = !forProject;
+        this._manage.label.set_text(this._withHint("Manage workspace projects…", "kbTogglePanel"));
+        if (!forProject) return;
+
+        const p = state.getProject(idx);
+        const here = this._isAt(idx);
+        this._header.label.set_text(p.name);
+        this._openNotion.actor.visible = !!p.notionUrl;
+        this._openNotion.label.set_text(
+            here ? this._withHint("Open Notion page", "kbOpenNotion") : "Open Notion page",
+        );
+        this._moveHere.actor.visible = !here;
+        this._remove.label.set_text(
+            here
+                ? this._withHint("Remove from workspaces", "kbRemoveProject")
+                : "Remove from workspaces",
+        );
     }
 
     // Insert at our own running index so we stay above Cinnamon's entries.
     _add(item) {
         this._menu.addMenuItem(item, this._items.length);
         this._items.push(item);
+        return item;
     }
 
-    _action(label, fn) {
+    // Project actions get the target's CURRENT deck index (the deck can change
+    // while the menu is open) and are skipped if it has left the deck.
+    _action(label, fn, general) {
         const item = new PopupMenu.PopupMenuItem(label);
         item.connect("activate", () => {
             try {
-                fn();
+                if (general) {
+                    fn();
+                } else {
+                    const idx = this._controller.state.indexOfProjectId(this._targetId);
+                    if (idx >= 0) fn(idx);
+                }
             } catch (e) {
                 L.error("'" + label + "': " + e.toString());
             }
             if (this._deps.afterAction) this._deps.afterAction();
         });
-        this._add(item);
+        return this._add(item);
     }
 
     _withHint(label, settingKey) {
@@ -65,7 +126,7 @@ var ContextMenu = class ContextMenu {
         return !!loc && loc.projectIdx === idx;
     }
 
-    // The strip actions below work on the active project, so make `idx` active.
+    // The strip actions work on the active project, so make `idx` active.
     // Already there: only sync the model (goToProject would jump to its last-used
     // workspace, which external navigation can leave stale).
     _goTo(idx) {
@@ -73,64 +134,9 @@ var ContextMenu = class ContextMenu {
         else this._controller.goToProject(idx);
     }
 
-    _addProjectItems(projectId, idx) {
-        const c = this._controller;
-        const p = c.state.getProject(idx);
-        const here = this._isAt(idx);
-        // Re-resolve at activation: the deck can change while the menu is open.
-        const forProject = (fn) => () => {
-            const now = c.state.indexOfProjectId(projectId);
-            if (now >= 0) fn(now);
-        };
-
-        this._add(new PopupMenu.PopupMenuItem(p.name, { reactive: false }));
-        if (p.notionUrl) {
-            this._action(
-                here ? this._withHint("Open Notion page", "kbOpenNotion") : "Open Notion page",
-                forProject((i) => {
-                    this._goTo(i);
-                    c.openActiveProjectHome();
-                }),
-            );
-        }
-        if (!here) {
-            this._action(
-                "Move focused window here",
-                forProject((i) => c.moveWindowToProject(i)),
-            );
-        }
-        this._action(
-            "Add workspace",
-            forProject((i) => {
-                this._goTo(i);
-                c.addWorkspaceToActiveProject();
-            }),
-        );
-        this._action(
-            "Remove empty workspaces",
-            forProject((i) => {
-                this._goTo(i);
-                c.removeEmptyWorkspacesOfActiveProject();
-            }),
-        );
-        this._add(new PopupMenu.PopupSeparatorMenuItem());
-        this._action(
-            here
-                ? this._withHint("Remove from workspaces", "kbRemoveProject")
-                : "Remove from workspaces",
-            () => this._deps.onRemoveProject(projectId),
-        );
-    }
-
-    _addGeneralItems() {
-        this._action(this._withHint("Manage workspace projects…", "kbTogglePanel"), () =>
-            this._deps.onManage(),
-        );
-        this._action("Sync with Notion now", () => this._deps.onSync());
-    }
-
     destroy() {
         for (let i = 0; i < this._items.length; i++) this._items[i].destroy();
         this._items = [];
+        this._projectItems = [];
     }
 };
