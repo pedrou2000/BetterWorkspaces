@@ -226,11 +226,12 @@ var PanelIndicator = class PanelIndicator {
         if (this._posBox) this._renderDots(loc);
     }
 
-    // Always exactly DOT_SLOTS dots — one ● and the rest ○ — so the row's width is
-    // the same on every project and a project switch never slides the icons out
-    // from under the pointer. A short strip is padded with invisible dots; a long
-    // one is seen through a sliding window whose edge dot shrinks when more
-    // workspaces lie beyond it.
+    // The row is always DOT_SLOTS dots wide — one ● and the rest ○ — so its width
+    // is the same on every project and a project switch never slides the icons
+    // out from under the pointer. Two layers share one box: an invisible full
+    // row that fixes the width, and the real dots centered on top of it. A strip
+    // longer than DOT_SLOTS is seen through a sliding window whose edge dot
+    // shrinks when more workspaces lie beyond it.
     _renderDots(loc) {
         this._posBox.destroy_all_children();
         const p = loc ? this.controller.state.getProject(loc.projectIdx) : null;
@@ -242,12 +243,9 @@ var PanelIndicator = class PanelIndicator {
 
         // Box taller than the largest font so even the biggest glyph's line box centers.
         const boxH = Math.ceil(Math.max(this._dotSize, this._dotSizeSmall) * 1.4);
-        for (let slot = 0; slot < DOT_SLOTS; slot++) {
-            const localIdx = win.start + slot;
-            const real = localIdx < p.wsCount;
-            const active = localIdx === loc.localIdx;
-            // ○ not ·: the middle dot barely fills its box, so its size won't scale.
-            const dot = new St.Button({
+        // ○ not ·: the middle dot barely fills its box, so its size won't scale.
+        const makeDot = (active, reactive) =>
+            new St.Button({
                 style_class: "better-workspaces-dot",
                 label: active ? "●" : "○",
                 style:
@@ -256,17 +254,28 @@ var PanelIndicator = class PanelIndicator {
                     "px; height: " +
                     boxH +
                     "px;",
-                reactive: real,
+                reactive: reactive,
             });
-            if (real) {
-                dot._localIdx = localIdx;
-                dot.connect("clicked", (b) => {
-                    this.controller.goToLocalWorkspace(b._localIdx);
-                    this.update();
-                });
-            } else {
-                dot.opacity = 0; // keeps its width in the layout, unlike hiding it
-            }
+        const place = { y_align: St.Align.MIDDLE, y_fill: false };
+
+        const sizer = new St.BoxLayout({ opacity: 0 }); // keeps its width, unlike hiding it
+        for (let slot = 0; slot < DOT_SLOTS; slot++) sizer.add(makeDot(slot === 0, false), place);
+
+        const row = new St.BoxLayout({
+            x_expand: true,
+            x_align: Clutter.ActorAlign.CENTER,
+            y_expand: true,
+            y_align: Clutter.ActorAlign.CENTER,
+        });
+        const shown = Math.min(p.wsCount, DOT_SLOTS);
+        for (let slot = 0; slot < shown; slot++) {
+            const localIdx = win.start + slot;
+            const dot = makeDot(localIdx === loc.localIdx, true);
+            dot._localIdx = localIdx;
+            dot.connect("clicked", (b) => {
+                this.controller.goToLocalWorkspace(b._localIdx);
+                this.update();
+            });
             const moreBeyond =
                 (slot === 0 && win.moreBefore) || (slot === DOT_SLOTS - 1 && win.moreAfter);
             if (moreBeyond) {
@@ -274,8 +283,13 @@ var PanelIndicator = class PanelIndicator {
                 dot.set_pivot_point(0.5, 0.5);
                 dot.set_scale(EDGE_DOT_SCALE, EDGE_DOT_SCALE);
             }
-            this._posBox.add(dot, { y_align: St.Align.MIDDLE, y_fill: false });
+            row.add(dot, place);
         }
+
+        const stack = new St.Widget({ layout_manager: new Clutter.BinLayout() });
+        stack.add_actor(sizer);
+        stack.add_actor(row);
+        this._posBox.add(stack, place);
     }
 
     destroy() {
