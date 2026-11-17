@@ -283,6 +283,41 @@ test("handleToggle ON is idempotent — re-toggling an already-deck project does
     assert.equal(ids.length, 1);
 });
 
+// openProject (the panel's "go")
+
+test("openProject switches to a project that is already on the deck", async () => {
+    const { coord, controller, wm } = makeStack([proj("a", true, 0), proj("b", true, 1)]);
+    coord.loadDeckFromStore();
+
+    await coord.openProject({ id: "b", name: "B" });
+    assert.equal(controller.state.activeProject().id, "b");
+    assert.equal(wm.getActiveIndex(), 1);
+    assert.deepEqual(deckIds(controller), ["a", "b"]); // nothing added or removed
+});
+
+test("openProject turns an off project on and lands on it", async () => {
+    const { coord, store, controller, wm } = makeStack([
+        proj("a", true, 0),
+        proj("b", false, null),
+    ]);
+    coord.loadDeckFromStore();
+
+    await coord.openProject(store.get("b"));
+    assert.deepEqual(deckIds(controller), ["a", "b"]);
+    assert.equal(store.get("b").inWorkspace, true);
+    assert.equal(wm.getActiveIndex(), 1);
+});
+
+test("openProject on the project you are on doesn't move you within it", async () => {
+    const { coord, controller, wm } = makeStack([proj("a", true, 0), proj("b", true, 1)]);
+    coord.loadDeckFromStore();
+    controller.addWorkspaceToActiveProject(); // a: 2 workspaces, now on the second
+    wm.goToWorkspace(0); // moved back by other means; a's last-used is still 1
+
+    await coord.openProject({ id: "a", name: "A" });
+    assert.equal(wm.getActiveIndex(), 0);
+});
+
 // handleToggle OFF
 
 test("handleToggle OFF removes from the deck without asking, clears flag + order", async () => {

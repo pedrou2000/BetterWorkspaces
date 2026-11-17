@@ -1,12 +1,19 @@
-/* ui/ProjectTogglePanel.js — modal searchable list toggling projects on/off. */
+/* ui/ProjectTogglePanel.js — modal searchable project list: go to one, or switch it on/off. */
 
 // Handlers are ID-KEYED, never row/deck positions (a background sync can refresh
 // the list under the panel): onToggle(project, newValue)->Promise (reject reverts
-// the switch), onReorder(movedId, toOnPos). refresh() re-renders while open.
+// the switch), onReorder(movedId, toOnPos), onGo(project). refresh() re-renders
+// while open.
 //
-// Keyboard: key focus never leaves the search entry (typing always filters);
-// Tab/Down and Shift+Tab/Up move a highlight over the rows and then the Close
-// button (as Tab would in any dialog); Enter activates whatever is highlighted.
+// Two verbs. GO (Enter, or a click on the row) takes the user to the project,
+// turning it on first if needed, and closes the panel: type a name, Enter. FLIP
+// (Ctrl+Enter, or a click on the switch) turns it on/off and stays open. Turning
+// off closes windows unconfirmed, which is why it is the one that needs the
+// modifier and why Enter is safe to aim at an auto-selected first match.
+//
+// Key focus never leaves the search entry (typing always filters); Tab/Down and
+// Shift+Tab/Up move a highlight over the rows and then the Close button (as Tab
+// would in any dialog).
 
 const St = imports.gi.St;
 const Clutter = imports.gi.Clutter;
@@ -26,18 +33,19 @@ const CLOSE_STOP = "__close__";
 var ProjectTogglePanel = class ProjectTogglePanel {
     // getProjects() returns {id,name,icon,inWorkspace,...} with the ON projects
     // already in deck order.
-    constructor(getProjects, onToggle, onReorder) {
+    constructor(getProjects, onToggle, onReorder, onGo) {
         this._getProjects = getProjects;
         this._onToggle = onToggle;
         this._onReorder = onReorder;
+        this._onGo = onGo;
         this._rows = [];
         this._filter = "";
         // Highlighted row, by project id so it survives re-renders and follows a
-        // project across sections (or CLOSE_STOP). Starts empty on purpose:
-        // toggling OFF closes windows unconfirmed, so a stray Enter must not hit
-        // the first match.
+        // project across sections (or CLOSE_STOP). Empty until the user types or
+        // moves; while searching it falls to the first match.
         this._selectedId = null;
         this._closeButton = null;
+        this._pressedRow = null; // row under the last button press, to tell a click
 
         // DnD works in row positions; we translate the source position to the
         // project id at drop time so the applet never sees a drifted index.
@@ -89,8 +97,8 @@ var ProjectTogglePanel = class ProjectTogglePanel {
         } catch (e) {}
         this._search.clutter_text.connect("text-changed", () => {
             this._filter = this._search.get_text().toLowerCase();
-            // Back to filtering: Enter must not dismiss the panel from here.
-            if (this._selectedId === CLOSE_STOP) this._selectedId = null;
+            // Like any search box: each new query highlights its first match.
+            this._selectedId = null;
             this._renderRows();
         });
         this._search.clutter_text.connect("key-press-event", (actor, event) =>
@@ -107,7 +115,7 @@ var ProjectTogglePanel = class ProjectTogglePanel {
         box.add(
             new St.Label({
                 style_class: "better-workspaces-toggle-hint",
-                text: "Tab / ↑↓ to move · Enter to toggle · Esc to close",
+                text: "Enter go · Ctrl+Enter turn on/off · Tab / ↑↓ move · Esc close",
             }),
         );
 
@@ -173,7 +181,10 @@ var ProjectTogglePanel = class ProjectTogglePanel {
             );
         }
 
-        if (this._selectedIndex() < 0) this._selectedId = null; // filtered out
+        if (this._selectedIndex() < 0) {
+            // Nothing (valid) highlighted: the first match while searching, else none.
+            this._selectedId = this._filter && this._rows.length ? this._rows[0].project.id : null;
+        }
         this._paintSelection();
         // The new rows aren't allocated until the next frame.
         Mainloop.idle_add(() => {
@@ -234,11 +245,25 @@ var ProjectTogglePanel = class ProjectTogglePanel {
         }
     }
 
-    _activateSelection() {
+    _goSelection() {
         if (this._selectedId === CLOSE_STOP) {
             this.close();
             return;
         }
+        const row = this._rows[this._selectedIndex()];
+        if (row) this._go(row.project);
+    }
+
+    _go(project) {
+        this.close();
+        try {
+            if (this._onGo) this._onGo(project);
+        } catch (e) {
+            L.error("go to '" + project.name + "': " + e.toString());
+        }
+    }
+
+    _flipSelection() {
         const row = this._rows[this._selectedIndex()];
         if (!row || !row.toggle.reactive) return; // nothing picked, or change in flight
         row.toggle.set_checked(!row.toggle.get_checked()); // what a click does itself
@@ -258,7 +283,8 @@ var ProjectTogglePanel = class ProjectTogglePanel {
         ) {
             this._moveSelection(-1);
         } else if (sym === Clutter.KEY_Return || sym === Clutter.KEY_KP_Enter) {
-            this._activateSelection();
+            if (event.get_state() & Clutter.ModifierType.CONTROL_MASK) this._flipSelection();
+            else this._goSelection();
         } else {
             return Clutter.EVENT_PROPAGATE;
         }
@@ -307,6 +333,21 @@ var ProjectTogglePanel = class ProjectTogglePanel {
         this._paintToggle(toggle);
         toggle.connect("clicked", (btn) => this._onRowToggled(project, btn));
         row.add(toggle, { y_align: St.Align.MIDDLE, y_fill: false });
+
+        // A plain click on the row goes there, like Enter. The switch swallows its
+        // own clicks, and a drag's release is consumed by DnD, so a release that
+        // reaches us after a press on this same row is a click.
+        row.connect("button-press-event", (actor, event) => {
+            if (event.get_button() === 1) this._pressedRow = row;
+            return Clutter.EVENT_PROPAGATE;
+        });
+        row.connect("button-release-event", (actor, event) => {
+            const clicked = this._pressedRow === row && event.get_button() === 1;
+            this._pressedRow = null;
+            if (!clicked) return Clutter.EVENT_PROPAGATE;
+            this._go(project);
+            return Clutter.EVENT_STOP;
+        });
 
         this._listBox.add(row);
         this._rows.push({ project: project, toggle: toggle, actor: row });

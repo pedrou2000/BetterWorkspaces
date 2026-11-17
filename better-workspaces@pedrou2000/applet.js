@@ -313,6 +313,11 @@ var MyApplet = class MyApplet extends Applet.Applet {
                 () => this.store.all(),
                 (project, newValue) => this.deckCoord.handleToggle(project, newValue),
                 (movedId, toOnPos) => this.deckCoord.reorderFromPanel(movedId, toOnPos),
+                (project) =>
+                    this.deckCoord
+                        .openProject(project)
+                        .then(() => this._afterNav())
+                        .catch((e) => L.error("openProject: " + e.toString())),
             );
             this._togglePanel = panel;
             panel.open();

@@ -224,6 +224,22 @@ var DeckCoordinator = class DeckCoordinator {
         if (from >= 0) this._controller.reorderProject(from, toOnPos);
     }
 
+    // "Take me there" (the project panel's Enter / row click): switch to the
+    // project, turning it on first if it isn't on the deck.
+    async openProject(project) {
+        const state = this._controller.state;
+        const idx = state.indexOfProjectId(project.id);
+        if (idx < 0) {
+            await this.handleToggle(project, true);
+            return;
+        }
+        const loc = this._controller.currentLocation();
+        // Already there: goToProject would jump to its last-used workspace.
+        if (loc && loc.projectIdx === idx) state.setActiveProject(idx);
+        else this._controller.goToProject(idx);
+        this._refresh();
+    }
+
     // Optimistic: store + deck update now, Notion writes queued by the store.
     // Resolves on success; rejects only when nothing changed (windows-open).
     async handleToggle(project, newValue) {
