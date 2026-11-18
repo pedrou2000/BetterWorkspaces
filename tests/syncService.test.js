@@ -154,7 +154,7 @@ test("syncNow: loading -> ok, onPull gets the mapped+sorted projects", async () 
         pulled = projects;
     });
 
-    await sync.syncNow();
+    assert.equal(await sync.syncNow(), "ok");
 
     assert.deepEqual(statuses, ["loading", "ok"]);
     assert.deepEqual(
@@ -171,7 +171,7 @@ test("syncNow failure: loading -> error, onPull not called", async () => {
     sync.onPull(() => {
         pulled = true;
     });
-    await sync.syncNow();
+    assert.equal(await sync.syncNow(), "error");
     assert.deepEqual(statuses, ["loading", "error"]);
     assert.equal(pulled, false);
 });
@@ -189,11 +189,11 @@ test("syncNow unconfigured: status only, no query", async () => {
 
 test("setToken/setDatabaseId make a previously unconfigured sync work", async () => {
     const { sync, client, statuses } = makeSync({ token: "", dbId: "" });
-    await sync.syncNow();
+    assert.equal(await sync.syncNow(), "unconfigured");
     assert.deepEqual(statuses, ["unconfigured"]);
     sync.setToken("tok2");
     sync.setDatabaseId("db2");
-    await sync.syncNow();
+    assert.equal(await sync.syncNow(), "ok");
     assert.equal(statuses[statuses.length - 1], "ok");
     assert.equal(client.calls[0].dbId, "db2");
 });

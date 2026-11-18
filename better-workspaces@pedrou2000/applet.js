@@ -223,6 +223,7 @@ var MyApplet = class MyApplet extends Applet.Applet {
             const dialog = new NewProjectDialog({
                 title: parent ? "New sub-project of " + parent.name : "New project",
                 initialName: initialName || "",
+                details: parent ? "" : "Creates a top-level project in Notion, with no parent.",
                 loadDetails: parent
                     ? async () => {
                           inherited = await this.creator.describeParent(parent.id);
@@ -362,14 +363,26 @@ var MyApplet = class MyApplet extends Applet.Applet {
         }
     }
 
-    // settings-schema.json "syncNow" button callback.
+    // A sync the user asked for (settings button, menu, shortcut). Background
+    // syncs are silent, so this one says what happened.
     onSyncNowClicked() {
         try {
-            if (this.sync) {
-                this.sync.setToken(this.settings.getValue("notionToken"));
-                this.sync.setDatabaseId(this.settings.getValue("notionDatabaseId"));
-                this.sync.syncNow();
-            }
+            if (!this.sync) return;
+            this.sync.setToken(this.settings.getValue("notionToken"));
+            this.sync.setDatabaseId(this.settings.getValue("notionDatabaseId"));
+            this.osd.showText("Syncing with Notion…");
+            this.sync
+                .syncNow()
+                .then((status) => {
+                    if (!this.osd) return;
+                    const said = {
+                        ok: "Synced with Notion",
+                        error: "Notion sync failed",
+                        unconfigured: "Notion isn't configured",
+                    };
+                    this.osd.showText(said[status] || said.error);
+                })
+                .catch((e) => L.error("syncNow: " + e.toString()));
         } catch (e) {
             L.error("onSyncNowClicked: " + e.toString());
         }
@@ -477,6 +490,11 @@ var MyApplet = class MyApplet extends Applet.Applet {
                 setting: "kbRemoveProject",
                 name: "bw-remove-project",
                 run: () => this._removeCurrentProject(),
+            },
+            {
+                setting: "kbSyncNow",
+                name: "bw-sync-now",
+                run: () => this.onSyncNowClicked(),
             },
             {
                 setting: "kbNewSubProject",

@@ -112,7 +112,19 @@
     font-size: 11px;
     color: #999999;
 }
-/* New-project dialog: fixed width so long lines wrap instead of widening it */
+/* New-project dialog */
+.better-workspaces-dialog-entry {
+    min-width: 380px;
+    padding: 8px 10px;
+    border-radius: 6px;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    background-color: rgba(255, 255, 255, 0.07);
+    font-size: 14px;
+}
+.better-workspaces-dialog-entry:focus {
+    border-color: rgba(120, 150, 255, 0.75);
+}
+/* fixed width so long lines wrap instead of widening the dialog */
 .better-workspaces-dialog-details {
     width: 400px;
     font-size: 11px;
@@ -181,10 +193,15 @@
     font-weight: bold;
 }
 
-/* Icon font-size is set inline in JS so it tracks the configured size. */
+/* Placeholder for a project with no icon: its initial on a tile. Sizes are set
+   inline in JS so they track the configured icon size. */
 .better-workspaces-icon-fallback {
+    background-color: rgba(255, 255, 255, 0.18);
+    border-radius: 5px;
+}
+.better-workspaces-icon-fallback-letter {
     font-weight: bold;
-    color: #cccccc;
+    color: #e8e8e8;
 }
 
 /* Super+Tab switcher overlay */

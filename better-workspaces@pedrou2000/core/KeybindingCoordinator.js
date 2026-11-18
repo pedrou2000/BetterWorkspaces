@@ -25,6 +25,7 @@ const KB_DEFAULTS = {
     kbRemoveProject: "<Super>q",
     kbNewSubProject: "<Super>s",
     kbNewProject: "<Super>a",
+    kbSyncNow: "<Super>r",
     // Tiling on Super+Shift+arrows; maximize/minimize on Alt+A/S.
     kbTileLeft: "<Super><Shift>Left",
     kbTileRight: "<Super><Shift>Right",

@@ -18,15 +18,16 @@ var OSD = class OSD {
         this._builtinWasVisible = undefined;
     }
 
-    // Timer resets on each call, so rapid navigation keeps one OSD alive.
+    // Where the user is now: "Project  ·  2/3".
     show(controller) {
-        try {
-            const loc = controller.currentLocation();
-            if (!loc) return;
-            const p = controller.state.getProject(loc.projectIdx);
-            if (!p) return;
-            const text = p.name + "  ·  " + (loc.localIdx + 1) + "/" + p.wsCount;
+        const loc = controller.currentLocation();
+        const p = loc ? controller.state.getProject(loc.projectIdx) : null;
+        if (p) this.showText(p.name + "  ·  " + (loc.localIdx + 1) + "/" + p.wsCount);
+    }
 
+    // Timer resets on each call, so rapid navigation keeps one OSD alive.
+    showText(text) {
+        try {
             if (!this._label) {
                 this._label = new St.Label({ style_class: "better-workspaces-osd" });
                 this._label.hide();
@@ -49,7 +50,7 @@ var OSD = class OSD {
                 return false;
             });
         } catch (e) {
-            L.error("show: " + e.toString());
+            L.error("showText: " + e.toString());
         }
     }
 

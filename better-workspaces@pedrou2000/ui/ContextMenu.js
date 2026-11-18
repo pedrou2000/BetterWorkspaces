@@ -79,6 +79,7 @@ var ContextMenu = class ContextMenu {
         this._sync.actor.visible = !forProject;
         this._manage.label.set_text(this._withHint("Manage workspace projects…", "kbTogglePanel"));
         this._newProject.label.set_text(this._withHint("New project…", "kbNewProject"));
+        this._sync.label.set_text(this._withHint("Sync with Notion now", "kbSyncNow"));
         if (!forProject) return;
 
         const p = state.getProject(idx);

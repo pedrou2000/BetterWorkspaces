@@ -101,6 +101,7 @@ function makeContextMenu(at) {
                 kbRemoveProject: "Super+Q",
                 kbNewSubProject: "Super+S",
                 kbNewProject: "Super+A",
+                kbSyncNow: "Super+R",
             })[key] || "",
         afterAction: () => other.push("after"),
     });
@@ -131,7 +132,7 @@ test("the general menu shows only the general actions", () => {
     assert.deepEqual(visible(), [
         "Manage workspace projects…  (Super+P)",
         "New project…  (Super+A)",
-        "Sync with Notion now",
+        "Sync with Notion now  (Super+R)",
     ]);
 });
 

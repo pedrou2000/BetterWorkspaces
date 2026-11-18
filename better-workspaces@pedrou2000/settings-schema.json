@@ -173,6 +173,11 @@
         "default": "<Super>a",
         "description": "New project (asks for a name)"
     },
+    "kbSyncNow": {
+        "type": "keybinding",
+        "default": "<Super>r",
+        "description": "Sync with Notion now"
+    },
     "wmSection": {
         "type": "section",
         "description": "Window management (Cinnamon actions, reassigned)"

@@ -70,11 +70,12 @@ var SyncService = class SyncService {
     }
 
     // Errors never reject — status reflects the outcome and cached data serves on.
+    // Resolves that outcome: "ok" | "error" | "unconfigured".
     async syncNow() {
         if (!this.databaseId || !this.client.hasToken()) {
             L.log("syncNow: not configured, skipping");
             this._setStatus("unconfigured");
-            return;
+            return "unconfigured";
         }
 
         L.log("syncNow: querying database " + this.databaseId);
@@ -88,7 +89,7 @@ var SyncService = class SyncService {
         } catch (e) {
             L.error("syncNow failed: " + e.message + " (store keeps serving)");
             this._setStatus("error");
-            return;
+            return "error";
         }
         const projects = ProjectMapper.mapResults(result);
         // We read a single page of results; when Notion has more, a project's
@@ -105,6 +106,7 @@ var SyncService = class SyncService {
                 L.error("onPull cb: " + e.toString());
             }
         }
+        return "ok";
     }
 
     start() {

@@ -56,14 +56,27 @@ function _cachePathFor(url) {
     return GLib.build_filenamev([_iconsDir(), _hashString(url) + _extFor(url)]);
 }
 
-// Fallback glyph: the project name's first character, uppercased.
+// A project with no icon gets a badge: its initial on a rounded tile, so it
+// reads as "no icon yet" rather than as stray text among the icons. The tile is
+// a little smaller than the box, like Notion's own icons, which carry padding.
+// Array.from: a name can start with a character outside the BMP (an emoji), and
+// charAt would cut it in half.
 function _fallbackLabel(name, size) {
-    const ch = name && name.length ? name.trim().charAt(0).toUpperCase() : "?";
-    return _boxedLabel(
-        "better-workspaces-icon-fallback",
-        ch,
-        "font-size: " + Math.round(size * 0.7) + "px; width: " + size + "px; text-align: center;",
+    const first = Array.from((name || "").trim())[0];
+    const tile = Math.round(size * 0.82);
+    const letter = _boxedLabel(
+        "better-workspaces-icon-fallback-letter",
+        first ? first.toUpperCase() : "?",
+        "font-size: " + Math.round(tile * 0.62) + "px;",
     );
+    return new St.Bin({
+        style: "width: " + size + "px; height: " + size + "px;",
+        child: new St.Bin({
+            style_class: "better-workspaces-icon-fallback",
+            style: "width: " + tile + "px; height: " + tile + "px;",
+            child: letter,
+        }),
+    });
 }
 
 function _iconFromFile(path, size) {

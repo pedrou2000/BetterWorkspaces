@@ -16,8 +16,9 @@ var NewProjectDialog = class NewProjectDialog {
     // opts: {
     //   title,
     //   initialName,
-    //   loadDetails: () => Promise<string>,  optional: a line saying what will be
-    //       copied; if it rejects ({userMessage}) creating is blocked
+    //   details: string,  a line under the name saying what will be created, or
+    //   loadDetails: () => Promise<string>,  the same line read asynchronously
+    //       (what will be copied); if it rejects ({userMessage}) creating is blocked
     //   nameExists: (name) => bool,
     //   submit: (name) => Promise,  rejects with {kind, userMessage}
     //   onClosed: () => void,
@@ -43,8 +44,8 @@ var NewProjectDialog = class NewProjectDialog {
         );
 
         this._entry = new St.Entry({
-            style_class: "better-workspaces-toggle-search",
-            hint_text: " Project name",
+            style_class: "better-workspaces-dialog-entry",
+            hint_text: "Project name",
             can_focus: true,
         });
         if (this._opts.initialName) this._entry.set_text(this._opts.initialName);
@@ -62,10 +63,12 @@ var NewProjectDialog = class NewProjectDialog {
         this._details = new St.Label({ style_class: "better-workspaces-dialog-details", text: "" });
         this._details.clutter_text.set_line_wrap(true);
         box.add(this._details);
+        this._show(this._details, this._opts.details || "");
 
         this._message = new St.Label({ style_class: "better-workspaces-dialog-message", text: "" });
         this._message.clutter_text.set_line_wrap(true);
         box.add(this._message);
+        this._show(this._message, "");
 
         this._dialog.setButtons([
             { label: "Cancel", action: () => this.close(), key: Clutter.KEY_Escape },
@@ -78,20 +81,26 @@ var NewProjectDialog = class NewProjectDialog {
         this._loadDetails();
     }
 
+    // An empty label still takes a line plus the box's spacing, so hide it.
+    _show(label, text) {
+        label.set_text(text);
+        label.visible = text.length > 0;
+    }
+
     _loadDetails() {
         if (!this._opts.loadDetails) return;
-        this._details.set_text("Reading the parent project…");
+        this._show(this._details, "Reading the parent project…");
         this._opts
             .loadDetails()
             .then((text) => {
                 this._ready = true;
-                if (this._dialog) this._details.set_text(text || "");
+                if (this._dialog) this._show(this._details, text || "");
             })
             .catch((e) => {
                 this._locked = true;
                 if (!this._dialog) return;
-                this._details.set_text("");
-                this._message.set_text(this._textOf(e));
+                this._show(this._details, "");
+                this._show(this._message, this._textOf(e));
             });
     }
 
@@ -108,7 +117,7 @@ var NewProjectDialog = class NewProjectDialog {
         if (this._busy || this._locked) return;
         const name = this._name();
         const exists = name && this._opts.nameExists && this._opts.nameExists(name);
-        this._message.set_text(exists ? "A project named “" + name + "” already exists." : "");
+        this._show(this._message, exists ? "A project named “" + name + "” already exists." : "");
     }
 
     _submit() {
@@ -117,7 +126,7 @@ var NewProjectDialog = class NewProjectDialog {
         if (!name) return;
 
         this._busy = true;
-        this._message.set_text("Creating in Notion…");
+        this._show(this._message, "Creating in Notion…");
         this._opts
             .submit(name)
             .then(() => {
@@ -129,7 +138,7 @@ var NewProjectDialog = class NewProjectDialog {
                 if (e && e.kind === "unclear") this._locked = true;
                 L.log("create '" + name + "' failed: " + (e && e.kind ? e.kind : e));
                 if (this._dialog) {
-                    this._message.set_text(this._textOf(e));
+                    this._show(this._message, this._textOf(e));
                 } else if (this._opts.onFailedAfterClose) {
                     this._opts.onFailedAfterClose(this._textOf(e));
                 }
