@@ -377,6 +377,11 @@
 }
 
 /* small dialogs */
+/* notices and confirmations: room above the buttons */
+.better-workspaces-dialog-notion .better-workspaces-notice {
+    padding-top: 10px;
+    padding-bottom: 18px;
+}
 /* the new-project dialog has few lines, so it gets a little more air between
    them, and above the buttons, than the dense navigator */
 .better-workspaces-dialog-notion .better-workspaces-new-project {
@@ -407,11 +412,13 @@
     background-color: rgba(255, 255, 255, 0.10);
     color: #ffffff;
 }
+/* The focused button is the one Enter presses, so it must be unmistakable: a
+   blue border doubled by an inset ring (a thicker border would resize it). */
 .better-workspaces-dialog-notion .dialog-button:focus {
     border: 1px solid #2383e2;
-    background-color: rgba(255, 255, 255, 0.06);
+    background-color: rgba(35, 131, 226, 0.16);
     color: #ffffff;
-    box-shadow: none;
+    box-shadow: inset 0 0 0 1px #2383e2;
 }
 .better-workspaces-dialog-notion .dialog-button:active {
     background-color: rgba(255, 255, 255, 0.14);
@@ -425,10 +432,12 @@
     border: 1px solid #3a92ea;
     background-color: #3a92ea;
 }
-/* a destructive action, in Notion's red: outlined, so Cancel stays the calm default */
+/* A destructive action, in Notion's red. At rest only its text is red, on the
+   same quiet button as Cancel, so it doesn't look like the selected one; it
+   fills in when pointed at or focused. */
 .better-workspaces-dialog-notion .dialog-button:destructive-action {
-    border: 1px solid rgba(235, 87, 87, 0.55);
-    background-color: rgba(235, 87, 87, 0.10);
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    background-color: rgba(255, 255, 255, 0.06);
     color: #ff7369;
 }
 .better-workspaces-dialog-notion .dialog-button:destructive-action:hover,
@@ -436,6 +445,7 @@
     border: 1px solid #eb5757;
     background-color: rgba(235, 87, 87, 0.22);
     color: #ff8a80;
+    box-shadow: inset 0 0 0 1px #eb5757;
 }
 
 /* Super+Tab switcher, Notion look */

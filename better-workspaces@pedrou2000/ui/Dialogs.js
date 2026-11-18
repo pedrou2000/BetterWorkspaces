@@ -12,7 +12,7 @@ function _open(title, message, buttons) {
     const dialog = new ModalDialog.ModalDialog(DialogStyle.dialogParams());
     const box = new St.BoxLayout({
         vertical: true,
-        style_class: "better-workspaces-toggle-panel",
+        style_class: "better-workspaces-toggle-panel better-workspaces-notice",
     });
     // Both labels have a fixed width (stylesheet) and wrap, so a long sentence
     // or project name makes the dialog taller, not wider.
