@@ -37,7 +37,7 @@ var NewProjectDialog = class NewProjectDialog {
         this._dialog = new ModalDialog.ModalDialog(DialogStyle.dialogParams());
         const box = new St.BoxLayout({
             vertical: true,
-            style_class: "better-workspaces-toggle-panel",
+            style_class: "better-workspaces-toggle-panel better-workspaces-new-project",
         });
         this._dialog.contentLayout.add(box);
 
