@@ -76,7 +76,7 @@ var ProjectTogglePanel = class ProjectTogglePanel {
 
         const box = new St.BoxLayout({
             vertical: true,
-            style_class: "better-workspaces-toggle-panel",
+            style_class: "better-workspaces-toggle-panel better-workspaces-project-panel",
         });
         this._dialog.contentLayout.add(box);
 

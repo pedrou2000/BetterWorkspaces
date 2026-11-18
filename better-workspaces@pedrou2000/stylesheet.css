@@ -73,11 +73,15 @@
     color: #ffffff;
 }
 
-/* Project Toggle Panel (M9) */
+/* Shared by the project panel and the small dialogs */
 .better-workspaces-toggle-panel {
     min-width: 420px;
     spacing: 10px;
     padding: 8px;
+}
+/* The project panel (Super+P) itself is wider; its search and list follow below. */
+.better-workspaces-project-panel {
+    min-width: 630px;
 }
 .better-workspaces-toggle-title {
     font-size: 16px;
@@ -85,7 +89,7 @@
     padding-bottom: 4px;
 }
 .better-workspaces-toggle-search {
-    min-width: 380px;
+    min-width: 570px;
     padding: 6px 10px;
 }
 .better-workspaces-search-icon {
@@ -94,7 +98,7 @@
 }
 .better-workspaces-toggle-scroll {
     max-height: 360px;
-    min-width: 400px;
+    min-width: 600px;
 }
 .better-workspaces-toggle-row {
     spacing: 10px;

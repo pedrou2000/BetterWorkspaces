@@ -70,10 +70,26 @@ var NewProjectDialog = class NewProjectDialog {
         box.add(this._message);
         this._show(this._message, "");
 
+        // ModalDialog hands each St.Button back on its info object.
+        const createInfo = { label: "Create", action: () => this._submit() };
         this._dialog.setButtons([
             { label: "Cancel", action: () => this.close(), key: Clutter.KEY_Escape },
-            { label: "Create", action: () => this._submit() },
+            createInfo,
         ]);
+
+        // While the user is typing, Enter means Create, so Create wears the
+        // theme's focus look, as if Tab had already reached it. Key focus itself
+        // stays in the entry (it has to, to type); once it moves to a button,
+        // that button's real focus look takes over.
+        const createButton = createInfo.button || null;
+        if (createButton) {
+            this._entry.clutter_text.connect("key-focus-in", () =>
+                createButton.add_style_pseudo_class("focus"),
+            );
+            this._entry.clutter_text.connect("key-focus-out", () =>
+                createButton.remove_style_pseudo_class("focus"),
+            );
+        }
 
         this._dialog.open();
         global.stage.set_key_focus(this._entry);
