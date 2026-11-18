@@ -64,8 +64,8 @@
     "showKeyHints": {
         "type": "switch",
         "default": true,
-        "description": "Show the keyboard hints in the project navigator",
-        "tooltip": "The line of keys at the bottom of the Super+P panel. Its small × also turns this off."
+        "description": "Show the key hints and Close button in the project navigator",
+        "tooltip": "The controls at the bottom of the Super+P panel. The small × next to the hints also turns this off. Esc closes the panel either way."
     },
     "dialogStyle": {
         "type": "combobox",

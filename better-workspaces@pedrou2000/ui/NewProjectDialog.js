@@ -87,21 +87,24 @@ var NewProjectDialog = class NewProjectDialog {
             createInfo,
         ]);
 
-        // Enter means Create while the user is typing, so Create is marked as the
-        // one Enter triggers. Notion look: it is the blue primary button. Classic
-        // look: it wears the theme's focus outline, as if Tab had already reached
-        // it (key focus itself stays in the entry — it has to, to type); once
-        // focus moves to a button, that button's real focus look takes over.
+        // Create looks selected exactly while Enter would press it: while the
+        // user is typing (key focus stays in the entry — it has to, to type) and
+        // when Create itself has focus. Tab onto Cancel and it goes quiet, so the
+        // dialog never shows two "selected" buttons. Notion look: the blue
+        // primary style. Classic look: the theme's focus outline, which the
+        // button also gets by itself when it has the real focus.
         const createButton = createInfo.button || null;
-        if (createButton && DialogStyle.is("notion")) {
-            createButton.add_style_pseudo_class("primary");
-        } else if (createButton) {
-            this._entry.clutter_text.connect("key-focus-in", () =>
-                createButton.add_style_pseudo_class("focus"),
-            );
-            this._entry.clutter_text.connect("key-focus-out", () =>
-                createButton.remove_style_pseudo_class("focus"),
-            );
+        if (createButton) {
+            const notion = DialogStyle.is("notion");
+            const mark = notion ? "primary" : "focus";
+            const on = () => createButton.add_style_pseudo_class(mark);
+            const off = () => createButton.remove_style_pseudo_class(mark);
+            this._entry.clutter_text.connect("key-focus-in", on);
+            this._entry.clutter_text.connect("key-focus-out", off);
+            if (notion) {
+                createButton.connect("key-focus-in", on);
+                createButton.connect("key-focus-out", off);
+            }
         }
 
         this._dialog.open();

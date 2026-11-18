@@ -39,8 +39,9 @@ const CREATE_STOP = "__create__";
 var ProjectTogglePanel = class ProjectTogglePanel {
     // getProjects() returns {id,name,icon,inWorkspace,...} in display order: the
     // ON projects in deck order, the others as they should be listed.
-    // opts: {showHints: bool, onHideHints()} — the key hints are a learning aid
-    // the user can switch off; onHideHints is their "don't show again".
+    // opts: {showControls: bool, onHideControls()} — the key hints and the Close
+    // button at the bottom can be switched off once the keys are known;
+    // onHideControls is the user's "don't show again". Escape closes either way.
     constructor(getProjects, onToggle, onReorder, onGo, onCreate, opts) {
         this._getProjects = getProjects;
         this._onToggle = onToggle;
@@ -123,20 +124,22 @@ var ProjectTogglePanel = class ProjectTogglePanel {
         this._scroll.add_actor(this._listBox);
         box.add(this._scroll, { expand: true });
 
-        if (this._opts.showHints !== false) box.add(this._makeHint());
+        const showControls = this._opts.showControls !== false;
+        if (showControls) box.add(this._makeHint());
 
         this._dnd.attachTo(this._listBox);
 
         this._renderRows();
 
-        // ModalDialog hands the St.Button back on the info object.
-        const closeInfo = {
-            label: "Close",
-            action: () => this.close(),
-            key: Clutter.KEY_Escape,
-        };
-        this._dialog.setButtons([closeInfo]);
-        this._closeButton = closeInfo.button || null;
+        // ModalDialog hands the St.Button back on the info object. Escape is
+        // handled in _onKeyPress, so it works with or without the button.
+        if (showControls) {
+            const closeInfo = { label: "Close", action: () => this.close() };
+            this._dialog.setButtons([closeInfo]);
+            this._closeButton = closeInfo.button || null;
+        } else {
+            this._dialog.buttonLayout.hide();
+        }
 
         this._dialog.open();
         global.stage.set_key_focus(this._search);
@@ -326,6 +329,8 @@ var ProjectTogglePanel = class ProjectTogglePanel {
         } else if (sym === Clutter.KEY_Return || sym === Clutter.KEY_KP_Enter) {
             if (event.get_state() & Clutter.ModifierType.CONTROL_MASK) this._flipSelection();
             else this._goSelection();
+        } else if (sym === Clutter.KEY_Escape) {
+            this.close();
         } else {
             return Clutter.EVENT_PROPAGATE;
         }
@@ -478,9 +483,9 @@ var ProjectTogglePanel = class ProjectTogglePanel {
             );
         }
 
-        // A small × at the far end: hide the hints now and stop showing them
+        // A small × at the far end: hide the controls now and stop showing them
         // (they come back from the applet's settings).
-        if (this._opts.onHideHints) {
+        if (this._opts.onHideControls) {
             footer.add(new St.Bin(), { expand: true });
             const dismiss = new St.Button({
                 style_class: "better-workspaces-hint-dismiss",
@@ -489,10 +494,14 @@ var ProjectTogglePanel = class ProjectTogglePanel {
             });
             dismiss.connect("clicked", () => {
                 footer.hide();
+                // The Close button goes with them, and leaves the Tab cycle.
+                this._dialog.buttonLayout.hide();
+                if (this._selectedId === CLOSE_STOP) this._selectedId = null;
+                this._closeButton = null;
                 try {
-                    this._opts.onHideHints();
+                    this._opts.onHideControls();
                 } catch (e) {
-                    L.error("onHideHints: " + e.toString());
+                    L.error("onHideControls: " + e.toString());
                 }
             });
             footer.add(dismiss, place);
