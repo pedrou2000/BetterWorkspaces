@@ -57,10 +57,9 @@ var ProjectStore = class ProjectStore {
     }
 
     // Take in a project this session just created in Notion (already ON and
-    // ordered remotely, so nothing is queued). createdLocallyAt marks it as not
-    // yet seen in a pull; merge() clears it the first time one includes it.
-    adopt(project, nowMs) {
-        const record = Object.assign({}, project, { createdLocallyAt: nowMs });
+    // ordered remotely, so nothing is queued).
+    adopt(project) {
+        const record = Object.assign({}, project);
         this._byId.set(record.id, record);
         this._acked.set(record.id + "\0inWorkspace", record.inWorkspace);
         this._acked.set(record.id + "\0order", record.order);
@@ -250,7 +249,6 @@ var ProjectStore = class ProjectStore {
                 if (r.inWorkspace) newlyOn.push(this._byId.get(r.id));
                 continue;
             }
-            delete local.createdLocallyAt; // a pull has now seen it
             // Catalog fields: remote wins (they can't move workspaces).
             local.name = r.name;
             local.icon = r.icon;

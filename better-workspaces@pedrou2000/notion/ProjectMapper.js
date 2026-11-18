@@ -60,9 +60,9 @@ function _number(page, propName) {
     return null;
 }
 
-// Either Notion's page-level archive or our own Archive checkbox.
+// Notion's page-level archive / trash, or our own Archive checkbox.
 function _isArchived(page) {
-    if (page.archived === true) return true;
+    if (page.archived === true || page.in_trash === true) return true;
     return _checkbox(page, ARCHIVE_PROP);
 }
 

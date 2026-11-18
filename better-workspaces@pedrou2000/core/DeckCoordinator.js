@@ -11,10 +11,6 @@ const L = AppletDir.lib.logger.Logger.makeLogger("deck-coord");
 
 const LAYOUT_FILE = "layout.json"; // {strips: [{id, wsCount}]} in deck order
 
-// A project created from here may be missing from the next pull or two (Notion's
-// query lags a fresh page). For this long that absence is not "archived".
-const NEW_PROJECT_GRACE_MS = 10 * 60 * 1000;
-
 var DeckCoordinator = class DeckCoordinator {
     // deps: {
     //   store, controller,
@@ -24,7 +20,8 @@ var DeckCoordinator = class DeckCoordinator {
     //   defaultWsPerProject: number,
     //   placeholderProjects: [{id,name,wsCount}],
     //   hooks: {rebuildPanel(), refresh(), refreshTogglePanel()},
-    //   now: () => ms (optional; defaults to Date.now),
+    //   pageStatus: (projectId) => Promise<"present"|"gone"|"unknown">, what
+    //     Notion says about one page; without it nothing is ever auto-removed,
     // }
     constructor(deps) {
         this._store = deps.store;
@@ -34,7 +31,8 @@ var DeckCoordinator = class DeckCoordinator {
         this._placeholder = deps.placeholderProjects || [];
         this._hooks = deps.hooks || {};
         this._persistence = deps.persistence || null;
-        this._now = deps.now || (() => Date.now());
+        this._pageStatus = deps.pageStatus || (async () => "unknown");
+        this._checking = new Set(); // project ids with a pageStatus lookup in flight
         this._closeRequested = new Set(); // gone project ids already asked to close
         if (this._persistence) {
             this._controller.state.onLayoutChanged(() => this._saveLayout());
@@ -125,21 +123,23 @@ var DeckCoordinator = class DeckCoordinator {
     // APPENDS to the deck end (append never moves existing workspaces). Unchecking
     // in Notion never auto-removes; that stays behind the explicit toggle-off flow.
     // A project that VANISHED from Notion (archived, deleted) is different: see
-    // _dropGoneProjects. `complete` is false when Notion had more pages to give.
+    // _checkMissingProjects. `complete` is false when Notion had more pages to give.
     onPull(projects, complete) {
         const state = this._controller.state;
         const onPlaceholder = state.indexOfProjectId("placeholder") >= 0;
-        if (!onPlaceholder && complete !== false) this._dropGoneProjects(projects);
+        // Judged BEFORE the merge below adds this pull's projects to the catalog:
+        // a pull that shares none with what we already hold is another database
+        // (changed id, wrong token), not a mass archive.
+        const remoteIds = new Set(projects.map((p) => p.id));
+        const sameDatabase = this._store.all().some((p) => remoteIds.has(p.id));
 
         const deckIds = [];
         for (let i = 0; i < state.projectCount(); i++) deckIds.push(state.getProject(i).id);
 
         const result = this._store.merge(projects, deckIds);
 
-        if (onPlaceholder || state.projectCount() === 0) {
-            // First real pull replaces the placeholder deck; a deck emptied by
-            // _dropGoneProjects falls back to it.
-            this.loadDeckFromStore();
+        if (onPlaceholder) {
+            this.loadDeckFromStore(); // first real pull replaces the placeholder deck
         } else {
             // Refresh renamed/re-iconed projects already on the deck.
             for (let i = 0; i < state.projectCount(); i++) {
@@ -158,45 +158,68 @@ var DeckCoordinator = class DeckCoordinator {
         this._rebuildPanel();
         this._refreshTogglePanel();
         this._refresh();
+
+        if (!onPlaceholder && sameDatabase && complete !== false) {
+            this._checkMissingProjects(remoteIds).catch((e) =>
+                L.error("checkMissingProjects: " + e.toString()),
+            );
+        }
     }
 
-    // A deck project absent from the pull was archived or deleted in Notion, so
-    // it leaves the deck: its windows are asked to close (gracefully — an app with
+    // A deck project absent from a pull MAY have been archived or deleted in
+    // Notion — or the query just doesn't list it yet (a page created seconds
+    // ago), or returned less than it should. So nothing is inferred from the
+    // absence: each absentee is looked up directly (pageStatus), and only a page
+    // Notion itself reports as archived, in the trash or nonexistent leaves the
+    // deck. "unknown" (no answer) does nothing; the next pull asks again.
+    //
+    // A gone project's windows are asked to close (gracefully — an app with
     // unsaved work can refuse) and it is removed once none are left. The close
     // request goes out ONCE per project; after that it is only re-checked on each
     // pull, so a refused prompt isn't re-raised every sync, and no dialog is
-    // shown for something the user didn't just do. Nothing is written back: the
-    // page may no longer exist.
-    //
-    // Guard: if the pull shares no project with the catalog we already hold, it
-    // is another database (changed id, wrong token), not a mass archive — acting
-    // on it would close every window on the desk.
-    _dropGoneProjects(projects) {
-        const remoteIds = new Set(projects.map((p) => p.id));
-        if (!this._store.all().some((p) => remoteIds.has(p.id))) return;
-
-        const state = this._controller.state;
-        const gone = [];
-        for (let i = 0; i < state.projectCount(); i++) {
-            const p = state.getProject(i);
-            if (remoteIds.has(p.id) || this._isFreshlyCreated(p.id)) continue;
-            gone.push(p);
-        }
+    // shown for something the user didn't just do. Nothing is written back.
+    async _checkMissingProjects(remoteIds) {
         // Forget close requests for projects that came back (un-archived).
         for (const id of Array.from(this._closeRequested)) {
             if (remoteIds.has(id)) this._closeRequested.delete(id);
         }
 
-        for (let i = 0; i < gone.length; i++) {
-            const p = gone[i];
-            if (this._controller.removeProjectIfEmpty(p.id)) {
-                this._closeRequested.delete(p.id);
-                L.log("onPull: " + p.name + " is gone from Notion — removed from the deck");
-            } else if (!this._closeRequested.has(p.id)) {
-                this._closeRequested.add(p.id);
-                L.log("onPull: " + p.name + " is gone from Notion — closing its windows");
-                this._closeAndRemoveGone(p);
+        const state = this._controller.state;
+        const missing = [];
+        for (let i = 0; i < state.projectCount(); i++) {
+            const p = state.getProject(i);
+            if (!remoteIds.has(p.id)) missing.push(p);
+        }
+
+        for (let i = 0; i < missing.length; i++) {
+            const p = missing[i];
+            if (this._checking.has(p.id)) continue; // pulls can overlap
+            this._checking.add(p.id);
+            let status = "unknown";
+            try {
+                status = await this._pageStatus(p.id);
+            } catch (e) {
+                L.error("pageStatus(" + p.name + "): " + e.toString());
             }
+            this._checking.delete(p.id);
+            if (!this._controller.state) return; // applet removed while we waited
+
+            if (status === "gone") this._removeGone(p);
+            else L.log("onPull: " + p.name + " missing from the pull but " + status + " in Notion");
+        }
+    }
+
+    _removeGone(p) {
+        if (this._controller.removeProjectIfEmpty(p.id)) {
+            L.log("onPull: " + p.name + " is gone from Notion — removed from the deck");
+            this._afterGoneRemoved(p.id);
+        } else if (
+            this._controller.state.indexOfProjectId(p.id) >= 0 &&
+            !this._closeRequested.has(p.id)
+        ) {
+            this._closeRequested.add(p.id);
+            L.log("onPull: " + p.name + " is gone from Notion — closing its windows");
+            this._closeAndRemoveGone(p);
         }
     }
 
@@ -210,25 +233,23 @@ var DeckCoordinator = class DeckCoordinator {
             L.log("onPull: " + project.name + " not removed yet (" + e.message + ")");
             return;
         }
-        this._closeRequested.delete(project.id);
-        this._store.forget(project.id);
+        this._afterGoneRemoved(project.id);
+    }
+
+    _afterGoneRemoved(projectId) {
+        this._closeRequested.delete(projectId);
+        this._store.forget(projectId);
         this._ensureDeckNotEmpty();
         this._rebuildPanel();
         this._refreshTogglePanel();
         this._refresh();
     }
 
-    _isFreshlyCreated(projectId) {
-        const record = this._store.get(projectId);
-        const at = record ? record.createdLocallyAt : null;
-        return typeof at === "number" && this._now() - at < NEW_PROJECT_GRACE_MS;
-    }
-
     // A project the user just created in Notion from here. Notion already has it
     // ON and ordered, so only the local side catches up: into the catalog, onto
     // the deck, and the user lands on it.
     adoptCreated(project) {
-        this._store.adopt(project, this._now());
+        this._store.adopt(project);
         const state = this._controller.state;
         if (state.indexOfProjectId("placeholder") >= 0) this.loadDeckFromStore();
         else this._controller.addProjectLive(this.toDef(project));
@@ -273,10 +294,12 @@ var DeckCoordinator = class DeckCoordinator {
         if (!this._store) throw new Error("no-store");
 
         if (newValue) {
-            // Order = max+1 so "bottom" survives reload. Land on the new project:
-            // the user just asked for it (a sync-driven append in onPull does not).
+            // Order = max+1 so "bottom" survives reload. Land on the new project
+            // and open its Notion page there: the user just asked for it (a
+            // sync-driven append in onPull does neither).
             const idx = this._controller.addProjectLive(this.toDef(project));
             this._controller.goToProject(idx);
+            this._controller.openActiveProjectHome();
             this._store.setInWorkspace(project.id, true);
             this._store.setOrder(project.id, this._store.maxOrder() + 1);
             this._rebuildPanel();

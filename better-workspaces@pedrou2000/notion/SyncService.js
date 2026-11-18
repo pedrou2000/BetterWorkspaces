@@ -69,6 +69,19 @@ var SyncService = class SyncService {
         return this.client.createPage(body);
     }
 
+    // What Notion says about ONE project page, asked directly rather than
+    // inferred from a query: "gone" (archived, in the trash, or no such page),
+    // "present", or "unknown" when there was no usable answer.
+    async projectStatus(pageId) {
+        let page;
+        try {
+            page = await this.client.getPage(pageId);
+        } catch (e) {
+            return e && e.status === 404 ? "gone" : "unknown";
+        }
+        return ProjectMapper.mapPage(page) ? "present" : "gone";
+    }
+
     // Errors never reject — status reflects the outcome and cached data serves on.
     // Resolves that outcome: "ok" | "error" | "unconfigured".
     async syncNow() {

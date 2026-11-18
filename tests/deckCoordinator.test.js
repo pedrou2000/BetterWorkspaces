@@ -59,8 +59,9 @@ function makeFakeDialogs() {
 
 function makeController(wm) {
     const mainloop = makeFakeMainloop();
+    const opened = []; // URLs handed to the browser
     const lib = {
-        browser: { Browser: { openUrlNewWindow() {} } },
+        browser: { Browser: { openUrlNewWindow: (url) => opened.push(url) } },
         constants: { Constants: { CLOSE_GRACE_MS: 0 } },
     };
     const coreDeps = { core: { mapping: { Mapping: Mapping } }, lib: lib };
@@ -84,7 +85,7 @@ function makeController(wm) {
         extraImports: { mainloop: mainloop },
     });
     wm = wm || new FakeWm(1);
-    return { controller: new Controller(wm), wm, mainloop };
+    return { controller: new Controller(wm), wm, mainloop, opened };
 }
 
 function makeStore(persistence) {
@@ -107,7 +108,7 @@ function makeStack(cached, opts) {
     const writer = makeAutoWriter();
     store.setWriter(writer);
 
-    const { controller, wm, mainloop } = makeController(opts.wm);
+    const { controller, wm, mainloop, opened } = makeController(opts.wm);
     const dialogs = makeFakeDialogs();
     const hookCalls = { rebuildPanel: 0, refresh: 0, refreshTogglePanel: 0 };
 
@@ -119,7 +120,7 @@ function makeStack(cached, opts) {
         dialogs,
         defaultWsPerProject: DEFAULT_WS_PER_PROJECT,
         placeholderProjects: PLACEHOLDER,
-        now: opts.now,
+        pageStatus: opts.pageStatus || (async () => "gone"),
         hooks: {
             rebuildPanel: () => hookCalls.rebuildPanel++,
             refresh: () => hookCalls.refresh++,
@@ -127,7 +128,18 @@ function makeStack(cached, opts) {
         },
     });
 
-    return { coord, store, controller, wm, mainloop, writer, dialogs, hookCalls, persistence };
+    return {
+        coord,
+        store,
+        controller,
+        wm,
+        mainloop,
+        writer,
+        dialogs,
+        hookCalls,
+        persistence,
+        opened,
+    };
 }
 
 function proj(id, inWorkspace, order) {
@@ -272,6 +284,32 @@ test("handleToggle ON appends to the deck, flips the flag, assigns max+1 order",
     await new Promise((r) => setImmediate(r)); // let queued pushes drain
     assert.ok(writer.calls.some((c) => c.kind === "flag" && c.id === "b" && c.value === true));
     assert.ok(hookCalls.rebuildPanel > 0);
+});
+
+test("turning a project ON opens its Notion page on its workspace", async () => {
+    const off = Object.assign(proj("b", false, null), { notionUrl: "https://notion.so/b" });
+    const { coord, store, wm, opened } = makeStack([proj("a", true, 0), off]);
+    coord.loadDeckFromStore();
+
+    await coord.handleToggle(store.get("b"), true);
+    assert.deepEqual(opened, ["https://notion.so/b"]);
+    assert.equal(wm.getActiveIndex(), 1); // opened after landing there
+});
+
+test("only the user's own turn-on opens a page: not a sync append, not going to an ON project", async () => {
+    const on = Object.assign(proj("a", true, 0), { notionUrl: "https://notion.so/a" });
+    const { coord, opened } = makeStack([on]);
+    coord.loadDeckFromStore();
+
+    coord.onPull(
+        [
+            Object.assign(remote("a", true, 0), { notionUrl: "https://notion.so/a" }),
+            Object.assign(remote("b", true, 1), { notionUrl: "https://notion.so/b" }),
+        ],
+        true,
+    );
+    await coord.openProject({ id: "b", name: "B" }); // already on the deck: just switch
+    assert.deepEqual(opened, []);
 });
 
 test("handleToggle ON is idempotent — re-toggling an already-deck project doesn't duplicate", async () => {
@@ -501,7 +539,18 @@ function remote(id, inWorkspace, order) {
     return { id, name: id.toUpperCase(), icon: null, notionUrl: null, inWorkspace, order };
 }
 
-test("a deck project gone from Notion is removed once nothing is open on it", () => {
+// Let the per-page lookups that follow a pull settle.
+const tick = () => new Promise((r) => setImmediate(r));
+
+// ...and then the async part of a removal: the close-grace timer and the
+// promise continuation behind it.
+async function settle(mainloop) {
+    await tick();
+    mainloop.flush();
+    await tick();
+}
+
+test("a deck project Notion reports gone is removed once nothing is open on it", async () => {
     const { coord, store, controller, wm } = makeStack([
         proj("a", true, 0),
         proj("b", true, 1),
@@ -511,18 +560,84 @@ test("a deck project gone from Notion is removed once nothing is open on it", ()
     wm.addWindow(2, "c-win");
 
     coord.onPull([remote("a", true, 0), remote("c", true, 2)], true); // b was archived
+    await tick();
 
     assert.deepEqual(deckIds(controller), ["a", "c"]);
     assert.deepEqual(wm.layout(), [[], ["c-win"]]); // c's window moved with it
     assert.equal(store.get("b"), null); // and it left the catalog
 });
 
-// Let the async part of a pull-driven removal finish: the close-grace timer,
-// then the promise continuation behind it.
-async function settle(mainloop) {
-    mainloop.flush();
-    await new Promise((r) => setImmediate(r));
-}
+test("a project missing from the pull is looked up, and kept if Notion says it is there", async () => {
+    const asked = [];
+    const { coord, store, controller, wm } = makeStack([proj("a", true, 0), proj("b", true, 1)], {
+        pageStatus: async (id) => {
+            asked.push(id);
+            return "present"; // e.g. created seconds ago and not listed by the query yet
+        },
+    });
+    coord.loadDeckFromStore();
+    const win = wm.addWindow(1, "notion page");
+
+    coord.onPull([remote("a", true, 0)], true);
+    await settle(makeFakeMainloop());
+
+    assert.deepEqual(asked, ["b"]); // only the absentee
+    assert.deepEqual(deckIds(controller), ["a", "b"]);
+    assert.equal(win.closeRequested, false);
+    assert.ok(store.get("b"));
+});
+
+test("no answer about a missing project changes nothing, and the next pull asks again", async () => {
+    let answer = "unknown";
+    const { coord, controller } = makeStack([proj("a", true, 0), proj("b", true, 1)], {
+        pageStatus: async () => {
+            if (answer === "throw") throw new Error("boom");
+            return answer;
+        },
+    });
+    coord.loadDeckFromStore();
+    const pull = [remote("a", true, 0)];
+
+    coord.onPull(pull, true);
+    await tick();
+    assert.deepEqual(deckIds(controller), ["a", "b"]);
+
+    answer = "throw";
+    coord.onPull(pull, true);
+    await tick();
+    assert.deepEqual(deckIds(controller), ["a", "b"]);
+
+    answer = "gone";
+    coord.onPull(pull, true);
+    await tick();
+    assert.deepEqual(deckIds(controller), ["a"]);
+});
+
+test("a project created here and deleted before any pull saw it is removed at the next pull", async () => {
+    // The reported bug: a time-based grace kept such a project for ten minutes.
+    const trashed = new Set();
+    const { coord, store, controller, mainloop, wm } = makeStack([proj("a", true, 0)], {
+        pageStatus: async (id) => (trashed.has(id) ? "gone" : "present"),
+    });
+    coord.loadDeckFromStore();
+    coord.adoptCreated(remote("n", true, 1));
+    const win = wm.addWindow(1, "notion page");
+
+    coord.onPull([remote("a", true, 0)], true); // the query doesn't list it yet: kept
+    await settle(mainloop);
+    assert.deepEqual(deckIds(controller), ["a", "n"]);
+    assert.equal(win.closeRequested, false);
+
+    trashed.add("n"); // the user deletes it in Notion, seconds after creating it
+    coord.onPull([remote("a", true, 0)], true);
+    await tick();
+    assert.equal(win.closeRequested, true);
+    wm.honorCloseRequests();
+    await settle(mainloop);
+
+    assert.deepEqual(deckIds(controller), ["a"]);
+    assert.equal(store.get("n"), null);
+});
 
 test("a gone project's windows are closed and it leaves the deck and the catalog", async () => {
     const { coord, store, controller, wm, mainloop, dialogs } = makeStack([
@@ -533,6 +648,7 @@ test("a gone project's windows are closed and it leaves the deck and the catalog
     const win = wm.addWindow(1, "b-notes");
 
     coord.onPull([remote("a", true, 0)], true); // b was archived
+    await tick();
     assert.equal(win.closeRequested, true);
     wm.honorCloseRequests(); // the app closes
     await settle(mainloop);
@@ -566,6 +682,7 @@ test("a window that refuses to close is asked once; the project goes when it doe
     win.closeRequested = true;
     wm.honorCloseRequests(); // the user finally closes it
     coord.onPull(pull, true);
+    await tick();
     assert.deepEqual(deckIds(controller), ["a"]);
 });
 
@@ -579,13 +696,24 @@ test("a project that comes back and is archived again is asked to close again", 
     win.closeRequested = false;
 
     coord.onPull([remote("a", true, 0), remote("b", true, 1)], true); // un-archived
+    await tick();
     coord.onPull([remote("a", true, 0)], true); // archived again
+    await tick();
     assert.equal(win.closeRequested, true);
     await settle(mainloop);
 });
 
-test("a truncated pull, an empty pull, or another database touches nothing", async () => {
-    const { coord, controller, wm, mainloop } = makeStack([proj("a", true, 0), proj("b", true, 1)]);
+test("a truncated pull, an empty pull, or another database asks nothing and touches nothing", async () => {
+    const asked = [];
+    const { coord, controller, wm, mainloop } = makeStack(
+        [proj("a", true, 0), proj("b", true, 1)],
+        {
+            pageStatus: async (id) => {
+                asked.push(id);
+                return "gone";
+            },
+        },
+    );
     coord.loadDeckFromStore();
     const win = wm.addWindow(1, "b-notes");
 
@@ -594,11 +722,12 @@ test("a truncated pull, an empty pull, or another database touches nothing", asy
     coord.onPull([remote("x", true, 0), remote("y", false, null)], true); // a different one
     await settle(mainloop);
 
+    assert.deepEqual(asked, []);
     assert.equal(win.closeRequested, false);
     assert.deepEqual(deckIds(controller).slice(0, 2), ["a", "b"]);
 });
 
-test("removing a gone project the user is on lands on the previous project", () => {
+test("removing a gone project the user is on lands on the previous project", async () => {
     const { coord, controller, wm } = makeStack([
         proj("a", true, 0),
         proj("b", true, 1),
@@ -609,12 +738,13 @@ test("removing a gone project the user is on lands on the previous project", () 
     controller.goToProject(1); // on b, came from c
 
     coord.onPull([remote("a", true, 0), remote("c", true, 2)], true);
+    await tick();
     assert.deepEqual(deckIds(controller), ["a", "c"]);
     assert.equal(controller.state.activeProject().id, "c");
     assert.equal(wm.getActiveIndex(), 1);
 });
 
-test("a deck whose every project is gone falls back to the placeholder", () => {
+test("a deck whose every project is gone falls back to the placeholder", async () => {
     const { coord, controller, wm } = makeStack([
         proj("a", true, 0),
         proj("b", true, 1),
@@ -623,8 +753,31 @@ test("a deck whose every project is gone falls back to the placeholder", () => {
     coord.loadDeckFromStore();
 
     coord.onPull([remote("c", false, null)], true); // same database: c is still there
+    await tick();
     assert.deepEqual(deckIds(controller), ["placeholder"]);
     assert.equal(wm.getWorkspaceCount(), 1);
+});
+
+test("overlapping pulls look a missing project up once at a time", async () => {
+    let release;
+    const asked = [];
+    const { coord, controller } = makeStack([proj("a", true, 0), proj("b", true, 1)], {
+        pageStatus: (id) => {
+            asked.push(id);
+            return new Promise((resolve) => (release = () => resolve("gone")));
+        },
+    });
+    coord.loadDeckFromStore();
+    const pull = [remote("a", true, 0)];
+
+    coord.onPull(pull, true);
+    coord.onPull(pull, true); // a second pull lands while the first lookup is open
+    await tick();
+    assert.deepEqual(asked, ["b"]);
+
+    release();
+    await tick();
+    assert.deepEqual(deckIds(controller), ["a"]);
 });
 
 // adoptCreated (a project just created in Notion from here)
@@ -646,36 +799,6 @@ test("adoptCreated replaces the placeholder deck", () => {
     coord.loadDeckFromStore();
     coord.adoptCreated(remote("n", true, 0));
     assert.deepEqual(deckIds(controller), ["n"]);
-});
-
-test("a just-created project missing from the next pulls is not treated as archived", () => {
-    let now = 1000000;
-    const { coord, store, controller, wm } = makeStack([proj("a", true, 0)], { now: () => now });
-    coord.loadDeckFromStore();
-    coord.adoptCreated(remote("n", true, 1));
-    const win = wm.addWindow(1, "notion page");
-
-    coord.onPull([remote("a", true, 0)], true); // Notion's query doesn't list it yet
-    assert.deepEqual(deckIds(controller), ["a", "n"]);
-    assert.equal(win.closeRequested, false);
-    assert.ok(store.get("n"));
-
-    now += 60 * 1000;
-    coord.onPull([remote("a", true, 0), remote("n", true, 1)], true); // now it does
-    assert.equal(store.get("n").createdLocallyAt, undefined);
-    assert.deepEqual(deckIds(controller), ["a", "n"]);
-});
-
-test("once a pull has seen it, or the grace period is over, absence means archived again", async () => {
-    let now = 1000000;
-    const { coord, controller, mainloop } = makeStack([proj("a", true, 0)], { now: () => now });
-    coord.loadDeckFromStore();
-    coord.adoptCreated(remote("n", true, 1));
-
-    now += 11 * 60 * 1000; // never appeared, and the grace period has passed
-    coord.onPull([remote("a", true, 0)], true);
-    await settle(mainloop);
-    assert.deepEqual(deckIds(controller), ["a"]);
 });
 
 // an emptied deck

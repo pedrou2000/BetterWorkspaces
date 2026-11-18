@@ -68,6 +68,8 @@ var MyApplet = class MyApplet extends Applet.Applet {
                 controller: this.controller,
                 persistence: Persistence,
                 dialogs: Dialogs,
+                // this.sync is created just below; resolved when first called.
+                pageStatus: (id) => this.sync.projectStatus(id),
                 defaultWsPerProject: DEFAULT_WS_PER_PROJECT,
                 placeholderProjects: PLACEHOLDER_PROJECTS,
                 hooks: {

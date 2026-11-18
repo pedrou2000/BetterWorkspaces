@@ -45,6 +45,14 @@ class FakeNotionClient {
         this.calls.push({ method: "updatePageNumber", pageId, propName, value });
         this._gate();
     }
+    // pages: id -> page object, or an Error to throw for that id.
+    async getPage(pageId) {
+        this.calls.push({ method: "getPage", pageId });
+        this._gate();
+        const page = (this.pages || {})[pageId];
+        if (page instanceof Error) throw page;
+        return page;
+    }
 }
 
 // Fake Gio.NetworkMonitor: tests flip availability and emit network-changed.
@@ -272,4 +280,36 @@ test("stop/destroy disconnect the network watcher", () => {
     sync.start();
     sync.destroy();
     assert.equal(netMonitor.handlerCount(), 0);
+});
+
+// projectStatus (one page, asked directly)
+
+test("projectStatus: present, archived, in the trash, missing, and no answer", async () => {
+    const { sync, client } = makeSync();
+    const notFound = new Error("http-404");
+    notFound.status = 404;
+    const serverError = new Error("http-502");
+    serverError.status = 502;
+    client.pages = {
+        live: rawPage("live", "Live", true, 0),
+        trashed: Object.assign(rawPage("trashed", "T", true, 1), {
+            archived: true,
+            in_trash: true,
+        }),
+        trashedOnly: Object.assign(rawPage("t2", "T2", true, 1), { in_trash: true }),
+        missing: notFound,
+        flaky: serverError,
+        offline: new Error("Could not connect"),
+    };
+    const checkbox = rawPage("boxed", "Boxed", true, 2);
+    checkbox.properties.Archive = { checkbox: true };
+    client.pages.boxed = checkbox;
+
+    assert.equal(await sync.projectStatus("live"), "present");
+    assert.equal(await sync.projectStatus("trashed"), "gone");
+    assert.equal(await sync.projectStatus("trashedOnly"), "gone");
+    assert.equal(await sync.projectStatus("boxed"), "gone"); // our own Archive checkbox
+    assert.equal(await sync.projectStatus("missing"), "gone"); // deleted for good
+    assert.equal(await sync.projectStatus("flaky"), "unknown");
+    assert.equal(await sync.projectStatus("offline"), "unknown");
 });
