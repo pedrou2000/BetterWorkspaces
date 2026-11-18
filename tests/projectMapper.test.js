@@ -45,6 +45,7 @@ test("mapPage maps the basic fields", () => {
         notionUrl: "https://notion.so/p1",
         inWorkspace: true,
         order: 2,
+        priority: null,
     });
 });
 
@@ -263,4 +264,45 @@ test("inheritedFrom reads Type and the inherited relations, tolerating missing o
     const empty = ProjectMapper.inheritedFrom({});
     assert.equal(empty.type, null);
     assert.deepEqual(Array.from(empty.relations.Areas), []);
+});
+
+// priority
+
+function withPriority(id, name, priority) {
+    const pg = page(id, { name: name });
+    pg.properties[ProjectMapper.PRIORITY_PROP] = { select: priority ? { name: priority } : null };
+    return pg;
+}
+
+test("mapPage reads the Current Priority option's name, or null when unset or absent", () => {
+    assert.equal(ProjectMapper.mapPage(withPriority("a", "A", "High")).priority, "High");
+    assert.equal(ProjectMapper.mapPage(withPriority("b", "B", null)).priority, null);
+    assert.equal(ProjectMapper.mapPage(page("c")).priority, null);
+});
+
+test("sortByPriority: highest first, the database's own order, unset last, title tie-break", () => {
+    const input = [
+        { name: "Zeta", priority: "Low" },
+        { name: "None B", priority: null },
+        { name: "Alpha", priority: "Vey Low" },
+        { name: "Mid", priority: "Medium" },
+        { name: "Top 2", priority: "Top" },
+        { name: "None A" }, // a cache written before priorities were read
+        { name: "Hi", priority: "High" },
+        { name: "Top 1", priority: "Top" },
+        { name: "Odd", priority: "Someday" }, // an option added later in Notion
+    ];
+    const names = ProjectMapper.sortByPriority(input).map((p) => p.name);
+    assert.deepEqual(names, [
+        "Top 1",
+        "Top 2",
+        "Hi",
+        "Mid",
+        "Zeta",
+        "Alpha",
+        "None A",
+        "None B",
+        "Odd",
+    ]);
+    assert.equal(input[0].name, "Zeta"); // input untouched
 });

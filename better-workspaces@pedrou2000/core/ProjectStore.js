@@ -52,6 +52,15 @@ var ProjectStore = class ProjectStore {
         return ProjectMapper.sortByOrder(Array.from(this._byId.values()));
     }
 
+    // The project panel's order: ON projects in deck order, then the rest by
+    // priority (highest first).
+    panelList() {
+        const all = this.all();
+        return all
+            .filter((p) => p.inWorkspace)
+            .concat(ProjectMapper.sortByPriority(all.filter((p) => !p.inWorkspace)));
+    }
+
     get(id) {
         return this._byId.get(id) || null;
     }
@@ -253,6 +262,7 @@ var ProjectStore = class ProjectStore {
             local.name = r.name;
             local.icon = r.icon;
             local.notionUrl = r.notionUrl;
+            local.priority = r.priority;
             // Deck fields: remote wins unless a local write is pending; but an
             // in-deck id is never downgraded to false (the deck owns membership).
             if (!this._dirty.has(r.id + "\0inWorkspace")) {

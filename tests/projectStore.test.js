@@ -424,3 +424,31 @@ test("adopt adds an already-ON project without queuing any write", async () => {
     assert.ok(cacheOf(persistence).some((p) => p.id === "n")); // survives a restart
     assert.equal(store.maxOrder(), 1);
 });
+
+// priority and the panel's order
+
+test("merge takes a project's priority from Notion", () => {
+    const { store } = makeStore([proj("a", 0, true)]);
+    store.merge([Object.assign(proj("a", 0, true), { priority: "High" })], ["a"]);
+    assert.equal(store.get("a").priority, "High");
+    store.merge([Object.assign(proj("a", 0, true), { priority: null })], ["a"]);
+    assert.equal(store.get("a").priority, null);
+});
+
+test("panelList: ON projects in deck order, then the rest by priority", () => {
+    const off = (id, priority) => Object.assign(proj(id, null, false), { priority: priority });
+    const on = (id, order, priority) =>
+        Object.assign(proj(id, order, true), { priority: priority });
+    const { store } = makeStore([
+        off("low", "Low"),
+        on("second", 1, "Top"),
+        off("none", null),
+        off("top", "Top"),
+        on("first", 0, "Vey Low"), // deck order wins for ON projects, not priority
+        off("medium", "Medium"),
+    ]);
+    assert.deepEqual(
+        store.panelList().map((p) => p.id),
+        ["first", "second", "top", "medium", "low", "none"],
+    );
+});

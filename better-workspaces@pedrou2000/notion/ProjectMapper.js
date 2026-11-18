@@ -10,6 +10,11 @@ const WORKSPACE_PROP = "Workspace";
 const ARCHIVE_PROP = "Archive";
 const ORDER_PROP = "Workspace Order";
 const PARENT_PROP = "Parent";
+const PRIORITY_PROP = "Current Priority";
+// Highest first, as the options are ordered in the Projects database (including
+// its "Vey Low" spelling; "Very Low" is accepted in case that gets fixed).
+// A page object carries only the chosen option's name, not the options' order.
+const PRIORITY_ORDER = ["Top", "High", "Medium", "Low", "Vey Low", "Very Low"];
 const TYPE_PROP = "Type";
 // What a sub-project copies from its parent, mirroring the Projects database's
 // own "Create Sub-Project" button: Type, and these relations.
@@ -58,6 +63,16 @@ function _number(page, propName) {
         }
     } catch (e) {}
     return null;
+}
+
+// The chosen option's name of a select property, or null.
+function _select(page, propName) {
+    try {
+        const prop = page.properties[propName];
+        return prop && prop.select && prop.select.name ? prop.select.name : null;
+    } catch (e) {
+        return null;
+    }
 }
 
 // Notion's page-level archive / trash, or our own Archive checkbox.
@@ -157,7 +172,23 @@ function mapPage(page) {
         notionUrl: page.url || null,
         inWorkspace: _wantsWorkspace(page),
         order: _number(page, ORDER_PROP),
+        priority: _select(page, PRIORITY_PROP),
     };
+}
+
+// Position of a priority name, highest first; unknown or unset sorts last.
+function _priorityRank(name) {
+    const i = PRIORITY_ORDER.indexOf(name);
+    return i === -1 ? PRIORITY_ORDER.length : i;
+}
+
+// Highest priority first; no priority last; ties broken by title.
+function sortByPriority(projects) {
+    return projects.slice().sort(function (a, b) {
+        const d = _priorityRank(a.priority) - _priorityRank(b.priority);
+        if (d !== 0) return d;
+        return (a.name || "").localeCompare(b.name || "");
+    });
 }
 
 // Ascending Workspace Order; unset orders sort last, tie-broken by title.
@@ -192,6 +223,8 @@ var ProjectMapper = {
     TYPE_PROP: TYPE_PROP,
     mapResults: mapResults,
     sortByOrder: sortByOrder,
+    sortByPriority: sortByPriority,
+    PRIORITY_PROP: PRIORITY_PROP,
     TITLE_PROP: TITLE_PROP,
     WORKSPACE_PROP: WORKSPACE_PROP,
     ARCHIVE_PROP: ARCHIVE_PROP,

@@ -7,8 +7,8 @@
 //     page may exist, and a second POST would duplicate it. The next sync shows.
 //   - The local catalog and deck change only from the page Notion returned,
 //     never from what we meant to create.
-//   - A sub-project gets exactly what describeParent() reported, so the caller
-//     can show the user what will be copied before they confirm.
+//   - A sub-project gets exactly what describeParent() reported, which the
+//     caller reads before the user confirms.
 // Collaborators are injected, so this has no GJS dependency.
 
 const AppletDir = imports.ui.appletManager.applets["better-workspaces@pedrou2000"];
@@ -25,9 +25,9 @@ function _fail(kind, userMessage) {
 }
 
 var ProjectCreator = class ProjectCreator {
-    // One line telling the user what a sub-project will copy from its parent,
-    // from describeParent()'s result. Relations the integration can't see come
-    // back empty, indistinguishable from "the parent has none", so say so.
+    // One line, for the log, saying what a sub-project will copy from its
+    // parent (describeParent()'s result). Relations the integration can't see
+    // come back empty, indistinguishable from "the parent has none", so say so.
     static summarize(inherited) {
         const parts = [];
         if (inherited.type) parts.push("Type: " + inherited.type);

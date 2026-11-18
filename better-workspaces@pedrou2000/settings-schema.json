@@ -71,6 +71,19 @@
         "description": "Look of the dialogs and overlays",
         "tooltip": "The project navigator, the new-project dialog, notices, the Super+Tab switcher and the on-screen message. The panel bar is not affected. Applies the next time each one opens."
     },
+    "surfaceTone": {
+        "type": "combobox",
+        "default": "gray",
+        "options": {
+            "Gray (Notion's menus)": "gray",
+            "Darker (Notion's page)": "darker",
+            "See-through": "glass",
+            "Blue tint": "blue"
+        },
+        "dependency": "dialogStyle=notion",
+        "description": "Background of the Notion-like look",
+        "tooltip": "Applies the next time each dialog or overlay opens."
+    },
     "notionStyleEmoji": {
         "type": "switch",
         "default": true,

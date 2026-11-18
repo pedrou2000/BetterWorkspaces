@@ -37,8 +37,8 @@ const CLOSE_STOP = "__close__";
 const CREATE_STOP = "__create__";
 
 var ProjectTogglePanel = class ProjectTogglePanel {
-    // getProjects() returns {id,name,icon,inWorkspace,...} with the ON projects
-    // already in deck order.
+    // getProjects() returns {id,name,icon,inWorkspace,...} in display order: the
+    // ON projects in deck order, the others as they should be listed.
     constructor(getProjects, onToggle, onReorder, onGo, onCreate) {
         this._getProjects = getProjects;
         this._onToggle = onToggle;

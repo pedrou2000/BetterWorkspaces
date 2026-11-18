@@ -446,3 +446,18 @@
     font-weight: bold;
     box-shadow: 0 8px 24px 0 rgba(0, 0, 0, 0.45);
 }
+
+/* Background choices for the Notion-like look (setting: surfaceTone). Each is
+   one extra class on the dialog, switcher and on-screen message. Keep these
+   LAST: at equal specificity the later rule wins, which is how they override
+   the default gray above. */
+.better-workspaces-tone-darker {
+    background-color: #191919;
+}
+.better-workspaces-tone-glass {
+    background-color: rgba(28, 28, 28, 0.86);
+}
+.better-workspaces-tone-blue {
+    background-color: #262932;
+    border: 1px solid rgba(150, 165, 255, 0.20);
+}

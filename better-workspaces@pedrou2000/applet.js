@@ -98,6 +98,13 @@ var MyApplet = class MyApplet extends Applet.Applet {
             IconRenderer.setEmojiScale(this.settings.getValue("emojiZoom") / 100);
             IconRenderer.setEmojiImages(this.settings.getValue("notionStyleEmoji"));
             DialogStyle.set(this.settings.getValue("dialogStyle"));
+            DialogStyle.setTone(this.settings.getValue("surfaceTone"));
+            this.settings.bindProperty(
+                Settings.BindingDirection.IN,
+                "surfaceTone",
+                "surfaceTone",
+                () => DialogStyle.setTone(this.settings.getValue("surfaceTone")),
+            );
             this.settings.bindProperty(
                 Settings.BindingDirection.IN,
                 "dialogStyle",
@@ -234,11 +241,15 @@ var MyApplet = class MyApplet extends Applet.Applet {
             const dialog = new NewProjectDialog({
                 title: parent ? "New sub-project of " + parent.name : "New project",
                 initialName: initialName || "",
-                details: parent ? "" : "Creates a top-level project in Notion, with no parent.",
-                loadDetails: parent
+                details: parent
+                    ? "Creates a sub-project in Notion."
+                    : "Creates a project in Notion.",
+                // What the sub-project will copy, read now and kept for the log
+                // rather than shown.
+                prepare: parent
                     ? async () => {
                           inherited = await this.creator.describeParent(parent.id);
-                          return ProjectCreator.summarize(inherited);
+                          L.log(parent.name + ": " + ProjectCreator.summarize(inherited));
                       }
                     : null,
                 nameExists: (name) => {
@@ -402,7 +413,7 @@ var MyApplet = class MyApplet extends Applet.Applet {
     openTogglePanel() {
         try {
             const panel = new ProjectTogglePanel(
-                () => this.store.all(),
+                () => this.store.panelList(),
                 (project, newValue) => this.deckCoord.handleToggle(project, newValue),
                 (movedId, toOnPos) => this.deckCoord.reorderFromPanel(movedId, toOnPos),
                 (project) =>

@@ -17,9 +17,10 @@ var NewProjectDialog = class NewProjectDialog {
     // opts: {
     //   title,
     //   initialName,
-    //   details: string,  a line under the name saying what will be created, or
-    //   loadDetails: () => Promise<string>,  the same line read asynchronously
-    //       (what will be copied); if it rejects ({userMessage}) creating is blocked
+    //   details: string,  a line under the name saying what will be created
+    //   prepare: () => Promise,  optional work the create depends on (reading the
+    //       parent), started when the dialog opens and shown only if it fails:
+    //       a rejection ({userMessage}) blocks creating
     //   nameExists: (name) => bool,
     //   submit: (name) => Promise,  rejects with {kind, userMessage}
     //   onClosed: () => void,
@@ -28,8 +29,8 @@ var NewProjectDialog = class NewProjectDialog {
     constructor(opts) {
         this._opts = opts;
         this._busy = false;
-        this._locked = false; // details unreadable, or an unclear outcome
-        this._ready = !opts.loadDetails;
+        this._locked = false; // prepare failed, or an unclear outcome
+        this._prepared = null; // prepare()'s promise; a create waits for it
     }
 
     open() {
@@ -98,7 +99,7 @@ var NewProjectDialog = class NewProjectDialog {
         this._dialog.open();
         global.stage.set_key_focus(this._entry);
         this._onTextChanged();
-        this._loadDetails();
+        this._prepare();
     }
 
     // An empty label still takes a line plus the box's spacing, so hide it.
@@ -107,21 +108,14 @@ var NewProjectDialog = class NewProjectDialog {
         label.visible = text.length > 0;
     }
 
-    _loadDetails() {
-        if (!this._opts.loadDetails) return;
-        this._show(this._details, "Reading the parent project…");
-        this._opts
-            .loadDetails()
-            .then((text) => {
-                this._ready = true;
-                if (this._dialog) this._show(this._details, text || "");
-            })
-            .catch((e) => {
-                this._locked = true;
-                if (!this._dialog) return;
-                this._show(this._details, "");
-                this._show(this._message, this._textOf(e));
-            });
+    // Runs while the user types, so it has usually finished by the time they
+    // press Enter; a create that comes sooner simply waits for it.
+    _prepare() {
+        this._prepared = this._opts.prepare ? this._opts.prepare() : Promise.resolve();
+        this._prepared.catch((e) => {
+            this._locked = true;
+            if (this._dialog) this._show(this._message, this._textOf(e));
+        });
     }
 
     _textOf(e) {
@@ -141,14 +135,14 @@ var NewProjectDialog = class NewProjectDialog {
     }
 
     _submit() {
-        if (this._busy || this._locked || !this._ready) return;
+        if (this._busy || this._locked) return;
         const name = this._name();
         if (!name) return;
 
         this._busy = true;
         this._show(this._message, "Creating in Notion…");
-        this._opts
-            .submit(name)
+        this._prepared
+            .then(() => this._opts.submit(name))
             .then(() => {
                 this._busy = false;
                 this.close();

@@ -30,3 +30,36 @@ test("an unknown or missing setting value falls back to the default look", () =>
         assert.equal(DialogStyle.is("notion"), true, String(bad));
     }
 });
+
+test("a background tone adds one more class to every Notion-look surface", () => {
+    const DialogStyle = load();
+    DialogStyle.setTone("darker");
+    assert.deepEqual(DialogStyle.dialogParams(), {
+        styleClass: "better-workspaces-dialog-notion better-workspaces-tone-darker",
+    });
+    assert.equal(
+        DialogStyle.className("better-workspaces-osd"),
+        "better-workspaces-osd-notion better-workspaces-tone-darker",
+    );
+
+    DialogStyle.setTone("gray"); // the default needs no extra class
+    assert.deepEqual(DialogStyle.dialogParams(), { styleClass: "better-workspaces-dialog-notion" });
+});
+
+test("tones are ignored by the classic look, and unknown tones fall back to gray", () => {
+    const DialogStyle = load();
+    DialogStyle.setTone("blue");
+    DialogStyle.set("classic");
+    assert.deepEqual(DialogStyle.dialogParams(), {});
+    assert.equal(DialogStyle.className("better-workspaces-osd"), "better-workspaces-osd");
+
+    DialogStyle.set("notion");
+    for (const bad of ["neon", "", null, undefined, "toString"]) {
+        DialogStyle.setTone(bad);
+        assert.equal(
+            DialogStyle.className("better-workspaces-osd"),
+            "better-workspaces-osd-notion",
+            String(bad),
+        );
+    }
+});
