@@ -14,13 +14,17 @@ function _open(title, message, buttons) {
         vertical: true,
         style_class: "better-workspaces-toggle-panel",
     });
-    box.add(
-        new St.Label({
-            style_class: "better-workspaces-toggle-title",
-            text: title,
-        }),
-    );
-    box.add(new St.Label({ style_class: "better-workspaces-dialog-body", text: message }));
+    // Both labels have a fixed width (stylesheet) and wrap, so a long sentence
+    // or project name makes the dialog taller, not wider.
+    const heading = new St.Label({
+        style_class: "better-workspaces-toggle-title better-workspaces-dialog-heading",
+        text: title,
+    });
+    heading.clutter_text.set_line_wrap(true);
+    box.add(heading);
+    const body = new St.Label({ style_class: "better-workspaces-dialog-body", text: message });
+    body.clutter_text.set_line_wrap(true);
+    box.add(body);
     dialog.contentLayout.add(box);
     dialog.setButtons(
         buttons.map((b) => ({

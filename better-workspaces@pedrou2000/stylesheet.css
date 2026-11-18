@@ -116,6 +116,14 @@
     font-size: 11px;
     color: #999999;
 }
+/* Notices and confirmations: fixed-width text that wraps */
+.better-workspaces-dialog-heading {
+    width: 400px;
+}
+.better-workspaces-dialog-body {
+    width: 400px;
+}
+
 /* New-project dialog */
 .better-workspaces-dialog-entry {
     min-width: 380px;

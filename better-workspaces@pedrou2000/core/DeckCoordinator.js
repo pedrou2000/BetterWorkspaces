@@ -360,7 +360,8 @@ var DeckCoordinator = class DeckCoordinator {
 
         const confirmed = await this._dialogs.confirm(
             "Delete “" + project.name + "” in Notion?",
-            "Its page goes to Notion’s trash, where it can be restored for 30 days. " +
+            "Its page goes to Notion’s trash, where it can be recovered only during " +
+                "the first 30 days.\n" +
                 "Here, its windows are closed and its workspaces removed.",
             { confirmLabel: "Delete", destructive: true },
         );
