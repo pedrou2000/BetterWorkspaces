@@ -3,9 +3,11 @@
 Unit tests for the Cinnamon-free modules — the pure logic where index
 arithmetic can silently regress:
 
-- `mapping.test.js` — `core/mapping.js` (strips ↔ flat-list mapping)
-- `state.test.js` — `core/State.js` (deck model, MRU, reorder/remove fixups)
-- `projectMapper.test.js` — `notion/ProjectMapper.js` (Notion page → project, sorting)
+- `mapping.test.js`, `dotWindow.test.js` — the index arithmetic (`core/mapping.js`, `core/dotWindow.js`)
+- `state.test.js`, `controller.test.js` — the deck model and the operations on it, against a fake window manager
+- `deckCoordinator.test.js`, `projectStore.test.js`, `projectCreator.test.js` — toggling, syncing, creating and deleting projects, against fakes for Notion and the dialogs
+- `projectMapper.test.js`, `syncService.test.js` — the Notion side: mapping pages to projects, the pull loop
+- `contextMenu.test.js`, `dialogStyle.test.js`, `emojiImage.test.js` — the few UI pieces that have logic worth pinning down
 
 ## Running
 
@@ -23,5 +25,5 @@ The applet is written for GJS (Cinnamon's JS runtime): modules import via a
 global `imports` object and export via top-level `var`. The tests load the
 applet source **verbatim** through `helpers/loadGjsModule.js`, which compiles
 each file with a stubbed `imports` (just the logger) and returns the named
-export. Only the pure modules above can be loaded this way; anything touching
-St/Gio/Main would need real GJS.
+export. Only modules without Cinnamon dependencies can be loaded this way (a few get
+small fakes injected); anything that draws with St needs real GJS.
