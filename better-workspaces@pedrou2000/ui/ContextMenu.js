@@ -18,7 +18,7 @@ var ContextMenu = class ContextMenu {
     //   menu: the applet's context menu,
     //   controller,
     //   onManage(), onSync(), onRemoveProject(projectId),
-    //   onNewProject(parentProjectId | null),
+    //   onNewProject(parentProjectId | null), onDeleteProject(projectId),
     //   shortcutHint(settingKey) -> "Super+P" | "",
     //   afterAction(),
     // }
@@ -36,20 +36,15 @@ var ContextMenu = class ContextMenu {
             c.openActiveProjectHome();
         });
         this._moveHere = this._action("Move focused window here", (i) => c.moveWindowToProject(i));
-        this._addWorkspace = this._action("Add workspace", (i) => {
-            this._goTo(i);
-            c.addWorkspaceToActiveProject();
-        });
-        this._removeEmpty = this._action("Remove empty workspaces", (i) => {
-            this._goTo(i);
-            c.removeEmptyWorkspacesOfActiveProject();
-        });
         this._newSub = this._action("New sub-project…", () =>
             this._deps.onNewProject(this._targetId),
         );
         this._separator = this._add(new PopupMenu.PopupSeparatorMenuItem());
         this._remove = this._action("Remove from workspaces", () =>
             this._deps.onRemoveProject(this._targetId),
+        );
+        this._delete = this._action("Delete in Notion…", () =>
+            this._deps.onDeleteProject(this._targetId),
         );
         this._projectItems = this._items.slice();
 
@@ -86,18 +81,14 @@ var ContextMenu = class ContextMenu {
         const here = this._isAt(idx);
         this._header.label.set_text(p.name);
         this._openNotion.actor.visible = !!p.notionUrl;
-        this._openNotion.label.set_text(
-            here ? this._withHint("Open Notion page", "kbOpenNotion") : "Open Notion page",
-        );
+        // Shortcut hints show on every project's menu, to make the shortcuts
+        // discoverable — though a shortcut acts on the project you are ON, while
+        // the menu entry acts on the one you right-clicked.
+        this._openNotion.label.set_text(this._withHint("Open Notion page", "kbOpenNotion"));
         this._moveHere.actor.visible = !here;
-        this._newSub.label.set_text(
-            here ? this._withHint("New sub-project…", "kbNewSubProject") : "New sub-project…",
-        );
-        this._remove.label.set_text(
-            here
-                ? this._withHint("Remove from workspaces", "kbRemoveProject")
-                : "Remove from workspaces",
-        );
+        this._newSub.label.set_text(this._withHint("New sub-project…", "kbNewSubProject"));
+        this._remove.label.set_text(this._withHint("Remove from workspaces", "kbRemoveProject"));
+        this._delete.label.set_text(this._withHint("Delete in Notion…", "kbDeleteProject"));
     }
 
     // Insert at our own running index so we stay above Cinnamon's entries.
@@ -137,7 +128,7 @@ var ContextMenu = class ContextMenu {
         return !!loc && loc.projectIdx === idx;
     }
 
-    // The strip actions work on the active project, so make `idx` active.
+    // "Open Notion page" opens the ACTIVE project's page, so make `idx` active.
     // Already there: only sync the model (goToProject would jump to its last-used
     // workspace, which external navigation can leave stale).
     _goTo(idx) {

@@ -73,8 +73,6 @@ function makeController(at) {
         goToProject: (i) => calls.push("goTo:" + i),
         openActiveProjectHome: () => calls.push("openHome"),
         moveWindowToProject: (i) => calls.push("moveWindow:" + i),
-        addWorkspaceToActiveProject: () => calls.push("addWorkspace"),
-        removeEmptyWorkspacesOfActiveProject: () => calls.push("removeEmpty"),
     };
 }
 
@@ -88,6 +86,7 @@ function makeContextMenu(at) {
     const removed = [];
     const other = [];
     const created = [];
+    const deleted = [];
     const cm = new ContextMenu({
         menu,
         controller,
@@ -95,6 +94,7 @@ function makeContextMenu(at) {
         onSync: () => other.push("sync"),
         onRemoveProject: (id) => removed.push(id),
         onNewProject: (parentId) => created.push(parentId),
+        onDeleteProject: (id) => deleted.push(id),
         shortcutHint: (key) =>
             ({
                 kbTogglePanel: "Super+P",
@@ -102,13 +102,26 @@ function makeContextMenu(at) {
                 kbNewSubProject: "Super+S",
                 kbNewProject: "Super+A",
                 kbSyncNow: "Super+R",
+                kbOpenNotion: "Super+N",
+                kbDeleteProject: "Shift+Super+Q",
             })[key] || "",
         afterAction: () => other.push("after"),
     });
     const visible = () =>
         menu.items.filter((i) => i.actor.visible && !i.separator).map((i) => i.label.text);
     const item = (prefix) => menu.items.find((i) => i.label.text.indexOf(prefix) === 0);
-    return { cm, menu, controller, removed, other, created, visible, item, stats: popupMenu.stats };
+    return {
+        cm,
+        menu,
+        controller,
+        removed,
+        other,
+        created,
+        deleted,
+        visible,
+        item,
+        stats: popupMenu.stats,
+    };
 }
 
 test("no item is created or destroyed after construction, however often it retargets", () => {
@@ -136,29 +149,27 @@ test("the general menu shows only the general actions", () => {
     ]);
 });
 
-test("a project the user is NOT on: its actions, with 'Move focused window here'", () => {
+test("a project the user is NOT on: its actions, with 'Move focused window here' and shortcut hints", () => {
     const { cm, visible } = makeContextMenu(1);
     cm.populate("a");
     assert.deepEqual(visible(), [
         "Alpha",
-        "Open Notion page",
+        "Open Notion page  (Super+N)",
         "Move focused window here",
-        "Add workspace",
-        "Remove empty workspaces",
-        "New sub-project…",
-        "Remove from workspaces",
+        "New sub-project…  (Super+S)",
+        "Remove from workspaces  (Super+Q)",
+        "Delete in Notion…  (Shift+Super+Q)",
     ]);
 });
 
-test("the project the user is on: no 'move here', shortcut hints, no Notion entry without a URL", () => {
+test("the project the user is on: no 'move here', no Notion entry without a URL", () => {
     const { cm, visible } = makeContextMenu(1);
     cm.populate("b");
     assert.deepEqual(visible(), [
         "Beta",
-        "Add workspace",
-        "Remove empty workspaces",
         "New sub-project…  (Super+S)",
         "Remove from workspaces  (Super+Q)",
+        "Delete in Notion…  (Shift+Super+Q)",
     ]);
 });
 
@@ -178,9 +189,9 @@ test("actions hit the project the menu was last opened for", () => {
     cm.populate("b");
     cm.populate("a"); // retargeted back
     item("Move focused window here").activate();
-    item("Add workspace").activate();
+    item("Open Notion page").activate();
     item("Remove from workspaces").activate();
-    assert.deepEqual(controller.calls, ["moveWindow:0", "goTo:0", "addWorkspace"]);
+    assert.deepEqual(controller.calls, ["moveWindow:0", "goTo:0", "openHome"]);
     assert.deepEqual(removed, ["a"]);
 });
 
@@ -197,7 +208,7 @@ test("a project action is skipped if the project left the deck while the menu wa
     const { cm, controller, item } = makeContextMenu(1);
     cm.populate("a");
     controller.state.projects.shift();
-    item("Add workspace").activate();
+    item("Move focused window here").activate();
     assert.deepEqual(controller.calls, []);
 });
 
@@ -215,4 +226,11 @@ test("'New sub-project' passes the right-clicked project; 'New project' passes n
     cm.populate(null);
     item("New project").activate();
     assert.deepEqual(created, ["a", null]);
+});
+
+test("'Delete in Notion' passes the right-clicked project", () => {
+    const { cm, deleted, item } = makeContextMenu(1);
+    cm.populate("a");
+    item("Delete in Notion").activate();
+    assert.deepEqual(deleted, ["a"]);
 });

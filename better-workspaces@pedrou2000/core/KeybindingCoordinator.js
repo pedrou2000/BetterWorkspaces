@@ -23,6 +23,7 @@ const KB_DEFAULTS = {
     kbOpenNotion: "<Super>n",
     kbTogglePanel: "<Super>p",
     kbRemoveProject: "<Super>q",
+    kbDeleteProject: "<Shift><Super>q",
     kbNewSubProject: "<Super>s",
     kbNewProject: "<Super>a",
     kbSyncNow: "<Super>r",

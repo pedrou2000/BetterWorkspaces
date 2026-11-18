@@ -46,11 +46,16 @@ function makeAutoWriter() {
     };
 }
 
-// Dialogs double: notify() is recorded.
-function makeFakeDialogs() {
-    const calls = { notify: [] };
+// Dialogs double: notify() is recorded; confirm() answers from a queue (default yes).
+function makeFakeDialogs(confirmAnswers) {
+    const answers = (confirmAnswers || []).slice();
+    const calls = { notify: [], confirm: [] };
     return {
         calls,
+        confirm(title, msg, opts) {
+            calls.confirm.push({ title, msg, opts });
+            return Promise.resolve(answers.length ? answers.shift() : true);
+        },
         notify(title, msg) {
             calls.notify.push({ title, msg });
         },
@@ -109,8 +114,9 @@ function makeStack(cached, opts) {
     store.setWriter(writer);
 
     const { controller, wm, mainloop, opened } = makeController(opts.wm);
-    const dialogs = makeFakeDialogs();
+    const dialogs = makeFakeDialogs(opts.confirm);
     const hookCalls = { rebuildPanel: 0, refresh: 0, refreshTogglePanel: 0 };
+    const trashed = []; // project ids sent to Notion's trash
 
     const DeckCoordinator = loadGjsModule("core/DeckCoordinator.js", "DeckCoordinator");
     const coord = new DeckCoordinator({
@@ -121,6 +127,10 @@ function makeStack(cached, opts) {
         defaultWsPerProject: DEFAULT_WS_PER_PROJECT,
         placeholderProjects: PLACEHOLDER,
         pageStatus: opts.pageStatus || (async () => "gone"),
+        trashPage: async (id) => {
+            trashed.push(id);
+            if (opts.trashFails) throw opts.trashFails;
+        },
         hooks: {
             rebuildPanel: () => hookCalls.rebuildPanel++,
             refresh: () => hookCalls.refresh++,
@@ -139,6 +149,7 @@ function makeStack(cached, opts) {
         hookCalls,
         persistence,
         opened,
+        trashed,
     };
 }
 
@@ -834,4 +845,96 @@ test("reorderFromPanel is a no-op for an unknown id", () => {
     coord.loadDeckFromStore();
     coord.reorderFromPanel("nope", 0);
     assert.deepEqual(deckIds(controller), ["a", "b"]);
+});
+
+// deleteProject (trash the Notion page, after a confirmation)
+
+test("deleteProject asks first; on yes it trashes the page and the project leaves the desk", async () => {
+    const { coord, store, controller, wm, mainloop, dialogs, trashed, writer } = makeStack([
+        proj("a", true, 0),
+        proj("b", true, 1),
+    ]);
+    coord.loadDeckFromStore();
+    const win = wm.addWindow(1, "b-notes");
+
+    const p = coord.deleteProject("b");
+    await tick(); // the confirmation, then the trash request
+    assert.equal(dialogs.calls.confirm.length, 1);
+    assert.match(dialogs.calls.confirm[0].title, /Delete .B. in Notion\?/);
+    assert.equal(dialogs.calls.confirm[0].opts.destructive, true);
+    assert.deepEqual(trashed, ["b"]);
+    assert.equal(win.closeRequested, true);
+    wm.honorCloseRequests();
+    mainloop.flush();
+    assert.equal(await p, true);
+
+    assert.deepEqual(deckIds(controller), ["a"]);
+    assert.equal(store.get("b"), null);
+    assert.equal(writer.calls.length, 0); // a trashed page can't be edited: nothing else is written
+});
+
+test("deleteProject does nothing at all when the user cancels", async () => {
+    const { coord, store, controller, wm, trashed } = makeStack(
+        [proj("a", true, 0), proj("b", true, 1)],
+        { confirm: [false] },
+    );
+    coord.loadDeckFromStore();
+    const win = wm.addWindow(1, "b-notes");
+
+    assert.equal(await coord.deleteProject("b"), false);
+    assert.deepEqual(trashed, []);
+    assert.equal(win.closeRequested, false);
+    assert.deepEqual(deckIds(controller), ["a", "b"]);
+    assert.ok(store.get("b"));
+});
+
+test("if Notion doesn't confirm the deletion, nothing changes here and the user is told", async () => {
+    const { coord, store, controller, wm, dialogs } = makeStack(
+        [proj("a", true, 0), proj("b", true, 1)],
+        { trashFails: new Error("Could not connect") },
+    );
+    coord.loadDeckFromStore();
+    const win = wm.addWindow(1, "b-notes");
+
+    assert.equal(await coord.deleteProject("b"), false);
+    assert.equal(win.closeRequested, false);
+    assert.deepEqual(deckIds(controller), ["a", "b"]);
+    assert.ok(store.get("b"));
+    assert.equal(dialogs.calls.notify.length, 1);
+    assert.match(dialogs.calls.notify[0].msg, /nothing was changed here/);
+});
+
+test("deleted in Notion but a window refuses to close: it stays, the user is told, a later pull removes it", async () => {
+    const { coord, controller, wm, mainloop, dialogs } = makeStack([
+        proj("a", true, 0),
+        proj("b", true, 1),
+    ]);
+    coord.loadDeckFromStore();
+    const win = wm.addWindow(1, "unsaved.txt");
+
+    const p = coord.deleteProject("b");
+    await tick();
+    mainloop.flush(); // grace elapses, window still open
+    assert.equal(await p, true); // it IS deleted in Notion
+    assert.deepEqual(deckIds(controller), ["a", "b"]);
+    assert.equal(dialogs.calls.notify.length, 1);
+
+    win.closeRequested = false;
+    coord.onPull([remote("a", true, 0)], true); // next sync: no second close request
+    await settle(mainloop);
+    assert.equal(win.closeRequested, false);
+
+    win.closeRequested = true;
+    wm.honorCloseRequests(); // the user closes it
+    coord.onPull([remote("a", true, 0)], true);
+    await tick();
+    assert.deepEqual(deckIds(controller), ["a"]);
+});
+
+test("deleteProject ignores an id that isn't a real project", async () => {
+    const { coord, dialogs, trashed } = makeStack([proj("a", true, 0)]);
+    coord.loadDeckFromStore();
+    assert.equal(await coord.deleteProject("placeholder"), false);
+    assert.equal(dialogs.calls.confirm.length, 0);
+    assert.deepEqual(trashed, []);
 });

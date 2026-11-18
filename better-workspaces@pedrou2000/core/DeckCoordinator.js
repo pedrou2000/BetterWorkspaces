@@ -16,7 +16,8 @@ var DeckCoordinator = class DeckCoordinator {
     //   store, controller,
     //   persistence: {readJSON, writeJSON} (optional; without it strip sizes
     //     don't survive a reload),
-    //   dialogs: {notify(title,msg)},
+    //   dialogs: {notify(title,msg), confirm(title,msg,opts)->Promise<bool>},
+    //   trashPage: (projectId) => Promise, moves the Notion page to the trash,
     //   defaultWsPerProject: number,
     //   placeholderProjects: [{id,name,wsCount}],
     //   hooks: {rebuildPanel(), refresh(), refreshTogglePanel()},
@@ -32,6 +33,7 @@ var DeckCoordinator = class DeckCoordinator {
         this._hooks = deps.hooks || {};
         this._persistence = deps.persistence || null;
         this._pageStatus = deps.pageStatus || (async () => "unknown");
+        this._trashPage = deps.trashPage || null;
         this._checking = new Set(); // project ids with a pageStatus lookup in flight
         this._closeRequested = new Set(); // gone project ids already asked to close
         if (this._persistence) {
@@ -343,6 +345,58 @@ var DeckCoordinator = class DeckCoordinator {
             return false;
         }
         this._refreshTogglePanel();
+        return true;
+    }
+
+    // Delete a project: after the user confirms, its page goes to Notion's trash
+    // (restorable there), then it leaves this desk like a project that vanished
+    // from Notion — windows asked to close, workspaces removed, catalog entry
+    // dropped. Nothing else is written: a trashed page can't be edited, so the
+    // usual Workspace-flag writes would only fail. Resolves true if Notion
+    // deleted it. Trashing is idempotent, so a failed attempt is safe to repeat.
+    async deleteProject(projectId) {
+        const project = this._store.get(projectId);
+        if (!project || !this._trashPage) return false;
+
+        const confirmed = await this._dialogs.confirm(
+            "Delete “" + project.name + "” in Notion?",
+            "Its page goes to Notion’s trash, where it can be restored for 30 days. " +
+                "Here, its windows are closed and its workspaces removed.",
+            { confirmLabel: "Delete", destructive: true },
+        );
+        if (!confirmed) return false;
+
+        try {
+            await this._trashPage(projectId);
+        } catch (e) {
+            L.error("deleteProject(" + project.name + "): " + (e && e.message ? e.message : e));
+            const denied = e && (e.status === 401 || e.status === 403);
+            this._dialogs.notify(
+                "Couldn’t delete “" + project.name + "”",
+                denied
+                    ? "Notion refused: this integration isn’t allowed to delete that page. Nothing was changed."
+                    : "Notion didn’t confirm the deletion, so nothing was changed here. You can try again.",
+            );
+            return false;
+        }
+        L.log("deleteProject: " + project.name + " moved to Notion's trash");
+
+        const idx = this._controller.state.indexOfProjectId(projectId);
+        if (idx >= 0) {
+            // Already asked to close here: a later pull must not ask again.
+            this._closeRequested.add(projectId);
+            try {
+                await this._controller.removeProjectLive(idx);
+            } catch (e) {
+                // Deleted in Notion, but a window refused to close. It stays on the
+                // deck until that window is gone; the next pull then removes it.
+                if (e.message === "windows-open") {
+                    this._notifyWindowsOpen(project, { openTitles: e.openTitles });
+                }
+                return true;
+            }
+        }
+        this._afterGoneRemoved(projectId);
         return true;
     }
 

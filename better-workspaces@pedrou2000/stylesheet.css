@@ -414,6 +414,18 @@
     border: 1px solid #3a92ea;
     background-color: #3a92ea;
 }
+/* a destructive action, in Notion's red: outlined, so Cancel stays the calm default */
+.better-workspaces-dialog-notion .dialog-button:destructive-action {
+    border: 1px solid rgba(235, 87, 87, 0.55);
+    background-color: rgba(235, 87, 87, 0.10);
+    color: #ff7369;
+}
+.better-workspaces-dialog-notion .dialog-button:destructive-action:hover,
+.better-workspaces-dialog-notion .dialog-button:destructive-action:focus {
+    border: 1px solid #eb5757;
+    background-color: rgba(235, 87, 87, 0.22);
+    color: #ff8a80;
+}
 
 /* Super+Tab switcher, Notion look */
 .better-workspaces-switcher-notion {

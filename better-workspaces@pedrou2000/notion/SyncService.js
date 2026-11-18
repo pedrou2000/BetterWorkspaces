@@ -69,6 +69,10 @@ var SyncService = class SyncService {
         return this.client.createPage(body);
     }
 
+    trashProject(pageId) {
+        return this.client.trashPage(pageId);
+    }
+
     // What Notion says about ONE project page, asked directly rather than
     // inferred from a query: "gone" (archived, in the trash, or no such page),
     // "present", or "unknown" when there was no usable answer.

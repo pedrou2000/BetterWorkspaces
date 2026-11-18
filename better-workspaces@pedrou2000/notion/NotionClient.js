@@ -71,6 +71,12 @@ var NotionClient = class NotionClient {
         return this._request("POST", "/pages", body);
     }
 
+    // Moves the page to Notion's trash (restorable there). Idempotent, so a
+    // call whose outcome is unknown may be repeated.
+    trashPage(pageId) {
+        return this._request("PATCH", "/pages/" + pageId, { archived: true });
+    }
+
     updatePageCheckbox(pageId, propName, value) {
         const props = {};
         props[propName] = { checkbox: !!value };

@@ -71,6 +71,7 @@ var MyApplet = class MyApplet extends Applet.Applet {
                 dialogs: Dialogs,
                 // this.sync is created just below; resolved when first called.
                 pageStatus: (id) => this.sync.projectStatus(id),
+                trashPage: (id) => this.sync.trashProject(id),
                 defaultWsPerProject: DEFAULT_WS_PER_PROJECT,
                 placeholderProjects: PLACEHOLDER_PROJECTS,
                 hooks: {
@@ -290,6 +291,22 @@ var MyApplet = class MyApplet extends Applet.Applet {
         const loc = this.controller.currentLocation();
         const p = loc ? this.controller.state.getProject(loc.projectIdx) : null;
         this.openNewProjectDialog(p && this.store.get(p.id) ? p.id : null);
+    }
+
+    // Asks first (DeckCoordinator.deleteProject shows the confirmation).
+    _deleteProject(projectId) {
+        this.deckCoord
+            .deleteProject(projectId)
+            .then((deleted) => {
+                if (deleted && this.osd && this.controller) this.osd.show(this.controller);
+            })
+            .catch((e) => L.error("deleteProject: " + e.toString()));
+    }
+
+    _deleteCurrentProject() {
+        const loc = this.controller.currentLocation();
+        const p = loc ? this.controller.state.getProject(loc.projectIdx) : null;
+        if (p) this._deleteProject(p.id);
     }
 
     _removeCurrentProject() {
@@ -514,6 +531,11 @@ var MyApplet = class MyApplet extends Applet.Applet {
                 run: () => this._removeCurrentProject(),
             },
             {
+                setting: "kbDeleteProject",
+                name: "bw-delete-project",
+                run: () => this._deleteCurrentProject(),
+            },
+            {
                 setting: "kbSyncNow",
                 name: "bw-sync-now",
                 run: () => this.onSyncNowClicked(),
@@ -546,6 +568,7 @@ var MyApplet = class MyApplet extends Applet.Applet {
             onSync: () => this.onSyncNowClicked(),
             onRemoveProject: (id) => this.deckCoord.removeFromWorkspaces(id),
             onNewProject: (parentId) => this.openNewProjectDialog(parentId),
+            onDeleteProject: (id) => this._deleteProject(id),
             shortcutHint: (key) => this._shortcutHint(key),
             afterAction: () => this._refresh(),
         });

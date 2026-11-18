@@ -186,6 +186,11 @@
         "default": "<Super>q",
         "description": "Remove the current project from workspaces (closes its windows)"
     },
+    "kbDeleteProject": {
+        "type": "keybinding",
+        "default": "<Shift><Super>q",
+        "description": "Delete the current project in Notion (asks first)"
+    },
     "kbNewSubProject": {
         "type": "keybinding",
         "default": "<Super>s",
