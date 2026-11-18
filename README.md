@@ -4,6 +4,12 @@ A Cinnamon (Linux Mint) panel applet that organizes virtual workspaces by projec
 
 The idea: switching context should mean switching project, not hunting for "workspace 7". You turn a project on, it gets a workspace and an icon in the panel; you move between projects, and between the workspaces inside one, with separate keys.
 
+<p align="center">
+  <img src="docs/images/panel.png" width="820" alt="The applet in a Cinnamon panel: three project icons with the current one highlighted, three dots for the current project's workspaces, and a button that opens the navigator.">
+</p>
+
+*The images on this page are illustrations with sample projects, drawn to match the applet's default look.*
+
 ## What it does
 
 - **A project bar in the panel.** One icon per active project (the page icon from Notion), plus dots for the workspaces of the project you are on. Click an icon to go there, drag icons to reorder.
@@ -82,6 +88,16 @@ These are the defaults; all of them can be changed under Configure → Keyboard 
 It also reassigns a few of Cinnamon's own window actions: Super+Shift+arrows tile the window, Alt+A maximizes and Alt+S minimizes.
 
 In the navigator: type to filter, Tab or the arrow keys move the highlight, Enter goes to the project, Ctrl+Enter turns it on or off, Escape closes. If nothing matches, a row offers to create a project with that name.
+
+<p align="center">
+  <img src="docs/images/navigator.png" width="560" alt="The project navigator: a search box, the projects that are on with their switches, the other projects below, and a line of key hints.">
+</p>
+
+Switching, creating and deleting each have their own small window:
+
+<p align="center">
+  <img src="docs/images/dialogs.png" width="820" alt="Three windows side by side: the Super+Tab project switcher, the dialog that asks for a new sub-project's name, and the confirmation shown before deleting a project in Notion.">
+</p>
 
 ### Mouse
 
