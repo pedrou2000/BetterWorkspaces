@@ -150,7 +150,7 @@ var ProjectTogglePanel = class ProjectTogglePanel {
         const onProjects = projects.filter((p) => p.inWorkspace);
         const offProjects = projects.filter((p) => !p.inWorkspace);
 
-        this._listBox.add(this._sectionHeader("In workspaces — drag to reorder"));
+        this._listBox.add(this._sectionHeader("In workspaces"));
         let shownOn = 0;
         for (let i = 0; i < onProjects.length; i++) {
             if (!matches(onProjects[i])) continue;
