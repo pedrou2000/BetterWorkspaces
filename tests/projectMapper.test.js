@@ -206,3 +206,61 @@ test("buildQueryBody filters out archived and requests up to 100 pages", () => {
         { property: ProjectMapper.ARCHIVE_PROP, checkbox: { equals: false } },
     ]);
 });
+
+// creating projects
+
+test("buildCreateBody for a top-level project sets only title, Workspace and order", () => {
+    assert.deepEqual(ProjectMapper.buildCreateBody({ databaseId: "db", name: "X", order: 0 }), {
+        parent: { database_id: "db" },
+        properties: {
+            Project: { title: [{ text: { content: "X" } }] },
+            Workspace: { checkbox: true },
+            "Workspace Order": { number: 0 },
+        },
+    });
+});
+
+test("buildCreateBody for a sub-project adds Parent and only the non-empty inherited values", () => {
+    const body = ProjectMapper.buildCreateBody({
+        databaseId: "db",
+        name: "Child",
+        order: 3,
+        parentId: "p1",
+        inherited: { type: "Job", relations: { Areas: ["a1"], "Lifetime Periods": [] } },
+    });
+    assert.deepEqual(body.properties.Parent, { relation: [{ id: "p1" }] });
+    assert.deepEqual(body.properties.Type, { select: { name: "Job" } });
+    assert.deepEqual(body.properties.Areas, { relation: [{ id: "a1" }] });
+    assert.equal("Lifetime Periods" in body.properties, false);
+});
+
+test("buildCreateBody ignores inherited values when there is no parent", () => {
+    const body = ProjectMapper.buildCreateBody({
+        databaseId: "db",
+        name: "X",
+        order: 1,
+        inherited: { type: "Job", relations: { Areas: ["a1"] } },
+    });
+    assert.deepEqual(Object.keys(body.properties).sort(), [
+        "Project",
+        "Workspace",
+        "Workspace Order",
+    ]);
+});
+
+test("inheritedFrom reads Type and the inherited relations, tolerating missing ones", () => {
+    const inherited = ProjectMapper.inheritedFrom({
+        properties: {
+            Type: { select: { name: "Studies" } },
+            Areas: { relation: [{ id: "a1" }, { id: "a2" }], has_more: false },
+        },
+    });
+    assert.equal(inherited.type, "Studies");
+    assert.deepEqual(Array.from(inherited.relations.Areas), ["a1", "a2"]);
+    assert.deepEqual(Array.from(inherited.relations["Lifetime Periods"]), []);
+    assert.equal(inherited.truncated, false);
+
+    const empty = ProjectMapper.inheritedFrom({});
+    assert.equal(empty.type, null);
+    assert.deepEqual(Array.from(empty.relations.Areas), []);
+});

@@ -14,6 +14,10 @@
 // Key focus never leaves the search entry (typing always filters); Tab/Down and
 // Shift+Tab/Up move a highlight over the rows and then the Close button (as Tab
 // would in any dialog).
+//
+// When a search matches no project, a "Create project …" row appears. It is
+// never auto-highlighted (Tab reaches it) and only opens the name dialog via
+// onCreate(text), so a typo plus Enter can't create anything.
 
 const St = imports.gi.St;
 const Clutter = imports.gi.Clutter;
@@ -27,17 +31,20 @@ const L = AppletDir.lib.logger.Logger.makeLogger("toggle-panel");
 
 const ROW_ICON_SIZE = AppletDir.lib.constants.Constants.ROW_ICON_SIZE;
 
-// _selectedId value for the Close button; can't collide, project ids are UUIDs.
+// _selectedId values for the non-project stops; can't collide, project ids are UUIDs.
 const CLOSE_STOP = "__close__";
+const CREATE_STOP = "__create__";
 
 var ProjectTogglePanel = class ProjectTogglePanel {
     // getProjects() returns {id,name,icon,inWorkspace,...} with the ON projects
     // already in deck order.
-    constructor(getProjects, onToggle, onReorder, onGo) {
+    constructor(getProjects, onToggle, onReorder, onGo, onCreate) {
         this._getProjects = getProjects;
         this._onToggle = onToggle;
         this._onReorder = onReorder;
         this._onGo = onGo;
+        this._onCreate = onCreate;
+        this._createRow = null; // the "Create project …" row, when shown
         this._rows = [];
         this._filter = "";
         // Highlighted row, by project id so it survives re-renders and follows a
@@ -181,8 +188,22 @@ var ProjectTogglePanel = class ProjectTogglePanel {
             );
         }
 
+        this._createRow = null;
+        const typed = this._search.get_text().trim();
+        if (typed && shownOn + shownOff === 0 && this._onCreate) {
+            this._createRow = new St.Button({
+                style_class: "better-workspaces-toggle-create",
+                label: "+ Create project “" + typed + "”…",
+                x_align: St.Align.START,
+                reactive: true,
+            });
+            this._createRow.connect("clicked", () => this._create());
+            this._listBox.add(this._createRow);
+        }
+
         if (this._selectedIndex() < 0) {
-            // Nothing (valid) highlighted: the first match while searching, else none.
+            // Nothing (valid) highlighted: the first match while searching, else
+            // none — never the Create row, which must be reached on purpose.
             this._selectedId = this._filter && this._rows.length ? this._rows[0].project.id : null;
         }
         this._paintSelection();
@@ -193,17 +214,16 @@ var ProjectTogglePanel = class ProjectTogglePanel {
         });
     }
 
-    // Stop order: the rows top to bottom, then the Close button.
-    _stopCount() {
-        return this._rows.length + (this._closeButton ? 1 : 0);
+    // Stop order: the rows top to bottom, the Create row if shown, then Close.
+    _stops() {
+        const stops = this._rows.map((row) => row.project.id);
+        if (this._createRow) stops.push(CREATE_STOP);
+        if (this._closeButton) stops.push(CLOSE_STOP);
+        return stops;
     }
 
     _selectedIndex() {
-        if (this._selectedId === CLOSE_STOP) return this._closeButton ? this._rows.length : -1;
-        for (let i = 0; i < this._rows.length; i++) {
-            if (this._rows[i].project.id === this._selectedId) return i;
-        }
-        return -1;
+        return this._selectedId === null ? -1 : this._stops().indexOf(this._selectedId);
     }
 
     _paintSelection() {
@@ -211,6 +231,11 @@ var ProjectTogglePanel = class ProjectTogglePanel {
             const row = this._rows[i];
             if (row.project.id === this._selectedId) row.actor.add_style_pseudo_class("selected");
             else row.actor.remove_style_pseudo_class("selected");
+        }
+        if (this._createRow) {
+            const picked = this._selectedId === CREATE_STOP;
+            if (picked) this._createRow.add_style_pseudo_class("selected");
+            else this._createRow.remove_style_pseudo_class("selected");
         }
         // The theme's own focus look, without giving up the entry's key focus.
         if (this._closeButton) {
@@ -221,11 +246,12 @@ var ProjectTogglePanel = class ProjectTogglePanel {
 
     // Wraps; from no selection, forward lands on the first stop and back on the last.
     _moveSelection(delta) {
-        const n = this._stopCount();
+        const stops = this._stops();
+        const n = stops.length;
         if (n === 0) return;
         const cur = this._selectedIndex();
         const next = cur < 0 ? (delta > 0 ? 0 : n - 1) : (cur + delta + n) % n;
-        this._selectedId = next < this._rows.length ? this._rows[next].project.id : CLOSE_STOP;
+        this._selectedId = stops[next];
         this._paintSelection();
         this._scrollToSelection();
     }
@@ -250,8 +276,23 @@ var ProjectTogglePanel = class ProjectTogglePanel {
             this.close();
             return;
         }
+        if (this._selectedId === CREATE_STOP) {
+            this._create();
+            return;
+        }
         const row = this._rows[this._selectedIndex()];
         if (row) this._go(row.project);
+    }
+
+    // Hands the typed text to the name dialog; nothing is created here.
+    _create() {
+        const typed = this._search.get_text().trim();
+        this.close();
+        try {
+            if (this._onCreate) this._onCreate(typed);
+        } catch (e) {
+            L.error("create '" + typed + "': " + e.toString());
+        }
     }
 
     _go(project) {
@@ -264,6 +305,7 @@ var ProjectTogglePanel = class ProjectTogglePanel {
     }
 
     _flipSelection() {
+        if (this._selectedId === CLOSE_STOP || this._selectedId === CREATE_STOP) return;
         const row = this._rows[this._selectedIndex()];
         if (!row || !row.toggle.reactive) return; // nothing picked, or change in flight
         row.toggle.set_checked(!row.toggle.get_checked()); // what a click does itself
@@ -403,6 +445,7 @@ var ProjectTogglePanel = class ProjectTogglePanel {
             this._dialog.close();
             this._dialog = null;
             this._closeButton = null;
+            this._createRow = null;
         }
     }
 

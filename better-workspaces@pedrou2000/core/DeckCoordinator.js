@@ -11,6 +11,10 @@ const L = AppletDir.lib.logger.Logger.makeLogger("deck-coord");
 
 const LAYOUT_FILE = "layout.json"; // {strips: [{id, wsCount}]} in deck order
 
+// A project created from here may be missing from the next pull or two (Notion's
+// query lags a fresh page). For this long that absence is not "archived".
+const NEW_PROJECT_GRACE_MS = 10 * 60 * 1000;
+
 var DeckCoordinator = class DeckCoordinator {
     // deps: {
     //   store, controller,
@@ -20,6 +24,7 @@ var DeckCoordinator = class DeckCoordinator {
     //   defaultWsPerProject: number,
     //   placeholderProjects: [{id,name,wsCount}],
     //   hooks: {rebuildPanel(), refresh(), refreshTogglePanel()},
+    //   now: () => ms (optional; defaults to Date.now),
     // }
     constructor(deps) {
         this._store = deps.store;
@@ -29,6 +34,7 @@ var DeckCoordinator = class DeckCoordinator {
         this._placeholder = deps.placeholderProjects || [];
         this._hooks = deps.hooks || {};
         this._persistence = deps.persistence || null;
+        this._now = deps.now || (() => Date.now());
         this._closeRequested = new Set(); // gone project ids already asked to close
         if (this._persistence) {
             this._controller.state.onLayoutChanged(() => this._saveLayout());
@@ -173,7 +179,8 @@ var DeckCoordinator = class DeckCoordinator {
         const gone = [];
         for (let i = 0; i < state.projectCount(); i++) {
             const p = state.getProject(i);
-            if (!remoteIds.has(p.id)) gone.push(p);
+            if (remoteIds.has(p.id) || this._isFreshlyCreated(p.id)) continue;
+            gone.push(p);
         }
         // Forget close requests for projects that came back (un-archived).
         for (const id of Array.from(this._closeRequested)) {
@@ -206,6 +213,26 @@ var DeckCoordinator = class DeckCoordinator {
         this._closeRequested.delete(project.id);
         this._store.forget(project.id);
         this._ensureDeckNotEmpty();
+        this._rebuildPanel();
+        this._refreshTogglePanel();
+        this._refresh();
+    }
+
+    _isFreshlyCreated(projectId) {
+        const record = this._store.get(projectId);
+        const at = record ? record.createdLocallyAt : null;
+        return typeof at === "number" && this._now() - at < NEW_PROJECT_GRACE_MS;
+    }
+
+    // A project the user just created in Notion from here. Notion already has it
+    // ON and ordered, so only the local side catches up: into the catalog, onto
+    // the deck, and the user lands on it.
+    adoptCreated(project) {
+        this._store.adopt(project, this._now());
+        const state = this._controller.state;
+        if (state.indexOfProjectId("placeholder") >= 0) this.loadDeckFromStore();
+        else this._controller.addProjectLive(this.toDef(project));
+        this._controller.goToProject(state.indexOfProjectId(project.id));
         this._rebuildPanel();
         this._refreshTogglePanel();
         this._refresh();

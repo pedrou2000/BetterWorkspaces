@@ -112,6 +112,30 @@
     font-size: 11px;
     color: #999999;
 }
+/* New-project dialog: fixed width so long lines wrap instead of widening it */
+.better-workspaces-dialog-details {
+    width: 400px;
+    font-size: 11px;
+    color: #999999;
+}
+.better-workspaces-dialog-message {
+    width: 400px;
+    font-size: 12px;
+    color: #e0a030;
+}
+.better-workspaces-toggle-create {
+    padding: 6px 8px;
+    border-radius: 6px;
+    color: #8899ff;
+    font-size: 14px;
+}
+.better-workspaces-toggle-create:hover {
+    background-color: rgba(255, 255, 255, 0.08);
+}
+.better-workspaces-toggle-create:selected {
+    background-color: rgba(120, 150, 255, 0.40);
+    color: #ffffff;
+}
 .better-workspaces-toggle-name {
     font-size: 14px;
 }

@@ -57,6 +57,18 @@ var SyncService = class SyncService {
         return this.client.updatePageNumber(pageId, "Workspace Order", order);
     }
 
+    getDatabaseId() {
+        return this.databaseId || "";
+    }
+
+    getProjectPage(pageId) {
+        return this.client.getPage(pageId);
+    }
+
+    createProject(body) {
+        return this.client.createPage(body);
+    }
+
     // Errors never reject — status reflects the outcome and cached data serves on.
     async syncNow() {
         if (!this.databaseId || !this.client.hasToken()) {

@@ -119,6 +119,7 @@ function makeStack(cached, opts) {
         dialogs,
         defaultWsPerProject: DEFAULT_WS_PER_PROJECT,
         placeholderProjects: PLACEHOLDER,
+        now: opts.now,
         hooks: {
             rebuildPanel: () => hookCalls.rebuildPanel++,
             refresh: () => hookCalls.refresh++,
@@ -624,6 +625,57 @@ test("a deck whose every project is gone falls back to the placeholder", () => {
     coord.onPull([remote("c", false, null)], true); // same database: c is still there
     assert.deepEqual(deckIds(controller), ["placeholder"]);
     assert.equal(wm.getWorkspaceCount(), 1);
+});
+
+// adoptCreated (a project just created in Notion from here)
+
+test("adoptCreated puts the new project in the catalog, on the deck, and lands on it", () => {
+    const { coord, store, controller, wm, writer } = makeStack([proj("a", true, 0)]);
+    coord.loadDeckFromStore();
+
+    coord.adoptCreated(remote("n", true, 1));
+    assert.deepEqual(deckIds(controller), ["a", "n"]);
+    assert.equal(controller.state.activeProject().id, "n");
+    assert.equal(wm.getActiveIndex(), 1);
+    assert.equal(store.get("n").inWorkspace, true);
+    assert.equal(writer.calls.length, 0); // Notion already has it: nothing to push
+});
+
+test("adoptCreated replaces the placeholder deck", () => {
+    const { coord, controller } = makeStack(); // empty cache -> placeholder
+    coord.loadDeckFromStore();
+    coord.adoptCreated(remote("n", true, 0));
+    assert.deepEqual(deckIds(controller), ["n"]);
+});
+
+test("a just-created project missing from the next pulls is not treated as archived", () => {
+    let now = 1000000;
+    const { coord, store, controller, wm } = makeStack([proj("a", true, 0)], { now: () => now });
+    coord.loadDeckFromStore();
+    coord.adoptCreated(remote("n", true, 1));
+    const win = wm.addWindow(1, "notion page");
+
+    coord.onPull([remote("a", true, 0)], true); // Notion's query doesn't list it yet
+    assert.deepEqual(deckIds(controller), ["a", "n"]);
+    assert.equal(win.closeRequested, false);
+    assert.ok(store.get("n"));
+
+    now += 60 * 1000;
+    coord.onPull([remote("a", true, 0), remote("n", true, 1)], true); // now it does
+    assert.equal(store.get("n").createdLocallyAt, undefined);
+    assert.deepEqual(deckIds(controller), ["a", "n"]);
+});
+
+test("once a pull has seen it, or the grace period is over, absence means archived again", async () => {
+    let now = 1000000;
+    const { coord, controller, mainloop } = makeStack([proj("a", true, 0)], { now: () => now });
+    coord.loadDeckFromStore();
+    coord.adoptCreated(remote("n", true, 1));
+
+    now += 11 * 60 * 1000; // never appeared, and the grace period has passed
+    coord.onPull([remote("a", true, 0)], true);
+    await settle(mainloop);
+    assert.deepEqual(deckIds(controller), ["a"]);
 });
 
 // an emptied deck

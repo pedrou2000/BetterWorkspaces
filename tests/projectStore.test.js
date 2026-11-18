@@ -410,3 +410,29 @@ test("destroy drops queued pushes (by design)", async () => {
     await writer.settle(true); // in-flight one settles harmlessly
     assert.equal(writer.pending.length, 0); // queued push never sent
 });
+
+// adopt (a project created from here)
+
+test("adopt adds an already-ON project without queuing any write", async () => {
+    const writer = makeAutoWriter();
+    const { store, persistence } = makeStore([proj("a", 0, true)], writer);
+    store.adopt(proj("n", 1, true), 5000);
+    await drain();
+
+    assert.equal(store.get("n").inWorkspace, true);
+    assert.equal(store.get("n").createdLocallyAt, 5000);
+    assert.equal(writer.calls.length, 0);
+    assert.ok(cacheOf(persistence).some((p) => p.id === "n")); // survives a restart
+    assert.equal(store.maxOrder(), 1);
+});
+
+test("merge clears the created-here marker the first time a pull includes the project", () => {
+    const { store } = makeStore([proj("a", 0, true)]);
+    store.adopt(proj("n", 1, true), 5000);
+
+    store.merge([proj("a", 0, true)], ["a", "n"]); // not listed yet: kept (on the deck), still marked
+    assert.equal(store.get("n").createdLocallyAt, 5000);
+
+    store.merge([proj("a", 0, true), proj("n", 1, true)], ["a", "n"]);
+    assert.equal(store.get("n").createdLocallyAt, undefined);
+});

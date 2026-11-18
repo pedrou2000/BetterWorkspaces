@@ -23,21 +23,30 @@ var NotionClient = class NotionClient {
     }
 
     // Resolves the parsed body; rejects Error("no-token"|"http-<status>"|"bad-json").
+    // An http error also carries .status and, when Notion sent one, .notionMessage.
     async _request(method, path, bodyObj) {
         if (!this.hasToken()) throw new Error("no-token");
 
-        const res = await Http.request(method, NOTION_BASE + path, {
+        const opts = {
             headers: {
                 Authorization: "Bearer " + this.token,
                 "Notion-Version": NOTION_VERSION,
                 "Content-Type": "application/json",
             },
-            body: JSON.stringify(bodyObj || {}),
-        });
+        };
+        if (method !== "GET") opts.body = JSON.stringify(bodyObj || {});
+        const res = await Http.request(method, NOTION_BASE + path, opts);
 
         if (res.status < 200 || res.status >= 300) {
             L.error("HTTP " + res.status + " — " + (res.text || "").slice(0, 300));
-            throw new Error("http-" + res.status);
+            const err = new Error("http-" + res.status);
+            err.status = res.status;
+            try {
+                err.notionMessage = JSON.parse(res.text).message || null;
+            } catch (e) {
+                err.notionMessage = null;
+            }
+            throw err;
         }
         try {
             return JSON.parse(res.text);
@@ -50,6 +59,16 @@ var NotionClient = class NotionClient {
     // One page of results (up to 100); pagination TODO if the list ever exceeds it.
     queryDatabase(dbId, body) {
         return this._request("POST", "/databases/" + dbId + "/query", body);
+    }
+
+    getPage(pageId) {
+        return this._request("GET", "/pages/" + pageId);
+    }
+
+    // Resolves the created page object. NOT idempotent: never retry a call whose
+    // outcome is unknown, or the page may exist twice.
+    createPage(body) {
+        return this._request("POST", "/pages", body);
     }
 
     updatePageCheckbox(pageId, propName, value) {

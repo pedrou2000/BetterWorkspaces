@@ -18,6 +18,7 @@ var ContextMenu = class ContextMenu {
     //   menu: the applet's context menu,
     //   controller,
     //   onManage(), onSync(), onRemoveProject(projectId),
+    //   onNewProject(parentProjectId | null),
     //   shortcutHint(settingKey) -> "Super+P" | "",
     //   afterAction(),
     // }
@@ -43,6 +44,9 @@ var ContextMenu = class ContextMenu {
             this._goTo(i);
             c.removeEmptyWorkspacesOfActiveProject();
         });
+        this._newSub = this._action("New sub-project…", () =>
+            this._deps.onNewProject(this._targetId),
+        );
         this._separator = this._add(new PopupMenu.PopupSeparatorMenuItem());
         this._remove = this._action("Remove from workspaces", () =>
             this._deps.onRemoveProject(this._targetId),
@@ -54,6 +58,7 @@ var ContextMenu = class ContextMenu {
             () => this._deps.onManage(),
             true,
         );
+        this._newProject = this._action("New project…", () => this._deps.onNewProject(null), true);
         this._sync = this._action("Sync with Notion now", () => this._deps.onSync(), true);
 
         this.populate(null);
@@ -70,8 +75,10 @@ var ContextMenu = class ContextMenu {
             this._projectItems[i].actor.visible = forProject;
         }
         this._manage.actor.visible = !forProject;
+        this._newProject.actor.visible = !forProject;
         this._sync.actor.visible = !forProject;
         this._manage.label.set_text(this._withHint("Manage workspace projects…", "kbTogglePanel"));
+        this._newProject.label.set_text(this._withHint("New project…", "kbNewProject"));
         if (!forProject) return;
 
         const p = state.getProject(idx);
@@ -82,6 +89,9 @@ var ContextMenu = class ContextMenu {
             here ? this._withHint("Open Notion page", "kbOpenNotion") : "Open Notion page",
         );
         this._moveHere.actor.visible = !here;
+        this._newSub.label.set_text(
+            here ? this._withHint("New sub-project…", "kbNewSubProject") : "New sub-project…",
+        );
         this._remove.label.set_text(
             here
                 ? this._withHint("Remove from workspaces", "kbRemoveProject")

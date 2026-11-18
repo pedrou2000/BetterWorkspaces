@@ -163,6 +163,16 @@
         "default": "<Super>q",
         "description": "Remove the current project from workspaces (closes its windows)"
     },
+    "kbNewSubProject": {
+        "type": "keybinding",
+        "default": "<Super>s",
+        "description": "New sub-project of the current project (asks for a name)"
+    },
+    "kbNewProject": {
+        "type": "keybinding",
+        "default": "<Super>a",
+        "description": "New project (asks for a name)"
+    },
     "wmSection": {
         "type": "section",
         "description": "Window management (Cinnamon actions, reassigned)"

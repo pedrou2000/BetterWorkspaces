@@ -24,6 +24,9 @@ const IconRenderer = AppletDir.ui.IconRenderer.IconRenderer;
 const ProjectSwitcher = AppletDir.ui.ProjectSwitcher.ProjectSwitcher;
 const ProjectTogglePanel = AppletDir.ui.ProjectTogglePanel.ProjectTogglePanel;
 const ContextMenu = AppletDir.ui.ContextMenu.ContextMenu;
+const NewProjectDialog = AppletDir.ui.NewProjectDialog.NewProjectDialog;
+const ProjectCreator = AppletDir.core.ProjectCreator.ProjectCreator;
+const ProjectMapper = AppletDir.notion.ProjectMapper.ProjectMapper;
 const OSD = AppletDir.ui.OSD.OSD;
 const Dialogs = AppletDir.ui.Dialogs.Dialogs;
 const SyncService = AppletDir.notion.SyncService.SyncService;
@@ -81,6 +84,12 @@ var MyApplet = class MyApplet extends Applet.Applet {
             // Settings first — we need the token before deciding the deck; this
             // also creates this.sync and wires it to the store.
             this._initSettingsAndSync(instanceId);
+            this.creator = new ProjectCreator({
+                notion: this.sync,
+                mapper: ProjectMapper,
+                store: this.store,
+                deck: this.deckCoord,
+            });
             this.deckCoord.loadDeckFromStore();
 
             IconRenderer.setEmojiScale(this.settings.getValue("emojiZoom") / 100);
@@ -201,6 +210,65 @@ var MyApplet = class MyApplet extends Applet.Applet {
         });
     }
 
+    // The only entry to creating a Notion page: opens the name dialog, which
+    // sends nothing until the user confirms. parentId is the project a
+    // sub-project hangs under, or null for a top-level project.
+    openNewProjectDialog(parentId, initialName) {
+        try {
+            if (this._newProjectDialog) return;
+            const parent = parentId ? this.store.get(parentId) : null;
+            if (parentId && !parent) return; // not a real project (the placeholder)
+
+            let inherited = null;
+            const dialog = new NewProjectDialog({
+                title: parent ? "New sub-project of " + parent.name : "New project",
+                initialName: initialName || "",
+                loadDetails: parent
+                    ? async () => {
+                          inherited = await this.creator.describeParent(parent.id);
+                          return ProjectCreator.summarize(inherited);
+                      }
+                    : null,
+                nameExists: (name) => {
+                    const wanted = name.toLowerCase();
+                    return this.store.all().some((p) => p.name.trim().toLowerCase() === wanted);
+                },
+                submit: async (name) => {
+                    try {
+                        await this.creator.create({
+                            name: name,
+                            parentId: parent ? parent.id : null,
+                            inherited: inherited,
+                        });
+                    } catch (e) {
+                        // If the page does exist after all, a pull brings it in.
+                        if (e && e.kind === "unclear" && this.sync) this.sync.syncNow();
+                        throw e;
+                    }
+                    // On the new project's workspace now: open its page there to fill in the rest.
+                    this.controller.openActiveProjectHome();
+                    this._afterNav();
+                },
+                onFailedAfterClose: (text) => Dialogs.notify("Project not created", text),
+                onClosed: () => {
+                    this._newProjectDialog = null;
+                },
+            });
+            this._newProjectDialog = dialog;
+            dialog.open();
+        } catch (e) {
+            this._newProjectDialog = null;
+            L.error("openNewProjectDialog: " + e.toString());
+        }
+    }
+
+    // A sub-project of the project the user is on (top-level if that isn't a real one).
+    _newSubProjectOfCurrent() {
+        const loc = this.controller.currentLocation();
+        const p = loc ? this.controller.state.getProject(loc.projectIdx) : null;
+        this.openNewProjectDialog(p && this.store.get(p.id) ? p.id : null);
+    }
+
     _removeCurrentProject() {
         const loc = this.controller.currentLocation();
         const p = loc ? this.controller.state.getProject(loc.projectIdx) : null;
@@ -318,6 +386,7 @@ var MyApplet = class MyApplet extends Applet.Applet {
                         .openProject(project)
                         .then(() => this._afterNav())
                         .catch((e) => L.error("openProject: " + e.toString())),
+                (name) => this.openNewProjectDialog(null, name),
             );
             this._togglePanel = panel;
             panel.open();
@@ -409,6 +478,16 @@ var MyApplet = class MyApplet extends Applet.Applet {
                 name: "bw-remove-project",
                 run: () => this._removeCurrentProject(),
             },
+            {
+                setting: "kbNewSubProject",
+                name: "bw-new-subproject",
+                run: () => this._newSubProjectOfCurrent(),
+            },
+            {
+                setting: "kbNewProject",
+                name: "bw-new-project",
+                run: () => this.openNewProjectDialog(null),
+            },
         ];
     }
 
@@ -426,6 +505,7 @@ var MyApplet = class MyApplet extends Applet.Applet {
             onManage: () => this.openTogglePanel(),
             onSync: () => this.onSyncNowClicked(),
             onRemoveProject: (id) => this.deckCoord.removeFromWorkspaces(id),
+            onNewProject: (parentId) => this.openNewProjectDialog(parentId),
             shortcutHint: (key) => this._shortcutHint(key),
             afterAction: () => this._refresh(),
         });
@@ -510,6 +590,8 @@ var MyApplet = class MyApplet extends Applet.Applet {
                 this.wm.destroy();
                 this.wm = null;
             }
+            if (this._newProjectDialog) this._newProjectDialog.close();
+            this.creator = null;
             this.deckCoord = null;
             L.log("removed, cleaned up");
         } catch (e) {

@@ -87,20 +87,27 @@ function makeContextMenu(at) {
     const controller = makeController(at || 0);
     const removed = [];
     const other = [];
+    const created = [];
     const cm = new ContextMenu({
         menu,
         controller,
         onManage: () => other.push("manage"),
         onSync: () => other.push("sync"),
         onRemoveProject: (id) => removed.push(id),
+        onNewProject: (parentId) => created.push(parentId),
         shortcutHint: (key) =>
-            ({ kbTogglePanel: "Super+P", kbRemoveProject: "Super+Q" })[key] || "",
+            ({
+                kbTogglePanel: "Super+P",
+                kbRemoveProject: "Super+Q",
+                kbNewSubProject: "Super+S",
+                kbNewProject: "Super+A",
+            })[key] || "",
         afterAction: () => other.push("after"),
     });
     const visible = () =>
         menu.items.filter((i) => i.actor.visible && !i.separator).map((i) => i.label.text);
     const item = (prefix) => menu.items.find((i) => i.label.text.indexOf(prefix) === 0);
-    return { cm, menu, controller, removed, other, visible, item, stats: popupMenu.stats };
+    return { cm, menu, controller, removed, other, created, visible, item, stats: popupMenu.stats };
 }
 
 test("no item is created or destroyed after construction, however often it retargets", () => {
@@ -121,7 +128,11 @@ test("no item is created or destroyed after construction, however often it retar
 
 test("the general menu shows only the general actions", () => {
     const { visible } = makeContextMenu();
-    assert.deepEqual(visible(), ["Manage workspace projects…  (Super+P)", "Sync with Notion now"]);
+    assert.deepEqual(visible(), [
+        "Manage workspace projects…  (Super+P)",
+        "New project…  (Super+A)",
+        "Sync with Notion now",
+    ]);
 });
 
 test("a project the user is NOT on: its actions, with 'Move focused window here'", () => {
@@ -133,6 +144,7 @@ test("a project the user is NOT on: its actions, with 'Move focused window here'
         "Move focused window here",
         "Add workspace",
         "Remove empty workspaces",
+        "New sub-project…",
         "Remove from workspaces",
     ]);
 });
@@ -144,6 +156,7 @@ test("the project the user is on: no 'move here', shortcut hints, no Notion entr
         "Beta",
         "Add workspace",
         "Remove empty workspaces",
+        "New sub-project…  (Super+S)",
         "Remove from workspaces  (Super+Q)",
     ]);
 });
@@ -152,10 +165,10 @@ test("an unknown project id, then null, both fall back to the general menu", () 
     const { cm, visible } = makeContextMenu();
     cm.populate("a");
     cm.populate("gone");
-    assert.equal(visible().length, 2);
+    assert.equal(visible().length, 3);
     cm.populate("a");
     cm.populate(null);
-    assert.equal(visible().length, 2);
+    assert.equal(visible().length, 3);
 });
 
 test("actions hit the project the menu was last opened for", () => {
@@ -192,4 +205,13 @@ test("general actions run and every action reports afterAction", () => {
     item("Manage workspace projects").activate();
     item("Sync with Notion now").activate();
     assert.deepEqual(other, ["manage", "after", "sync", "after"]);
+});
+
+test("'New sub-project' passes the right-clicked project; 'New project' passes no parent", () => {
+    const { cm, created, item } = makeContextMenu(1);
+    cm.populate("a");
+    item("New sub-project").activate();
+    cm.populate(null);
+    item("New project").activate();
+    assert.deepEqual(created, ["a", null]);
 });
