@@ -125,6 +125,9 @@
 }
 
 /* New-project dialog */
+.better-workspaces-field-group {
+    spacing: 6px;
+}
 .better-workspaces-dialog-entry {
     min-width: 380px;
     padding: 8px 10px;
@@ -377,9 +380,9 @@
 /* the new-project dialog has few lines, so it gets a little more air between
    them, and above the buttons, than the dense navigator */
 .better-workspaces-dialog-notion .better-workspaces-new-project {
-    spacing: 12px;
+    spacing: 14px;
     padding-top: 10px;
-    padding-bottom: 14px;
+    padding-bottom: 20px;
 }
 .better-workspaces-dialog-notion .better-workspaces-dialog-details {
     font-size: 12px;

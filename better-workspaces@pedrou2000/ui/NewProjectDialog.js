@@ -61,16 +61,23 @@ var NewProjectDialog = class NewProjectDialog {
             this._submit();
             return Clutter.EVENT_STOP;
         });
-        box.add(this._entry);
+        // The lines about the name sit close under the field they describe, as
+        // one group, so the dialog reads as three parts: title, field, buttons.
+        const field = new St.BoxLayout({
+            vertical: true,
+            style_class: "better-workspaces-field-group",
+        });
+        box.add(field);
+        field.add(this._entry);
 
         this._details = new St.Label({ style_class: "better-workspaces-dialog-details", text: "" });
         this._details.clutter_text.set_line_wrap(true);
-        box.add(this._details);
+        field.add(this._details);
         this._show(this._details, this._opts.details || "");
 
         this._message = new St.Label({ style_class: "better-workspaces-dialog-message", text: "" });
         this._message.clutter_text.set_line_wrap(true);
-        box.add(this._message);
+        field.add(this._message);
         this._show(this._message, "");
 
         // ModalDialog hands each St.Button back on its info object.
