@@ -4,9 +4,12 @@ const St = imports.gi.St;
 const Clutter = imports.gi.Clutter;
 const ModalDialog = imports.ui.modalDialog;
 
+const AppletDir = imports.ui.appletManager.applets["better-workspaces@pedrou2000"];
+const DialogStyle = AppletDir.ui.DialogStyle.DialogStyle;
+
 // buttons: [{label, action?, key?}]; each button's action also closes.
 function _open(title, message, buttons) {
-    const dialog = new ModalDialog.ModalDialog();
+    const dialog = new ModalDialog.ModalDialog(DialogStyle.dialogParams());
     const box = new St.BoxLayout({
         vertical: true,
         style_class: "better-workspaces-toggle-panel",
@@ -17,7 +20,7 @@ function _open(title, message, buttons) {
             text: title,
         }),
     );
-    box.add(new St.Label({ text: message }));
+    box.add(new St.Label({ style_class: "better-workspaces-dialog-body", text: message }));
     dialog.contentLayout.add(box);
     dialog.setButtons(
         buttons.map((b) => ({

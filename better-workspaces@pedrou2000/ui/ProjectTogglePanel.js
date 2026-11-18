@@ -27,6 +27,7 @@ const ModalDialog = imports.ui.modalDialog;
 const AppletDir = imports.ui.appletManager.applets["better-workspaces@pedrou2000"];
 const IconRenderer = AppletDir.ui.IconRenderer.IconRenderer;
 const DndReorderHelper = AppletDir.ui.DndReorder.DndReorderHelper;
+const DialogStyle = AppletDir.ui.DialogStyle.DialogStyle;
 const L = AppletDir.lib.logger.Logger.makeLogger("toggle-panel");
 
 const ROW_ICON_SIZE = AppletDir.lib.constants.Constants.ROW_ICON_SIZE;
@@ -72,7 +73,7 @@ var ProjectTogglePanel = class ProjectTogglePanel {
     }
 
     open() {
-        this._dialog = new ModalDialog.ModalDialog();
+        this._dialog = new ModalDialog.ModalDialog(DialogStyle.dialogParams());
 
         const box = new St.BoxLayout({
             vertical: true,
@@ -119,12 +120,7 @@ var ProjectTogglePanel = class ProjectTogglePanel {
         this._scroll.add_actor(this._listBox);
         box.add(this._scroll, { expand: true });
 
-        box.add(
-            new St.Label({
-                style_class: "better-workspaces-toggle-hint",
-                text: "Enter go · Ctrl+Enter turn on/off · Tab / ↑↓ move · Esc close",
-            }),
-        );
+        box.add(this._makeHint());
 
         this._dnd.attachTo(this._listBox);
 
@@ -371,6 +367,11 @@ var ProjectTogglePanel = class ProjectTogglePanel {
             reactive: true,
             toggle_mode: true,
         });
+        // Notion look: a knob that slides, in place of the ON/OFF text.
+        if (DialogStyle.is("notion")) {
+            toggle._bwKnob = new St.Bin({ style_class: "better-workspaces-toggle-knob" });
+            toggle.set_child(toggle._bwKnob);
+        }
         toggle.set_checked(!!project.inWorkspace);
         this._paintToggle(toggle);
         toggle.connect("clicked", (btn) => this._onRowToggled(project, btn));
@@ -411,9 +412,44 @@ var ProjectTogglePanel = class ProjectTogglePanel {
     }
 
     _paintToggle(toggle) {
-        toggle.set_label(toggle.get_checked() ? "ON" : "OFF");
-        if (toggle.get_checked()) toggle.add_style_pseudo_class("checked");
+        const on = toggle.get_checked();
+        if (toggle._bwKnob) {
+            toggle.set_alignment(on ? St.Align.END : St.Align.START, St.Align.MIDDLE);
+        } else {
+            toggle.set_label(on ? "ON" : "OFF");
+        }
+        if (on) toggle.add_style_pseudo_class("checked");
         else toggle.remove_style_pseudo_class("checked");
+    }
+
+    // The key hints: one line of text in the classic look; key caps with their
+    // meanings, above a hairline, in the Notion look.
+    _makeHint() {
+        const keys = [
+            ["↵", "Go"],
+            ["Ctrl ↵", "On / Off"],
+            ["Tab", "Move"],
+            ["Esc", "Close"],
+        ];
+        if (!DialogStyle.is("notion")) {
+            return new St.Label({
+                style_class: "better-workspaces-toggle-hint",
+                text: "Enter go · Ctrl+Enter turn on/off · Tab / ↑↓ move · Esc close",
+            });
+        }
+        const footer = new St.BoxLayout({ style_class: "better-workspaces-toggle-footer" });
+        const place = { y_align: St.Align.MIDDLE, y_fill: false };
+        for (let i = 0; i < keys.length; i++) {
+            footer.add(
+                new St.Label({ style_class: "better-workspaces-key", text: keys[i][0] }),
+                place,
+            );
+            footer.add(
+                new St.Label({ style_class: "better-workspaces-key-label", text: keys[i][1] }),
+                place,
+            );
+        }
+        return footer;
     }
 
     _onRowToggled(project, toggle) {

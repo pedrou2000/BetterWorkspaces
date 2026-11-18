@@ -234,3 +234,215 @@
 .better-workspaces-switcher-name {
     font-size: 15px;
 }
+
+/* ------------------------------------------------------------------------
+   Notion-like look for the dialogs (setting: dialogStyle = "notion").
+   Everything is scoped under the class DialogStyle puts on the dialog box, so
+   the classic look above is untouched. Colours follow Notion's dark mode:
+   a #252525 surface, hairline borders, gray labels, #2383e2 blue.
+   ------------------------------------------------------------------------ */
+.better-workspaces-dialog-notion {
+    background-color: #252525;
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    border-radius: 14px;
+    padding: 6px;
+    color: #dcdcdc;
+    box-shadow: 0 12px 32px 0 rgba(0, 0, 0, 0.45);
+}
+.better-workspaces-dialog-notion .dialog-content-box {
+    margin-top: 0;
+    margin-bottom: 4px;
+}
+.better-workspaces-dialog-notion .better-workspaces-toggle-panel {
+    spacing: 8px;
+}
+.better-workspaces-dialog-notion .better-workspaces-toggle-title {
+    font-size: 14px;
+    font-weight: bold;
+    color: #ededed;
+    padding: 2px 4px 2px 4px;
+}
+
+/* search box and name box: a field with a blue border while typing */
+.better-workspaces-dialog-notion .better-workspaces-toggle-search,
+.better-workspaces-dialog-notion .better-workspaces-dialog-entry {
+    padding: 7px 10px;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.09);
+    background-color: rgba(255, 255, 255, 0.055);
+    color: #f0f0f0;
+    font-size: 14px;
+}
+.better-workspaces-dialog-notion .better-workspaces-toggle-search:focus,
+.better-workspaces-dialog-notion .better-workspaces-dialog-entry:focus {
+    border: 1px solid #2383e2;
+}
+.better-workspaces-dialog-notion .better-workspaces-search-icon {
+    color: #8a8a8a;
+}
+
+/* list */
+.better-workspaces-dialog-notion .better-workspaces-toggle-section {
+    padding: 10px 8px 4px 8px;
+    font-size: 12px;
+    font-weight: normal;
+    color: #8f8f8f;
+}
+.better-workspaces-dialog-notion .better-workspaces-toggle-row {
+    padding: 5px 8px;
+    border-radius: 6px;
+}
+.better-workspaces-dialog-notion .better-workspaces-toggle-row:hover {
+    background-color: rgba(255, 255, 255, 0.055);
+}
+.better-workspaces-dialog-notion .better-workspaces-toggle-row:selected {
+    background-color: rgba(255, 255, 255, 0.10);
+}
+.better-workspaces-dialog-notion .better-workspaces-toggle-row:drop-target {
+    background-color: rgba(35, 131, 226, 0.28);
+}
+.better-workspaces-dialog-notion .better-workspaces-toggle-name {
+    color: #dcdcdc;
+}
+.better-workspaces-dialog-notion .better-workspaces-drag-handle {
+    color: #5a5a5a;
+    font-size: 12px;
+}
+.better-workspaces-dialog-notion .better-workspaces-toggle-row:hover .better-workspaces-drag-handle,
+.better-workspaces-dialog-notion .better-workspaces-toggle-row:selected .better-workspaces-drag-handle {
+    color: #9a9a9a;
+}
+.better-workspaces-dialog-notion .better-workspaces-toggle-empty {
+    padding: 10px 8px;
+    font-size: 13px;
+    color: #7c7c7c;
+}
+.better-workspaces-dialog-notion .better-workspaces-toggle-create {
+    color: #5aa0ea;
+}
+.better-workspaces-dialog-notion .better-workspaces-toggle-create:hover {
+    background-color: rgba(255, 255, 255, 0.055);
+}
+.better-workspaces-dialog-notion .better-workspaces-toggle-create:selected {
+    background-color: rgba(255, 255, 255, 0.10);
+    color: #5aa0ea;
+}
+
+/* the switch: a 30x18 track (26x14 plus 2px of padding) with a 14px knob */
+.better-workspaces-dialog-notion .better-workspaces-toggle-switch {
+    width: 26px;
+    height: 14px;
+    padding: 2px;
+    border-radius: 9px;
+    background-color: rgba(255, 255, 255, 0.16);
+}
+.better-workspaces-dialog-notion .better-workspaces-toggle-switch:checked {
+    background-color: #2383e2;
+}
+.better-workspaces-toggle-knob {
+    width: 14px;
+    height: 14px;
+    border-radius: 7px;
+    background-color: #ffffff;
+}
+
+/* key hints */
+.better-workspaces-toggle-footer {
+    spacing: 6px;
+    padding: 9px 4px 0 4px;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+.better-workspaces-key {
+    padding: 1px 6px;
+    border-radius: 4px;
+    background-color: rgba(255, 255, 255, 0.09);
+    color: #cfcfcf;
+    font-size: 11px;
+}
+.better-workspaces-key-label {
+    padding-right: 10px;
+    color: #8a8a8a;
+    font-size: 11px;
+}
+
+/* small dialogs */
+.better-workspaces-dialog-notion .better-workspaces-dialog-details {
+    font-size: 12px;
+    color: #8f8f8f;
+}
+.better-workspaces-dialog-notion .better-workspaces-dialog-body {
+    color: #c9c9c9;
+}
+
+/* Cinnamon's own buttons, quieter; the primary action in Notion's blue */
+.better-workspaces-dialog-notion .dialog-button {
+    padding: 7px 12px;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    background-color: rgba(255, 255, 255, 0.06);
+    color: #dcdcdc;
+    font-weight: normal;
+    font-size: 14px;
+    box-shadow: none;
+}
+.better-workspaces-dialog-notion .dialog-button:hover {
+    background-color: rgba(255, 255, 255, 0.10);
+    color: #ffffff;
+}
+.better-workspaces-dialog-notion .dialog-button:focus {
+    border: 1px solid #2383e2;
+    background-color: rgba(255, 255, 255, 0.06);
+    color: #ffffff;
+    box-shadow: none;
+}
+.better-workspaces-dialog-notion .dialog-button:active {
+    background-color: rgba(255, 255, 255, 0.14);
+}
+.better-workspaces-dialog-notion .dialog-button:primary {
+    border: 1px solid #2383e2;
+    background-color: #2383e2;
+    color: #ffffff;
+}
+.better-workspaces-dialog-notion .dialog-button:primary:hover {
+    border: 1px solid #3a92ea;
+    background-color: #3a92ea;
+}
+
+/* Super+Tab switcher, Notion look */
+.better-workspaces-switcher-notion {
+    background-color: #252525;
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    border-radius: 14px;
+    padding: 6px;
+    spacing: 2px;
+    min-width: 300px;
+    box-shadow: 0 12px 32px 0 rgba(0, 0, 0, 0.45);
+}
+.better-workspaces-switcher-notion .better-workspaces-switcher-card {
+    padding: 7px 10px;
+    border-radius: 8px;
+    spacing: 10px;
+    color: #dcdcdc;
+    font-size: 14px;
+}
+/* Notion's selection blue rather than the lists' gray: this highlight has to
+   be found at a glance while Super is held. */
+.better-workspaces-switcher-notion .better-workspaces-switcher-card:selected {
+    background-color: rgba(35, 131, 226, 0.32);
+    color: #ffffff;
+}
+.better-workspaces-switcher-notion .better-workspaces-switcher-name {
+    font-size: 14px;
+}
+
+/* On-screen message, Notion look */
+.better-workspaces-osd-notion {
+    background-color: #252525;
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    border-radius: 12px;
+    padding: 10px 20px;
+    color: #ededed;
+    font-size: 15px;
+    font-weight: bold;
+    box-shadow: 0 8px 24px 0 rgba(0, 0, 0, 0.45);
+}

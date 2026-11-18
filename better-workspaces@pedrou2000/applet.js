@@ -25,6 +25,7 @@ const ProjectSwitcher = AppletDir.ui.ProjectSwitcher.ProjectSwitcher;
 const ProjectTogglePanel = AppletDir.ui.ProjectTogglePanel.ProjectTogglePanel;
 const ContextMenu = AppletDir.ui.ContextMenu.ContextMenu;
 const NewProjectDialog = AppletDir.ui.NewProjectDialog.NewProjectDialog;
+const DialogStyle = AppletDir.ui.DialogStyle.DialogStyle;
 const ProjectCreator = AppletDir.core.ProjectCreator.ProjectCreator;
 const ProjectMapper = AppletDir.notion.ProjectMapper.ProjectMapper;
 const OSD = AppletDir.ui.OSD.OSD;
@@ -96,6 +97,14 @@ var MyApplet = class MyApplet extends Applet.Applet {
 
             IconRenderer.setEmojiScale(this.settings.getValue("emojiZoom") / 100);
             IconRenderer.setEmojiImages(this.settings.getValue("notionStyleEmoji"));
+            DialogStyle.set(this.settings.getValue("dialogStyle"));
+            this.settings.bindProperty(
+                Settings.BindingDirection.IN,
+                "dialogStyle",
+                "dialogStyle",
+                // Takes effect on the next dialog opened.
+                () => DialogStyle.set(this.settings.getValue("dialogStyle")),
+            );
             this.panelUI = new PanelIndicator(this.actor, this.controller, orientation, {
                 onManage: () => this.openTogglePanel(),
                 onRemoveProject: (id) => this.deckCoord.removeFromWorkspaces(id),

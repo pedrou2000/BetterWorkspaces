@@ -11,6 +11,7 @@ const Main = imports.ui.main;
 
 const AppletDir = imports.ui.appletManager.applets["better-workspaces@pedrou2000"];
 const IconRenderer = AppletDir.ui.IconRenderer.IconRenderer;
+const DialogStyle = AppletDir.ui.DialogStyle.DialogStyle;
 const L = AppletDir.lib.logger.Logger.makeLogger("switcher");
 
 const CARD_ICON_SIZE = AppletDir.lib.constants.Constants.ROW_ICON_SIZE;
@@ -129,7 +130,7 @@ var ProjectSwitcher = class ProjectSwitcher {
         const monitor = Main.layoutManager.primaryMonitor;
 
         this._overlay = new St.BoxLayout({
-            style_class: "better-workspaces-switcher",
+            style_class: DialogStyle.className("better-workspaces-switcher"),
             vertical: true,
             reactive: true,
             can_focus: true,

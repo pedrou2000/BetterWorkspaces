@@ -7,6 +7,7 @@ const Mainloop = imports.mainloop;
 
 const AppletDir = imports.ui.appletManager.applets["better-workspaces@pedrou2000"];
 const OSD_HIDE_MS = AppletDir.lib.constants.Constants.OSD_HIDE_MS;
+const DialogStyle = AppletDir.ui.DialogStyle.DialogStyle;
 
 const L = AppletDir.lib.logger.Logger.makeLogger("osd");
 
@@ -29,10 +30,12 @@ var OSD = class OSD {
     showText(text) {
         try {
             if (!this._label) {
-                this._label = new St.Label({ style_class: "better-workspaces-osd" });
+                this._label = new St.Label();
                 this._label.hide();
                 Main.uiGroup.add_actor(this._label);
             }
+            // Set each time: the label outlives a change of the look setting.
+            this._label.style_class = DialogStyle.className("better-workspaces-osd");
             this._label.set_text(text);
 
             const mon = Main.layoutManager.primaryMonitor;

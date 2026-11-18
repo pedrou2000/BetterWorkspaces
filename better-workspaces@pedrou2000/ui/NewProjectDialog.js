@@ -10,6 +10,7 @@ const Clutter = imports.gi.Clutter;
 const ModalDialog = imports.ui.modalDialog;
 
 const AppletDir = imports.ui.appletManager.applets["better-workspaces@pedrou2000"];
+const DialogStyle = AppletDir.ui.DialogStyle.DialogStyle;
 const L = AppletDir.lib.logger.Logger.makeLogger("new-project");
 
 var NewProjectDialog = class NewProjectDialog {
@@ -32,7 +33,7 @@ var NewProjectDialog = class NewProjectDialog {
     }
 
     open() {
-        this._dialog = new ModalDialog.ModalDialog();
+        this._dialog = new ModalDialog.ModalDialog(DialogStyle.dialogParams());
         const box = new St.BoxLayout({
             vertical: true,
             style_class: "better-workspaces-toggle-panel",
@@ -77,12 +78,15 @@ var NewProjectDialog = class NewProjectDialog {
             createInfo,
         ]);
 
-        // While the user is typing, Enter means Create, so Create wears the
-        // theme's focus look, as if Tab had already reached it. Key focus itself
-        // stays in the entry (it has to, to type); once it moves to a button,
-        // that button's real focus look takes over.
+        // Enter means Create while the user is typing, so Create is marked as the
+        // one Enter triggers. Notion look: it is the blue primary button. Classic
+        // look: it wears the theme's focus outline, as if Tab had already reached
+        // it (key focus itself stays in the entry — it has to, to type); once
+        // focus moves to a button, that button's real focus look takes over.
         const createButton = createInfo.button || null;
-        if (createButton) {
+        if (createButton && DialogStyle.is("notion")) {
+            createButton.add_style_pseudo_class("primary");
+        } else if (createButton) {
             this._entry.clutter_text.connect("key-focus-in", () =>
                 createButton.add_style_pseudo_class("focus"),
             );

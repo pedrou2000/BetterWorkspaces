@@ -61,6 +61,16 @@
         "units": "px",
         "description": "Space between project icons"
     },
+    "dialogStyle": {
+        "type": "combobox",
+        "default": "notion",
+        "options": {
+            "Notion-like": "notion",
+            "Classic (the original)": "classic"
+        },
+        "description": "Look of the dialogs and overlays",
+        "tooltip": "The project navigator, the new-project dialog, notices, the Super+Tab switcher and the on-screen message. The panel bar is not affected. Applies the next time each one opens."
+    },
     "notionStyleEmoji": {
         "type": "switch",
         "default": true,
