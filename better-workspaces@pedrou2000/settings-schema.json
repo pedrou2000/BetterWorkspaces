@@ -7,7 +7,7 @@
         "type": "entry",
         "default": "",
         "description": "Notion integration token (secret_...)",
-        "tooltip": "Create an internal integration at notion.so/my-integrations, share your Projects database with it, and paste the token here. Stored in plaintext in the applet config."
+        "tooltip": "Create an internal integration at notion.so/my-integrations, share your Projects database with it, and paste the token here. It is moved to your system keyring and this field then only says so. Paste a new token to replace it; clear the field to forget it."
     },
     "notionDatabaseId": {
         "type": "entry",

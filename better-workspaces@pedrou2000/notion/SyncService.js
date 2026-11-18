@@ -14,6 +14,10 @@ const ProjectMapper = AppletDir.notion.ProjectMapper.ProjectMapper;
 
 const DEFAULT_SYNC_INTERVAL_S = AppletDir.lib.constants.Constants.DEFAULT_SYNC_INTERVAL_S;
 
+// Pages of 100 followed per pull: 5,000 projects. A stop for a cursor that
+// never ends, not a limit anyone should reach.
+const MAX_PAGES = 50;
+
 var SyncService = class SyncService {
     constructor(token, databaseId, opts) {
         opts = opts || {};
@@ -97,21 +101,32 @@ var SyncService = class SyncService {
 
         L.log("syncNow: querying database " + this.databaseId);
         this._setStatus("loading");
-        let result;
+        // Follow Notion's pages to the end. `complete` stays false if we stop
+        // early: then a project's absence from `projects` doesn't mean it is gone.
+        // A failure on any page fails the whole pull — never a partial list.
+        const pages = [];
+        let complete = false;
         try {
-            result = await this.client.queryDatabase(
-                this.databaseId,
-                ProjectMapper.buildQueryBody(),
-            );
+            let cursor = null;
+            for (let i = 0; i < MAX_PAGES; i++) {
+                const result = await this.client.queryDatabase(
+                    this.databaseId,
+                    ProjectMapper.buildQueryBody(cursor),
+                );
+                if (result && Array.isArray(result.results)) pages.push(result.results);
+                if (!result || result.has_more !== true) {
+                    complete = true;
+                    break;
+                }
+                if (!result.next_cursor) break; // more, but no way to ask for it
+                cursor = result.next_cursor;
+            }
         } catch (e) {
             L.error("syncNow failed: " + e.message + " (store keeps serving)");
             this._setStatus("error");
             return "error";
         }
-        const projects = ProjectMapper.mapResults(result);
-        // We read a single page of results; when Notion has more, a project's
-        // absence from `projects` doesn't mean it is gone.
-        const complete = !result || result.has_more !== true;
+        const projects = ProjectMapper.mapResults({ results: [].concat(...pages) });
         this._setStatus("ok");
         L.log(
             "syncNow: pulled " + projects.length + " projects" + (complete ? "" : " (truncated)"),

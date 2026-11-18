@@ -20,14 +20,17 @@ const TYPE_PROP = "Type";
 // own "Create Sub-Project" button: Type, and these relations.
 const INHERITED_RELATIONS = ["Areas", "Lifetime Periods"];
 
-function buildQueryBody() {
-    return {
+// One page of the query; pass the previous page's next_cursor for the next one.
+function buildQueryBody(startCursor) {
+    const body = {
         page_size: 100,
         filter: {
             and: [{ property: ARCHIVE_PROP, checkbox: { equals: false } }],
         },
         sorts: [{ property: TITLE_PROP, direction: "ascending" }],
     };
+    if (startCursor) body.start_cursor = startCursor;
+    return body;
 }
 
 function _plainTitle(page) {

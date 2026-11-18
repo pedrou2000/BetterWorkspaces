@@ -306,3 +306,8 @@ test("sortByPriority: highest first, the database's own order, unset last, title
     ]);
     assert.equal(input[0].name, "Zeta"); // input untouched
 });
+
+test("buildQueryBody asks for the next page only when given a cursor", () => {
+    assert.equal("start_cursor" in ProjectMapper.buildQueryBody(), false);
+    assert.equal(ProjectMapper.buildQueryBody("abc").start_cursor, "abc");
+});

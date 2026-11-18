@@ -28,6 +28,8 @@ const NewProjectDialog = AppletDir.ui.NewProjectDialog.NewProjectDialog;
 const DialogStyle = AppletDir.ui.DialogStyle.DialogStyle;
 const ProjectCreator = AppletDir.core.ProjectCreator.ProjectCreator;
 const ProjectMapper = AppletDir.notion.ProjectMapper.ProjectMapper;
+const TokenVault = AppletDir.core.TokenVault.TokenVault;
+const Keyring = AppletDir.lib.keyring.Keyring;
 const OSD = AppletDir.ui.OSD.OSD;
 const Dialogs = AppletDir.ui.Dialogs.Dialogs;
 const SyncService = AppletDir.notion.SyncService.SyncService;
@@ -203,7 +205,10 @@ var MyApplet = class MyApplet extends Applet.Applet {
             this.osd.suppressBuiltin();
             this._refresh();
 
-            if (this.sync && this._notionConfigured()) this.sync.start();
+            // The token comes from the keyring (asynchronously) before the first pull.
+            this._applyToken(false).then(() => {
+                if (this.sync && this._notionConfigured()) this.sync.start();
+            });
         } catch (e) {
             L.error("init exception: " + e.toString());
         }
@@ -321,6 +326,17 @@ var MyApplet = class MyApplet extends Applet.Applet {
             .catch((e) => L.error("removeCurrentProject: " + e.toString()));
     }
 
+    // Hands the service the token to use, from the keyring or the settings field
+    // (see TokenVault). userEdited: the field was just changed by the user.
+    _applyToken(userEdited) {
+        return this.tokenVault
+            .resolve(userEdited)
+            .then((token) => {
+                if (this.sync) this.sync.setToken(token);
+            })
+            .catch((e) => L.error("applyToken: " + e.toString()));
+    }
+
     _notionConfigured() {
         return (
             this.settings &&
@@ -346,12 +362,18 @@ var MyApplet = class MyApplet extends Applet.Applet {
     _initSettingsAndSync(instanceId) {
         this.settings = new Settings.AppletSettings(this, UUID, instanceId);
 
-        const token = this.settings.getValue("notionToken") || "";
+        // The token field holds the token only until TokenVault has moved it to
+        // the keyring; the service starts without one and gets it in _applyToken.
+        this.tokenVault = new TokenVault({
+            keyring: Keyring,
+            getSetting: () => this.settings.getValue("notionToken"),
+            setSetting: (value) => this.settings.setValue("notionToken", value),
+        });
         const dbId = this.settings.getValue("notionDatabaseId") || "";
         const interval =
             this.settings.getValue("syncIntervalSec") || Constants.DEFAULT_SYNC_INTERVAL_S;
 
-        this.sync = new SyncService(token, dbId, { intervalSec: interval });
+        this.sync = new SyncService("", dbId, { intervalSec: interval });
 
         this.store.setWriter(this.sync);
         this.store.onWriteError(() => {
@@ -382,7 +404,7 @@ var MyApplet = class MyApplet extends Applet.Applet {
             "notionToken",
             "notionToken",
             () => {
-                this.sync.setToken(this.settings.getValue("notionToken"));
+                this._applyToken(true);
             },
         );
         this.settings.bindProperty(
@@ -394,7 +416,7 @@ var MyApplet = class MyApplet extends Applet.Applet {
             },
         );
 
-        if (!token || !dbId) {
+        if (!this.settings.getValue("notionToken") || !dbId) {
             L.log(
                 "Notion not configured — open settings, add your token, click " +
                     "'Sync now', then reload Cinnamon (Alt+F2, r) to load the deck.",
@@ -407,11 +429,10 @@ var MyApplet = class MyApplet extends Applet.Applet {
     onSyncNowClicked() {
         try {
             if (!this.sync) return;
-            this.sync.setToken(this.settings.getValue("notionToken"));
             this.sync.setDatabaseId(this.settings.getValue("notionDatabaseId"));
             this.osd.showText("Syncing with Notion…");
-            this.sync
-                .syncNow()
+            this._applyToken(false)
+                .then(() => (this.sync ? this.sync.syncNow() : "error"))
                 .then((status) => {
                     if (!this.osd) return;
                     const said = {

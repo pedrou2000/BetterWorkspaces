@@ -43,6 +43,8 @@ Because the applet is linked rather than copied, pulling a newer version and res
 2. Share your projects database with that integration (the database's ••• menu → Connections). If you use sub-projects, also share the databases its relations point to, or those relations will not be copied.
 3. Right-click the applet → Configure, paste the integration token and the database ID, and press "Sync from Notion now".
 
+The token is moved to your system keyring (GNOME Keyring, via libsecret) as soon as you paste it; the settings field then only says that it is stored there. On a system without a keyring it stays in the applet's settings file, in plain text.
+
 The database needs these properties. The names are fixed for now (they live in one file, `notion/ProjectMapper.js`).
 
 | Property | Type | Used for |
@@ -121,8 +123,6 @@ Under Configure you will also find: the sync interval, whether empty workspaces 
 This is a personal project that I use every day, not a packaged product. Before relying on it, know that:
 
 - It expects the database properties listed above, by those names.
-- It reads the first 100 projects that are not archived.
-- The integration token is stored in plain text in Cinnamon's applet settings.
 - It is not on Cinnamon Spices, and there is no mode for people who do not use Notion.
 
 ## Development

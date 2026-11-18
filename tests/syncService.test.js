@@ -32,9 +32,16 @@ class FakeNotionClient {
         if (!this.hasToken()) throw new Error("no-token");
         if (this.failAll) throw this.failAll;
     }
+    // queryPages (cursor -> result, "first" for the opening request) overrides
+    // the single queryResult, to play back a paginated list.
     async queryDatabase(dbId, body) {
         this.calls.push({ method: "queryDatabase", dbId, body });
         this._gate();
+        if (this.queryPages) {
+            const page = this.queryPages[body.start_cursor || "first"];
+            if (page instanceof Error) throw page;
+            return page;
+        }
         return this.queryResult;
     }
     async updatePageCheckbox(pageId, propName, value) {
@@ -312,4 +319,61 @@ test("projectStatus: present, archived, in the trash, missing, and no answer", a
     assert.equal(await sync.projectStatus("missing"), "gone"); // deleted for good
     assert.equal(await sync.projectStatus("flaky"), "unknown");
     assert.equal(await sync.projectStatus("offline"), "unknown");
+});
+
+// pagination
+
+test("syncNow follows Notion's pages to the end and reports a complete list", async () => {
+    const { sync, client } = makeSync();
+    client.queryPages = {
+        first: { results: [rawPage("a", "A", true, 0)], has_more: true, next_cursor: "c1" },
+        c1: { results: [rawPage("b", "B", false, null)], has_more: true, next_cursor: "c2" },
+        c2: { results: [rawPage("c", "C", true, 1)], has_more: false, next_cursor: null },
+    };
+    let got = null;
+    sync.onPull((projects, complete) => (got = { ids: projects.map((p) => p.id), complete }));
+
+    assert.equal(await sync.syncNow(), "ok");
+    assert.deepEqual(got.ids.slice().sort(), ["a", "b", "c"]);
+    assert.equal(got.complete, true);
+    const cursors = client.calls
+        .filter((c) => c.method === "queryDatabase")
+        .map((c) => c.body.start_cursor);
+    assert.deepEqual(cursors, [undefined, "c1", "c2"]);
+});
+
+test("a failure on a later page fails the whole pull: no partial list is delivered", async () => {
+    const { sync, client, statuses } = makeSync();
+    client.queryPages = {
+        first: { results: [rawPage("a", "A", true, 0)], has_more: true, next_cursor: "c1" },
+        c1: new Error("http-502"),
+    };
+    let pulled = false;
+    sync.onPull(() => (pulled = true));
+
+    assert.equal(await sync.syncNow(), "error");
+    assert.equal(pulled, false);
+    assert.equal(statuses[statuses.length - 1], "error");
+});
+
+test("a list that can't be read to the end is delivered as incomplete", async () => {
+    // Notion says there is more but gives no cursor to ask for it.
+    const a = makeSync();
+    a.client.queryPages = { first: { results: [rawPage("a", "A", true, 0)], has_more: true } };
+    let complete = null;
+    a.sync.onPull((projects, c) => (complete = c));
+    await a.sync.syncNow();
+    assert.equal(complete, false);
+
+    // A cursor that never ends stops at the page cap.
+    const b = makeSync();
+    b.client.queryPages = new Proxy(
+        {},
+        { get: () => ({ results: [], has_more: true, next_cursor: "again" }) },
+    );
+    complete = null;
+    b.sync.onPull((projects, c) => (complete = c));
+    await b.sync.syncNow();
+    assert.equal(complete, false);
+    assert.equal(b.client.calls.filter((c) => c.method === "queryDatabase").length, 50);
 });

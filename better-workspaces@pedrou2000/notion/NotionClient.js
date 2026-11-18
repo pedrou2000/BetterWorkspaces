@@ -56,7 +56,7 @@ var NotionClient = class NotionClient {
         }
     }
 
-    // One page of results (up to 100); pagination TODO if the list ever exceeds it.
+    // One page of results (up to 100); the caller follows has_more/next_cursor.
     queryDatabase(dbId, body) {
         return this._request("POST", "/databases/" + dbId + "/query", body);
     }
