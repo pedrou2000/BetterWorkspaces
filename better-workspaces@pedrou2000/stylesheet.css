@@ -370,8 +370,8 @@
    them, and above the buttons, than the dense navigator */
 .better-workspaces-dialog-notion .better-workspaces-new-project {
     spacing: 12px;
-    padding-top: 4px;
-    padding-bottom: 8px;
+    padding-top: 10px;
+    padding-bottom: 14px;
 }
 .better-workspaces-dialog-notion .better-workspaces-dialog-details {
     font-size: 12px;
