@@ -447,6 +447,26 @@
     box-shadow: 0 8px 24px 0 rgba(0, 0, 0, 0.45);
 }
 
+/* Drag grip, Notion look: two columns of three 2px dots in a fixed 10px slot
+   (so rows with and without a grip line up), shown on hover or highlight. */
+.better-workspaces-grip {
+    width: 10px;
+    spacing: 2px;
+}
+.better-workspaces-grip-column {
+    spacing: 2px;
+}
+.better-workspaces-grip-dot {
+    width: 2px;
+    height: 2px;
+    border-radius: 1px;
+    background-color: rgba(255, 255, 255, 0);
+}
+.better-workspaces-toggle-row:hover .better-workspaces-grip-dot,
+.better-workspaces-toggle-row:selected .better-workspaces-grip-dot {
+    background-color: #8f8f8f;
+}
+
 /* Background choices for the Notion-like look (setting: surfaceTone). Each is
    one extra class on the dialog, switcher and on-screen message. Keep these
    LAST: at equal specificity the later rule wins, which is how they override

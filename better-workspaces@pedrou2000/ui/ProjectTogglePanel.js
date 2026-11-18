@@ -339,15 +339,13 @@ var ProjectTogglePanel = class ProjectTogglePanel {
             style_class: "better-workspaces-toggle-row",
             vertical: false,
             reactive: true, // needed for DnD to receive button-press
+            // A plain box doesn't get the :hover pseudo-class unless asked. The
+            // Notion look depends on it (hover highlight, the grip appearing);
+            // the classic look never had it and is left as it was.
+            track_hover: DialogStyle.is("notion"),
         });
 
-        row.add(
-            new St.Label({
-                style_class: "better-workspaces-drag-handle",
-                text: onIdx >= 0 ? "⋮⋮" : "",
-            }),
-            { y_align: St.Align.MIDDLE, y_fill: false },
-        );
+        row.add(this._makeHandle(onIdx >= 0), { y_align: St.Align.MIDDLE, y_fill: false });
 
         row.add(IconRenderer.makeActor(project.icon, project.name, ROW_ICON_SIZE), {
             y_align: St.Align.MIDDLE,
@@ -409,6 +407,33 @@ var ProjectTogglePanel = class ProjectTogglePanel {
                     }),
             );
         }
+    }
+
+    // The drag grip at the start of a row. Classic look: the "⋮⋮" glyph. Notion
+    // look: six dots drawn as actors — a glyph's size and spacing depend on the
+    // font, which is how "⋮⋮" came out as three specks — and only visible while
+    // the row is hovered or highlighted (stylesheet), as Notion's own grip is.
+    // A row that can't be dragged gets the empty column, so icons line up.
+    _makeHandle(draggable) {
+        if (!DialogStyle.is("notion")) {
+            return new St.Label({
+                style_class: "better-workspaces-drag-handle",
+                text: draggable ? "⋮⋮" : "",
+            });
+        }
+        const grip = new St.BoxLayout({ style_class: "better-workspaces-grip" });
+        if (!draggable) return grip;
+        for (let col = 0; col < 2; col++) {
+            const column = new St.BoxLayout({
+                vertical: true,
+                style_class: "better-workspaces-grip-column",
+            });
+            for (let dot = 0; dot < 3; dot++) {
+                column.add(new St.Bin({ style_class: "better-workspaces-grip-dot" }));
+            }
+            grip.add(column);
+        }
+        return grip;
     }
 
     _paintToggle(toggle) {

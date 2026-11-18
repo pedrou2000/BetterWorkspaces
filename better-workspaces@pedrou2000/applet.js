@@ -242,8 +242,8 @@ var MyApplet = class MyApplet extends Applet.Applet {
                 title: parent ? "New sub-project of " + parent.name : "New project",
                 initialName: initialName || "",
                 details: parent
-                    ? "Creates a sub-project in Notion."
-                    : "Creates a project in Notion.",
+                    ? "Creates a new sub-project in Notion, as a child of " + parent.name + "."
+                    : "Creates a new project in Notion.",
                 // What the sub-project will copy, read now and kept for the log
                 // rather than shown.
                 prepare: parent

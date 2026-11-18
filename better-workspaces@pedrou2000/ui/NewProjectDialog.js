@@ -45,9 +45,10 @@ var NewProjectDialog = class NewProjectDialog {
             new St.Label({ style_class: "better-workspaces-toggle-title", text: this._opts.title }),
         );
 
+        // Leading space in the hint so the placeholder clears the caret.
         this._entry = new St.Entry({
             style_class: "better-workspaces-dialog-entry",
-            hint_text: "Project name",
+            hint_text: " Project name",
             can_focus: true,
         });
         if (this._opts.initialName) this._entry.set_text(this._opts.initialName);
