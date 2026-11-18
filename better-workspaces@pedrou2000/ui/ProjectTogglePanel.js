@@ -39,12 +39,15 @@ const CREATE_STOP = "__create__";
 var ProjectTogglePanel = class ProjectTogglePanel {
     // getProjects() returns {id,name,icon,inWorkspace,...} in display order: the
     // ON projects in deck order, the others as they should be listed.
-    constructor(getProjects, onToggle, onReorder, onGo, onCreate) {
+    // opts: {showHints: bool, onHideHints()} — the key hints are a learning aid
+    // the user can switch off; onHideHints is their "don't show again".
+    constructor(getProjects, onToggle, onReorder, onGo, onCreate, opts) {
         this._getProjects = getProjects;
         this._onToggle = onToggle;
         this._onReorder = onReorder;
         this._onGo = onGo;
         this._onCreate = onCreate;
+        this._opts = opts || {};
         this._createRow = null; // the "Create project …" row, when shown
         this._rows = [];
         this._filter = "";
@@ -120,7 +123,7 @@ var ProjectTogglePanel = class ProjectTogglePanel {
         this._scroll.add_actor(this._listBox);
         box.add(this._scroll, { expand: true });
 
-        box.add(this._makeHint());
+        if (this._opts.showHints !== false) box.add(this._makeHint());
 
         this._dnd.attachTo(this._listBox);
 
@@ -473,6 +476,26 @@ var ProjectTogglePanel = class ProjectTogglePanel {
                 new St.Label({ style_class: "better-workspaces-key-label", text: keys[i][1] }),
                 place,
             );
+        }
+
+        // A small × at the far end: hide the hints now and stop showing them
+        // (they come back from the applet's settings).
+        if (this._opts.onHideHints) {
+            footer.add(new St.Bin(), { expand: true });
+            const dismiss = new St.Button({
+                style_class: "better-workspaces-hint-dismiss",
+                label: "×",
+                reactive: true,
+            });
+            dismiss.connect("clicked", () => {
+                footer.hide();
+                try {
+                    this._opts.onHideHints();
+                } catch (e) {
+                    L.error("onHideHints: " + e.toString());
+                }
+            });
+            footer.add(dismiss, place);
         }
         return footer;
     }

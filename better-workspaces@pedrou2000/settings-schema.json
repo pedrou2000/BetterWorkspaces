@@ -61,6 +61,12 @@
         "units": "px",
         "description": "Space between project icons"
     },
+    "showKeyHints": {
+        "type": "switch",
+        "default": true,
+        "description": "Show the keyboard hints in the project navigator",
+        "tooltip": "The line of keys at the bottom of the Super+P panel. Its small × also turns this off."
+    },
     "dialogStyle": {
         "type": "combobox",
         "default": "notion",

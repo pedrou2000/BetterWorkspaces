@@ -439,6 +439,10 @@ var MyApplet = class MyApplet extends Applet.Applet {
                         .then(() => this._afterNav())
                         .catch((e) => L.error("openProject: " + e.toString())),
                 (name) => this.openNewProjectDialog(null, name),
+                {
+                    showHints: this.settings.getValue("showKeyHints") !== false,
+                    onHideHints: () => this.settings.setValue("showKeyHints", false),
+                },
             );
             this._togglePanel = panel;
             panel.open();
