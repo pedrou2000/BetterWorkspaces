@@ -5,6 +5,7 @@ arithmetic can silently regress:
 
 - `mapping.test.js`, `dotWindow.test.js` — the index arithmetic (`core/mapping.js`, `core/dotWindow.js`)
 - `state.test.js`, `controller.test.js` — the deck model and the operations on it, against a fake window manager
+- `windowKeeper.test.js` — sending back a window that its own dialog dragged to the active workspace
 - `deckCoordinator.test.js`, `projectStore.test.js`, `projectCreator.test.js` — toggling, syncing, creating and deleting projects, against fakes for Notion and the dialogs
 - `projectMapper.test.js`, `syncService.test.js` — the Notion side: mapping pages to projects, the pull loop
 - `contextMenu.test.js`, `dialogStyle.test.js`, `emojiImage.test.js` — the few UI pieces that have logic worth pinning down
@@ -18,6 +19,21 @@ node --test tests/*.test.js
 ```
 
 or `npm test` if npm is available.
+
+## Manual check: a dialog must not drag its window over
+
+The window manager side of `core/WindowKeeper.js` can only be seen in a running
+Cinnamon. With the applet loaded:
+
+```sh
+python3 tests/manual/dialog-pull.py
+```
+
+It opens a test window, sends it to another workspace and has it raise a
+dialog the way VS Code does, then prints `STAYED` (exit 0) or `PULLED` (exit 1)
+and closes everything. Without the applet, or with "Keep a window on its
+workspace…" switched off, Cinnamon gives `PULLED`. Each time the applet sends a
+window back it also logs a line: `grep keeper ~/.xsession-errors`.
 
 ## How the applet code is loaded
 

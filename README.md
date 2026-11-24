@@ -19,6 +19,7 @@ The idea: switching context should mean switching project, not hunting for "work
 - **Two-way Notion sync.** Turning a project on or off, and reordering, is written back to Notion. Projects archived or deleted in Notion leave the panel on the next sync.
 - **Create and delete from the desktop.** Create a project or a sub-project (it lands on a new workspace with its Notion page open), or delete one, without opening Notion first.
 - **Survives a Cinnamon restart.** Each project keeps its workspaces and windows where they were.
+- **Windows stay in their project.** When a window in another project opens a dialog that asks for attention, Cinnamon moves the window, dialog and all, to the workspace you are on. The applet puts it back, and the dialog waits where the window lives.
 
 ## Requirements
 
@@ -116,7 +117,7 @@ Switching, creating and deleting each have their own small window:
 
 ## Settings
 
-Under Configure you will also find: the sync interval, whether empty workspaces are removed automatically, icon and dot sizes, whether emoji are drawn the way Notion draws them, and the look of the dialogs (a Notion-like dark style with a choice of backgrounds, or Cinnamon's stock dialogs).
+Under Configure you will also find: the sync interval, whether empty workspaces are removed automatically, whether a window stays on its workspace when one of its dialogs asks for attention, icon and dot sizes, whether emoji are drawn the way Notion draws them, and the look of the dialogs (a Notion-like dark style with a choice of backgrounds, or Cinnamon's stock dialogs).
 
 ## Status and limits
 

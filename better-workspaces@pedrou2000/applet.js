@@ -18,6 +18,7 @@ const WorkspaceManager = AppletDir.wm.WorkspaceManager.WorkspaceManager;
 const Controller = AppletDir.core.Controller.Controller;
 const ProjectStore = AppletDir.core.ProjectStore.ProjectStore;
 const DeckCoordinator = AppletDir.core.DeckCoordinator.DeckCoordinator;
+const WindowKeeper = AppletDir.core.WindowKeeper.WindowKeeper;
 const KeybindingCoordinator = AppletDir.core.KeybindingCoordinator.KeybindingCoordinator;
 const PanelIndicator = AppletDir.ui.PanelIndicator.PanelIndicator;
 const IconRenderer = AppletDir.ui.IconRenderer.IconRenderer;
@@ -192,6 +193,11 @@ var MyApplet = class MyApplet extends Applet.Applet {
             this._nWorkspacesId = global.workspace_manager.connect("notify::n-workspaces", () =>
                 this._refresh(),
             );
+
+            this.keeper = new WindowKeeper(this.wm, {
+                enabled: () => !!this.settings && this.settings.getValue("keepWindowsOnWorkspace"),
+            });
+            this.keeper.start();
 
             this.keybindings = new KeybindingCoordinator({
                 settings: this.settings,
@@ -629,6 +635,10 @@ var MyApplet = class MyApplet extends Applet.Applet {
             if (this.osd) {
                 this.osd.destroy();
                 this.osd = null;
+            }
+            if (this.keeper) {
+                this.keeper.destroy();
+                this.keeper = null;
             }
             if (this._switchId) {
                 global.window_manager.disconnect(this._switchId);

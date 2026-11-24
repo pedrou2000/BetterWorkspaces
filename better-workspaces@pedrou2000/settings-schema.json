@@ -39,6 +39,12 @@
         "description": "Remove a workspace when you leave it empty",
         "tooltip": "A project always keeps at least one workspace."
     },
+    "keepWindowsOnWorkspace": {
+        "type": "switch",
+        "default": true,
+        "description": "Keep a window on its workspace when one of its dialogs asks for attention",
+        "tooltip": "Cinnamon otherwise moves the window, dialog included, to the workspace you are on: for example every VS Code window that shows \"Cannot reconnect. Please reload the window\" after a night away. With this on, the dialog waits on the window's own workspace."
+    },
     "appearanceSection": {
         "type": "section",
         "description": "Appearance"

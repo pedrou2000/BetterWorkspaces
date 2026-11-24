@@ -22,6 +22,9 @@ class FakeWm {
         }
         this.activeIndex = 0;
         this.focusedWindow = null; // {title}, assumed on the active workspace
+        this.overviewOpen = false;
+        this.bringsWindows = false;
+        this._onWindowMoved = null;
     }
 
     // Windows expose get_title() like real MetaWindows.
@@ -29,6 +32,7 @@ class FakeWm {
         const w = {
             title: title,
             sticky: !!sticky,
+            transientFor: null,
             closeRequested: false,
             get_title() {
                 return this.title;
@@ -36,6 +40,13 @@ class FakeWm {
         };
         this.workspaces[index].windows.push(w);
         return w;
+    }
+
+    // A dialog belongs to its parent window and starts on the parent's workspace.
+    addDialog(parent, title) {
+        const dialog = this.addWindow(this._indexOfWindow(parent), title);
+        dialog.transientFor = parent;
+        return dialog;
     }
 
     // Per-workspace window titles, for whole-layout assertions.
@@ -160,6 +171,80 @@ class FakeWm {
         src.windows = src.windows.filter((w) => w.sticky);
         dst.windows.push(...movable);
         return true;
+    }
+
+    watchWindowMoves(onMoved) {
+        this._onWindowMoved = onMoved;
+    }
+
+    unwatchWindowMoves() {
+        this._onWindowMoved = null;
+    }
+
+    _place(win, index) {
+        const from = this._indexOfWindow(win);
+        if (from === index) return null;
+        const src = this.workspaces[from];
+        src.windows.splice(src.windows.indexOf(win), 1);
+        this.workspaces[index].windows.push(win);
+        return src;
+    }
+
+    _dialogsOf(win) {
+        const out = [];
+        for (const ws of this.workspaces) {
+            for (const w of ws.windows) {
+                for (let p = w.transientFor; p; p = p.transientFor) {
+                    if (p === win) out.push(w);
+                }
+            }
+        }
+        return out;
+    }
+
+    // Test helper: something other than the applet moves one window, as Muffin
+    // reports it (with workspace objects).
+    externalMove(win, index) {
+        const src = this._place(win, index);
+        if (src && this._onWindowMoved) this._onWindowMoved(win, src, this.workspaces[index]);
+    }
+
+    // Test helper — mirrors Muffin when a dialog asks for focus: the dialog,
+    // then the windows it belongs to, are moved to the active workspace.
+    dialogAsksForFocus(dialog) {
+        this.externalMove(dialog, this.activeIndex);
+        for (let p = dialog.transientFor; p; p = p.transientFor) {
+            this.externalMove(p, this.activeIndex);
+        }
+    }
+
+    workspaceIndexOfWindow(win) {
+        return win.sticky ? -1 : this._indexOfWindow(win);
+    }
+
+    isTopLevelWindow(win) {
+        return !win.transientFor;
+    }
+
+    hasDialogOnWorkspace(win, index) {
+        return this._dialogsOf(win).some((d) => this._indexOfWindow(d) === index);
+    }
+
+    // Like Muffin, takes the window's dialogs along; the applet's own moves
+    // are not reported to the watcher.
+    moveWindowToWorkspace(win, index) {
+        if (index < 0 || index >= this.workspaces.length) return false;
+        this._place(win, index);
+        for (const d of this._dialogsOf(win)) this._place(d, index);
+        return true;
+    }
+
+    isOverviewOpen() {
+        return this.overviewOpen;
+    }
+
+    bringsWindowsToCurrentWorkspace() {
+        return this.bringsWindows;
     }
 
     // Marks the window; the test decides whether it "closes" (removes it).

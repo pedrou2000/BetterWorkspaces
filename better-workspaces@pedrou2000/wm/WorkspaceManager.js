@@ -3,6 +3,8 @@
 // Every method is bounds-checked and guarded: a bad call degrades to a no-op +
 // log line rather than crashing the shell. When Cinnamon's API drifts, fix here.
 
+const Main = imports.ui.main;
+
 const UUID = "better-workspaces@pedrou2000";
 const AppletDir = imports.ui.appletManager.applets[UUID];
 
@@ -23,7 +25,23 @@ function realWindows(ws) {
 }
 
 var WorkspaceManager = class WorkspaceManager {
-    constructor() {}
+    constructor() {
+        this._watched = null; // MetaWindow -> {ws, ids}, while window moves are watched
+        this._onWindowMoved = null;
+        this._createdId = 0;
+        this._ownMove = false;
+    }
+
+    // Window moves the applet makes itself are not reported to the watcher.
+    _asOwnMove(fn) {
+        const was = this._ownMove;
+        this._ownMove = true;
+        try {
+            return fn();
+        } finally {
+            this._ownMove = was;
+        }
+    }
 
     _wm() {
         return global.workspace_manager;
@@ -154,7 +172,8 @@ var WorkspaceManager = class WorkspaceManager {
                 );
                 return false;
             }
-            this._wm().remove_workspace(ws, this._now());
+            // Muffin relocates the workspace's windows to a neighbour.
+            this._asOwnMove(() => this._wm().remove_workspace(ws, this._now()));
             L.log(
                 "removeWorkspace: removed index " +
                     index +
@@ -189,7 +208,7 @@ var WorkspaceManager = class WorkspaceManager {
                 L.log("moveFocusedWindowTo: no focused window");
                 return null;
             }
-            win.change_workspace_by_index(index, false);
+            this._asOwnMove(() => win.change_workspace_by_index(index, false));
             L.log("moveFocusedWindowTo: moved '" + win.get_title() + "' to workspace " + index);
             return win;
         } catch (e) {
@@ -219,9 +238,11 @@ var WorkspaceManager = class WorkspaceManager {
     moveAllWindows(from, to) {
         try {
             const windows = realWindows(this._wm().get_workspace_by_index(from));
-            for (let i = 0; i < windows.length; i++) {
-                windows[i].change_workspace_by_index(to, false);
-            }
+            this._asOwnMove(() => {
+                for (let i = 0; i < windows.length; i++) {
+                    windows[i].change_workspace_by_index(to, false);
+                }
+            });
             return true;
         } catch (e) {
             L.error("moveAllWindows(" + from + "->" + to + "): " + e.toString());
@@ -253,5 +274,158 @@ var WorkspaceManager = class WorkspaceManager {
         }
     }
 
-    destroy() {}
+    // Calls onMoved(win, fromWorkspace, toWorkspace) — workspace OBJECTS — each
+    // time something other than this applet moves a window to another workspace.
+    watchWindowMoves(onMoved) {
+        this.unwatchWindowMoves();
+        this._watched = new Map();
+        this._onWindowMoved = onMoved;
+        try {
+            const actors = global.get_window_actors();
+            for (let i = 0; i < actors.length; i++) this._watch(actors[i].get_meta_window());
+            this._createdId = global.display.connect("window-created", (display, win) =>
+                this._watch(win),
+            );
+        } catch (e) {
+            L.error("watchWindowMoves: " + e.toString());
+        }
+    }
+
+    unwatchWindowMoves() {
+        if (this._createdId) {
+            global.display.disconnect(this._createdId);
+            this._createdId = 0;
+        }
+        if (this._watched) {
+            this._watched.forEach((entry, win) => this._disconnect(win, entry));
+            this._watched = null;
+        }
+        this._onWindowMoved = null;
+    }
+
+    // A pinned window reports whichever workspace is active, so it has no home.
+    _homeOf(win) {
+        return win.is_on_all_workspaces() ? null : win.get_workspace();
+    }
+
+    _watch(win) {
+        try {
+            // Menus and tooltips: never on a workspace of their own.
+            if (!win || !this._watched || this._watched.has(win)) return;
+            if (win.is_override_redirect()) return;
+            const entry = { ws: this._homeOf(win), ids: [] };
+            entry.ids.push(win.connect("workspace-changed", () => this._workspaceChanged(win)));
+            entry.ids.push(win.connect("unmanaged", () => this._unwatch(win)));
+            this._watched.set(win, entry);
+        } catch (e) {
+            L.error("watch window: " + e.toString());
+        }
+    }
+
+    _unwatch(win) {
+        const entry = this._watched ? this._watched.get(win) : null;
+        if (!entry) return;
+        this._watched.delete(win);
+        this._disconnect(win, entry);
+    }
+
+    _disconnect(win, entry) {
+        for (let i = 0; i < entry.ids.length; i++) {
+            try {
+                win.disconnect(entry.ids[i]);
+            } catch (e) {
+                L.error("unwatch window: " + e.toString());
+            }
+        }
+    }
+
+    _workspaceChanged(win) {
+        try {
+            const entry = this._watched ? this._watched.get(win) : null;
+            if (!entry) return;
+            const from = entry.ws;
+            // null once the window is closing (Muffin signals that as a change too).
+            const to = this._homeOf(win);
+            entry.ws = to;
+            if (this._ownMove || !from || !to || from === to) return;
+            if (this._onWindowMoved) this._onWindowMoved(win, from, to);
+        } catch (e) {
+            L.error("window moved: " + e.toString());
+        }
+    }
+
+    // -1 for a closed window or one pinned to all workspaces.
+    workspaceIndexOfWindow(win) {
+        try {
+            const ws = this._homeOf(win);
+            return ws ? ws.index() : -1;
+        } catch (e) {
+            L.error("workspaceIndexOfWindow: " + e.toString());
+            return -1;
+        }
+    }
+
+    // False for dialogs and other windows that belong to another window.
+    isTopLevelWindow(win) {
+        try {
+            return win.get_transient_for() === null;
+        } catch (e) {
+            L.error("isTopLevelWindow: " + e.toString());
+            return false;
+        }
+    }
+
+    // Whether a dialog of `win` (or a dialog of one of its dialogs) is on workspace `index`.
+    hasDialogOnWorkspace(win, index) {
+        try {
+            const ws = this._wm().get_workspace_by_index(index);
+            if (!ws) return false;
+            let found = false;
+            win.foreach_transient((dialog) => {
+                if (this._homeOf(dialog) === ws) found = true;
+                return !found; // false stops the walk
+            });
+            return found;
+        } catch (e) {
+            L.error("hasDialogOnWorkspace: " + e.toString());
+            return false;
+        }
+    }
+
+    // Muffin moves the window's dialogs along with it.
+    moveWindowToWorkspace(win, index) {
+        try {
+            if (index < 0 || index > this.getWorkspaceCount() - 1) return false;
+            this._asOwnMove(() => win.change_workspace_by_index(index, false));
+            return true;
+        } catch (e) {
+            L.error("moveWindowToWorkspace(" + index + "): " + e.toString());
+            return false;
+        }
+    }
+
+    // Expo and the overview are where the user drags windows between workspaces.
+    isOverviewOpen() {
+        try {
+            return !!((Main.expo && Main.expo.visible) || (Main.overview && Main.overview.visible));
+        } catch (e) {
+            L.error("isOverviewOpen: " + e.toString());
+            return false;
+        }
+    }
+
+    // Cinnamon's own setting: clicking a window elsewhere brings it here
+    // instead of taking you there.
+    bringsWindowsToCurrentWorkspace() {
+        try {
+            return global.settings.get_boolean("bring-windows-to-current-workspace");
+        } catch (e) {
+            L.error("bringsWindowsToCurrentWorkspace: " + e.toString());
+            return false;
+        }
+    }
+
+    destroy() {
+        this.unwatchWindowMoves();
+    }
 };
